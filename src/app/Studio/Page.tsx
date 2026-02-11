@@ -8,33 +8,48 @@ export default function AIStudio() {
   const [prompt, setPrompt] = useState('')
   const [result, setResult] = useState('')
   const [loading, setLoading] = useState(false)
+  const [userMetrics, setUserMetrics] = useState<any[]>([])
   const router = useRouter()
 
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) router.push('/login')
+      if (!session) {
+        router.push('/login')
+        return
+      }
+      // Busca as métricas do cliente para alimentar a análise automática
+      const { data } = await supabase
+        .from('metrics')
+        .select('label, value, change')
+        .eq('user_id', session.user.id)
+      if (data) setUserMetrics(data)
     }
     checkUser()
   }, [router])
 
   const generateAI = async () => {
-    if(!prompt) return alert("Digite o que você precisa primeiro!")
-    
     setLoading(true)
-    setResult("Sintonizando frequências de IA...")
+    setResult("Sintonizando frequências de IA e processando seus dados...")
     
     try {
+      // Se for analista, enviamos as métricas junto no corpo da requisição
+      const payload = { 
+        type: activeTab, 
+        prompt: prompt || (activeTab === 'analyst' ? "Analise meus dados atuais." : ""),
+        contextData: activeTab === 'analyst' ? userMetrics : null 
+      }
+
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: activeTab, prompt }),
+        body: JSON.stringify(payload),
       })
       
       const data = await res.json()
       setResult(data.text)
     } catch (e) {
-      setResult("Erro ao conectar com o Studio. Verifique se a GEMINI_API_KEY está configurada.")
+      setResult("Erro ao conectar com o Studio. Verifique a API.")
     } finally {
       setLoading(false)
     }
@@ -58,20 +73,22 @@ export default function AIStudio() {
       <main className="flex-1 p-10 overflow-y-auto">
         <header className="mb-10">
           <h2 className="text-6xl font-black tracking-tighter text-white italic leading-none uppercase">AI_Studio</h2>
-          <p className="text-[#6c4bff] text-[10px] font-bold mt-4 uppercase tracking-[0.3em]">Criação e Análise com Inteligência Artificial</p>
+          <p className="text-[#6c4bff] text-[10px] font-bold mt-4 uppercase tracking-[0.3em]">
+            {activeTab === 'analyst' ? 'MODO ANALISTA ATIVADO (DADOS SINCRONIZADOS)' : 'Criação e Inteligência'}
+          </p>
         </header>
 
-        <div className="flex bg-[#16171a] p-2 rounded-[30px] mb-8 border border-white/5 w-fit shadow-2xl">
+        <div className="flex bg-[#16171a] p-2 rounded-[30px] mb-8 border border-white/5 w-fit shadow-2xl overflow-x-auto">
           {[
             { id: 'copy', label: 'Copywriter' },
             { id: 'creative', label: 'Criativos' },
             { id: 'script', label: 'Roteiros' },
-            { id: 'analyst', label: 'Analista' }
+            { id: 'analyst', label: 'Analista Data' }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => {setActiveTab(tab.id as any); setResult('')}}
-              className={`px-8 py-3 rounded-[22px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab.id ? 'bg-[#6c4bff] text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
+              className={`px-8 py-3 rounded-[22px] text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-[#6c4bff] text-white shadow-lg shadow-[#6c4bff]/40' : 'text-zinc-500 hover:text-zinc-300'}`}
             >
               {tab.label}
             </button>
@@ -79,15 +96,12 @@ export default function AIStudio() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-          <div className="bg-[#16171a] p-10 rounded-[45px] border border-white/5 shadow-2xl">
+          <div className="bg-[#16171a] p-10 rounded-[45px] border border-white/5 shadow-2xl relative">
             <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em] mb-6 italic">Comando de Operação</h3>
             <textarea 
               className="w-full h-80 bg-[#1c1d21] border border-white/5 rounded-[30px] p-6 outline-none focus:border-[#6c4bff]/50 text-white transition-all resize-none placeholder:text-zinc-800 font-medium"
               placeholder={
-                activeTab === 'copy' ? "Diga o produto e para quem vamos vender..." :
-                activeTab === 'creative' ? "Explique o conceito ou objetivo do anúncio..." :
-                activeTab === 'script' ? "Duração e estilo do vídeo (Ex: Reels Dinâmico)..." :
-                "Descreva os resultados atuais para análise..."
+                activeTab === 'analyst' ? "Opcional: Descreva um problema específico ou apenas clique no botão para análise geral..." : "O que vamos criar hoje?"
               }
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -95,18 +109,17 @@ export default function AIStudio() {
             <button 
               onClick={generateAI}
               disabled={loading}
-              className="w-full mt-8 p-6 bg-[#6c4bff] text-white rounded-[25px] font-black text-xs uppercase tracking-[0.4em] hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-[#6c4bff]/30 disabled:opacity-50"
+              className="w-full mt-8 p-6 bg-[#6c4bff] text-white rounded-[25px] font-black text-[11px] uppercase tracking-[0.4em] hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-[#6c4bff]/30 disabled:opacity-50"
             >
-              {loading ? 'Sincronizando IA...' : 'Executar Comando'}
+              {loading ? 'PROCESSANDO...' : 'EXECUTAR COMANDO'}
             </button>
           </div>
 
-          <div className="bg-[#1c1d21] p-10 rounded-[45px] border border-white/5 shadow-2xl relative overflow-hidden flex flex-col min-h-[500px]">
-            <h3 className="text-[10px] font-black text-[#6c4bff] uppercase tracking-[0.3em] mb-6 italic">Output_Data</h3>
-            <div className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap font-medium flex-1 overflow-y-auto">
-              {result || "Aguardando entrada para processamento..."}
+          <div className="bg-[#1c1d21] p-10 rounded-[45px] border border-white/5 shadow-2xl relative flex flex-col min-h-[500px]">
+            <h3 className="text-[10px] font-black text-[#6c4bff] uppercase tracking-[0.3em] mb-6 italic">Relatório_IA</h3>
+            <div className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap font-medium flex-1 overflow-y-auto pr-4 scrollbar-hide">
+              {result || "Aguardando entrada de dados..."}
             </div>
-            <div className="absolute bottom-[-5%] right-[-5%] w-64 h-64 bg-[#6c4bff]/5 blur-[80px] rounded-full"></div>
           </div>
         </div>
       </main>
