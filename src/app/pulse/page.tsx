@@ -9,6 +9,7 @@ export default function Pulse() {
   const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
 
+  // Estados
   const [label, setLabel] = useState('')
   const [value, setValue] = useState('')
   const [change, setChange] = useState('')
@@ -50,60 +51,49 @@ export default function Pulse() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0b] text-white p-8 flex flex-col items-center justify-center font-sans relative overflow-hidden">
-      <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-[#6c4bff]/5 rounded-full blur-[120px]"></div>
-
-      <div className="w-full max-w-md bg-[#16171a]/80 backdrop-blur-2xl rounded-[50px] border border-white/5 p-12 shadow-2xl z-10">
-        <div className="text-center mb-10">
-          <h2 className="text-3xl font-black italic tracking-tighter uppercase leading-none">Data_Pulse</h2>
-          <p className="text-zinc-600 text-[9px] font-black uppercase tracking-[0.4em] mt-4 text-center">Injeção de Telemetria</p>
-        </div>
+    <div className="min-h-screen bg-[#0f1013] text-white p-8 flex flex-col items-center justify-center font-sans">
+      <div className="w-full max-w-md bg-[#16171a] rounded-[40px] border border-white/5 p-10 shadow-2xl">
+        <h2 className="text-3xl font-black italic mb-8 tracking-tighter uppercase">Lançamento</h2>
         
-        <div className="flex bg-[#1c1d21] p-2 rounded-[25px] mb-10 border border-white/5 shadow-inner">
-          <button onClick={() => setActiveTab('cards')} className={`flex-1 py-4 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'cards' ? 'bg-[#6c4bff] text-white shadow-lg' : 'text-zinc-500'}`}>Cards</button>
-          <button onClick={() => setActiveTab('chart')} className={`flex-1 py-4 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'chart' ? 'bg-[#6c4bff] text-white shadow-lg' : 'text-zinc-500'}`}>Gráfico</button>
+        {/* TABS SELETORAS - ESTILO ORIGINAL */}
+        <div className="flex bg-[#1c1d21] p-1.5 rounded-2xl mb-8 border border-white/5">
+          <button 
+            onClick={() => setActiveTab('cards')}
+            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'cards' ? 'bg-[#6c4bff] text-white shadow-lg' : 'text-zinc-500'}`}
+          >
+            Métricas
+          </button>
+          <button 
+            onClick={() => setActiveTab('chart')}
+            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'chart' ? 'bg-[#6c4bff] text-white shadow-lg' : 'text-zinc-500'}`}
+          >
+            Gráfico
+          </button>
         </div>
 
         {activeTab === 'cards' ? (
-          <form onSubmit={saveCard} className="space-y-5">
-            <div className="space-y-2">
-              <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-4">Nome_Métrica</label>
-              <input required placeholder="EX: VENDAS" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold placeholder:text-zinc-800" onChange={(e) => setLabel(e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-4">Valor</label>
-                <input required placeholder="10.500" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold placeholder:text-zinc-800" onChange={(e) => setValue(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-4">Var</label>
-                <input required placeholder="+15%" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold placeholder:text-zinc-800" onChange={(e) => setChange(e.target.value)} />
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-5 bg-[#1c1d21] rounded-[22px] border border-white/5">
-                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Growth_Status</span>
+          <form onSubmit={saveCard} className="space-y-6">
+            <input required placeholder="Nome da Métrica (Ex: ROI)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] transition-all text-white" onChange={(e) => setLabel(e.target.value)} />
+            <input required placeholder="Valor (Ex: 12.500)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] transition-all text-white" onChange={(e) => setValue(e.target.value)} />
+            <input required placeholder="Variação (Ex: +12%)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] transition-all text-white" onChange={(e) => setChange(e.target.value)} />
+            <div className="flex items-center justify-between p-4 bg-[#1c1d21] rounded-2xl border border-white/5">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Positivo?</span>
                 <input type="checkbox" checked={isPositive} onChange={() => setIsPositive(!isPositive)} className="w-5 h-5 accent-[#00ff9d]" />
             </div>
-            <button type="submit" disabled={loading} className="w-full p-6 bg-[#6c4bff] rounded-[22px] font-black text-xs uppercase tracking-[0.3em] shadow-lg shadow-[#6c4bff]/20 active:scale-95 transition-all mt-4">
-                {loading ? 'Sincronizando...' : 'Executar Lançamento'}
+            <button type="submit" disabled={loading} className="w-full p-5 bg-[#6c4bff] rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-lg shadow-[#6c4bff]/20 hover:scale-[1.02] active:scale-95 transition-all">
+                {loading ? 'Salvando...' : 'Lançar Dados'}
             </button>
           </form>
         ) : (
-          <form onSubmit={saveChart} className="space-y-5">
-            <div className="space-y-2">
-              <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-4">Dia_Semana</label>
-              <input required placeholder="EX: SEG" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold placeholder:text-zinc-800" onChange={(e) => setDayName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-4">Telemetria_Valor</label>
-              <input required type="number" placeholder="000" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold placeholder:text-zinc-800" onChange={(e) => setAmount(e.target.value)} />
-            </div>
-            <button type="submit" disabled={loading} className="w-full p-6 bg-[#6c4bff] rounded-[22px] font-black text-xs uppercase tracking-[0.3em] shadow-lg shadow-[#6c4bff]/20 active:scale-95 transition-all mt-6">
-                {loading ? 'Sincronizando...' : 'Atualizar Gráfico'}
+          <form onSubmit={saveChart} className="space-y-6">
+            <input required placeholder="Dia (Ex: SEG, TER, QUA...)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] transition-all text-white" onChange={(e) => setDayName(e.target.value)} />
+            <input required type="number" placeholder="Valor do Gráfico (Ex: 850)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] transition-all text-white" onChange={(e) => setAmount(e.target.value)} />
+            <button type="submit" disabled={loading} className="w-full p-5 bg-[#6c4bff] rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-lg shadow-[#6c4bff]/20 hover:scale-[1.02] active:scale-95 transition-all">
+                {loading ? 'Salvando...' : 'Atualizar Gráfico'}
             </button>
           </form>
         )}
-        <button onClick={() => router.push('/')} className="w-full mt-8 text-[9px] font-black text-zinc-700 uppercase tracking-[0.3em] hover:text-white transition-colors">Abortar Operação</button>
+        <button onClick={() => router.push('/')} className="w-full mt-6 text-[9px] font-bold text-zinc-600 uppercase tracking-[0.4em] hover:text-white transition-colors">Voltar ao Painel</button>
       </div>
     </div>
   )
