@@ -1,41 +1,60 @@
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
+// Inicializa a biblioteca com a chave que você configurou na Vercel
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
   try {
+    // 1. Coleta os dados enviados pelo seu botão "Executar Comando"
     const { type, prompt, contextData } = await req.json();
 
+    // 2. Validação de segurança da chave
     if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ text: "Chave não configurada." }, { status: 500 });
+      return NextResponse.json(
+        { text: "Erro: GEMINI_API_KEY não configurada nas variáveis da Vercel." }, 
+        { status: 500 }
+      );
     }
 
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
-      // Isso impede que a IA bloqueie respostas por excesso de cautela
-      safetySettings: [
-        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      ],
-    });
+    // 3. Seleção do Modelo Estável (gemini-pro)
+    // Usamos o 'gemini-pro' porque o seu erro anterior confirmou que o 'flash' 
+    // ainda não está disponível para a sua versão da API v1beta.
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
+    // 4. Configuração de Personalidade (System Instructions)
     const instructions: any = {
-      copy: "Você é um Copywriter Sênior. Responda em Português.",
-      creative: "Você é um Diretor de Arte. Responda em Português.",
-      script: "Você é um Roteirista de vídeos. Responda em Português.",
-      analyst: "Você é um Analista de Performance. Responda em Português."
+      copy: "Você é um Copywriter Sênior especializado em marketing direto e headlines persuasivas.",
+      creative: "Você é um Diretor de Arte experiente. Sugira conceitos visuais e layouts inovadores.",
+      script: "Você é um Roteirista de alta performance para vídeos curtos (Reels/TikTok) e anúncios.",
+      analyst: "Você é um Analista de Performance de Dados. Analise as métricas e sugira otimizações."
     };
 
-    const result = await model.generateContent(`${instructions[type] || ""} \n\n ${prompt}`);
+    const role = instructions[type] || "Você é um assistente estratégico de marketing.";
+    
+    // 5. Construção do Prompt Final
+    let finalPrompt = `${role}\n\nResponda sempre em Português do Brasil.\n\nComando do usuário: ${prompt}`;
+    
+    // Se for o analista, ele anexa os dados do Supabase que você buscou no frontend
+    if (type === 'analyst' && contextData) {
+      finalPrompt += `\n\nDados para análise: ${JSON.stringify(contextData)}`;
+    }
+
+    // 6. Chamada oficial para o Google Gemini
+    const result = await model.generateContent(finalPrompt);
     const response = await result.response;
     const text = response.text();
 
+    // 7. Retorno para o seu frontend (Relatório)
     return NextResponse.json({ text });
+
   } catch (error: any) {
-    console.error("ERRO DETALHADO:", error);
-    return NextResponse.json({ text: "Erro na IA: " + error.message }, { status: 500 });
+    console.error("ERRO NA API AI:", error);
+    
+    // Retorna o erro detalhado para aparecer no seu quadro de "Relatório" se algo falhar
+    return NextResponse.json({ 
+      text: "Erro ao processar sua solicitação.",
+      details: error.message 
+    }, { status: 500 });
   }
 }
