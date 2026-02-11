@@ -22,7 +22,6 @@ export default function AIStudio() {
   }, [router])
 
   const generateAI = async () => {
-    if (!prompt && activeTab !== 'analyst') return alert("Digite algo!")
     setLoading(true)
     setResult("Processando inteligência...")
     try {
@@ -55,24 +54,26 @@ export default function AIStudio() {
       </aside>
 
       <main className="flex-1 p-10 overflow-y-auto">
-        <header className="mb-10 text-6xl font-black tracking-tighter text-white italic uppercase">AI_Studio</header>
+        <header className="mb-10 text-6xl font-black tracking-tighter text-white italic uppercase leading-none">AI_Studio</header>
         <div className="flex bg-[#16171a] p-2 rounded-[30px] mb-8 border border-white/5 w-fit">
           {['copy', 'creative', 'script', 'analyst'].map((tab) => (
-            <button key={tab} onClick={() => {setActiveTab(tab as any); setResult('')}} className={`px-8 py-3 rounded-[22px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-[#6c4bff] text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <button key={tab} onClick={() => {setActiveTab(tab as any); setResult('')}} className={`px-8 py-3 rounded-[22px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-[#6c4bff] text-white shadow-lg shadow-[#6c4bff]/40' : 'text-zinc-500 hover:text-zinc-300'}`}>
               {tab === 'analyst' ? 'Analista Data' : tab}
             </button>
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="bg-[#16171a] p-10 rounded-[45px] border border-white/5 shadow-2xl">
-            <textarea className="w-full h-80 bg-[#1c1d21] border border-white/5 rounded-[30px] p-6 outline-none focus:border-[#6c4bff]/50 text-white transition-all resize-none font-medium" placeholder="O que você precisa?" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+            <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em] mb-6 italic">Comando</h3>
+            <textarea className="w-full h-80 bg-[#1c1d21] border border-white/5 rounded-[30px] p-6 outline-none focus:border-[#6c4bff]/50 text-white transition-all resize-none font-medium" placeholder="Descreva sua necessidade..." value={prompt} onChange={(e) => setPrompt(e.target.value)} />
             <button onClick={generateAI} disabled={loading} className="w-full mt-8 p-6 bg-[#6c4bff] text-white rounded-[25px] font-black text-xs uppercase tracking-[0.4em] hover:scale-[1.02] transition-all shadow-xl shadow-[#6c4bff]/30">
-              {loading ? 'PROCESSANDO...' : 'EXECUTAR COMANDO'}
+              {loading ? 'SINCROIZANDO...' : 'EXECUTAR COMANDO'}
             </button>
           </div>
           <div className="bg-[#1c1d21] p-10 rounded-[45px] border border-white/5 shadow-2xl flex flex-col min-h-[500px]">
+            <h3 className="text-[10px] font-black text-[#6c4bff] uppercase tracking-[0.3em] mb-6 italic">Relatório</h3>
             <div className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap font-medium flex-1 overflow-y-auto">
-              {result || "Aguardando comando..."}
+              {result || "Aguardando entrada..."}
             </div>
           </div>
         </div>
