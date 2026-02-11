@@ -20,26 +20,24 @@ export default function AIStudio() {
 
   const generateAI = async () => {
     if(!prompt) return alert("Digite o que você precisa primeiro!")
+    
     setLoading(true)
     setResult("Sintonizando frequências de IA...")
     
-    // Deixaremos o fetch comentado até criarmos a rota da API
-    /*
     try {
       const res = await fetch('/api/ai', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: activeTab, prompt }),
       })
+      
       const data = await res.json()
       setResult(data.text)
     } catch (e) {
-      setResult("Erro ao conectar com o Studio. Verifique a API.")
+      setResult("Erro ao conectar com o Studio. Verifique se a GEMINI_API_KEY está configurada.")
+    } finally {
+      setLoading(false)
     }
-    */
-    setTimeout(() => {
-        setResult("A API ainda não foi conectada. O motor está pronto, só falta a chave de ignição (API KEY)!")
-        setLoading(false)
-    }, 1500)
   }
 
   return (
@@ -89,7 +87,7 @@ export default function AIStudio() {
                 activeTab === 'copy' ? "Diga o produto e para quem vamos vender..." :
                 activeTab === 'creative' ? "Explique o conceito ou objetivo do anúncio..." :
                 activeTab === 'script' ? "Duração e estilo do vídeo (Ex: Reels Dinâmico)..." :
-                "Peça uma análise dos dados do dashboard..."
+                "Descreva os resultados atuais para análise..."
               }
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -97,16 +95,16 @@ export default function AIStudio() {
             <button 
               onClick={generateAI}
               disabled={loading}
-              className="w-full mt-8 p-6 bg-[#6c4bff] text-white rounded-[25px] font-black text-xs uppercase tracking-[0.4em] hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-[#6c4bff]/30"
+              className="w-full mt-8 p-6 bg-[#6c4bff] text-white rounded-[25px] font-black text-xs uppercase tracking-[0.4em] hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-[#6c4bff]/30 disabled:opacity-50"
             >
-              {loading ? 'Processando...' : 'Gerar Resultado'}
+              {loading ? 'Sincronizando IA...' : 'Executar Comando'}
             </button>
           </div>
 
-          <div className="bg-[#1c1d21] p-10 rounded-[45px] border border-white/5 shadow-2xl relative overflow-hidden flex flex-col">
-            <h3 className="text-[10px] font-black text-[#6c4bff] uppercase tracking-[0.3em] mb-6 italic">Resposta da IA</h3>
-            <div className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap font-medium flex-1">
-              {result || "Aguardando entrada de dados para processar..."}
+          <div className="bg-[#1c1d21] p-10 rounded-[45px] border border-white/5 shadow-2xl relative overflow-hidden flex flex-col min-h-[500px]">
+            <h3 className="text-[10px] font-black text-[#6c4bff] uppercase tracking-[0.3em] mb-6 italic">Output_Data</h3>
+            <div className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap font-medium flex-1 overflow-y-auto">
+              {result || "Aguardando entrada para processamento..."}
             </div>
             <div className="absolute bottom-[-5%] right-[-5%] w-64 h-64 bg-[#6c4bff]/5 blur-[80px] rounded-full"></div>
           </div>
