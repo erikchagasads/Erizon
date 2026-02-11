@@ -15,7 +15,6 @@ export default function Dashboard() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/login'); return }
-      
       const currentUser = session.user
       setUser(currentUser)
 
@@ -58,13 +57,16 @@ export default function Dashboard() {
       <aside className="w-64 bg-[#16171a] flex flex-col border-r border-white/5 shadow-2xl">
         <div className="p-8">
           <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">ERIZON</h1>
-          <div className="w-10 h-1 bg-[#6c4bff] mt-2 rounded-full"></div>
+          <div className="w-10 h-1 bg-[#6c4bff] mt-2 rounded-full shadow-[0_0_10px_#6c4bff]"></div>
         </div>
         
         <nav className="flex-1 px-4 space-y-1">
           <div className="px-4 py-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Navegação</div>
           <button onClick={() => router.push('/')} className="w-full flex items-center gap-3 p-4 bg-[#6c4bff] rounded-[20px] text-white text-sm font-bold shadow-lg shadow-[#6c4bff]/20 transition-all">
             📊 Overview
+          </button>
+          <button onClick={() => router.push('/studio')} className="w-full flex items-center gap-3 p-4 text-zinc-500 hover:text-white hover:bg-white/5 rounded-[20px] text-sm font-bold transition-all group">
+            🧠 Studio
           </button>
           <button onClick={() => router.push('/pulse')} className="w-full flex items-center gap-3 p-4 text-zinc-500 hover:text-white hover:bg-white/5 rounded-[20px] text-sm font-bold transition-all group">
             ⚡ Pulse
@@ -108,7 +110,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-[#16171a] border border-white/5 p-12 rounded-[55px] shadow-2xl overflow-hidden group">
+        <div className="bg-[#16171a] border border-white/5 p-12 rounded-[55px] shadow-2xl overflow-hidden">
           <h3 className="text-2xl font-black text-white italic tracking-tight mb-12 uppercase">Histórico</h3>
           <div className="h-96 w-full">
             <ResponsiveContainer width="100%" height="100%">
