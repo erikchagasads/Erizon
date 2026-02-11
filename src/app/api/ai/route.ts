@@ -1,38 +1,58 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
+// Inicializa a IA com a chave
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
   try {
+    // 1. Verifica se a chave existe
+    if (!process.env.GEMINI_API_KEY) {
+      console.error("ERRO: Chave GEMINI_API_KEY não encontrada.");
+      return NextResponse.json({ text: "Erro: Chave de API não configurada na Vercel." }, { status: 500 });
+    }
+
     const { type, prompt, contextData } = await req.json();
 
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ text: "Erro: GEMINI_API_KEY não configurada na Vercel." }, { status: 500 });
-    }
-
+    // 2. Configura o modelo (Usando o flash que é mais rápido)
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    let systemInstructions = "";
-    if (type === 'analyst' && contextData && contextData.length > 0) {
-      const metricsSummary = contextData.map((m: any) => `${m.label}: ${m.value} (${m.change})`).join(', ');
-      systemInstructions = `Você é um Analista de Performance de Elite. O cliente possui estas métricas: ${metricsSummary}. Analise e dê 3 sugestões práticas.`;
-    } else {
-      const instructions: any = {
-        copy: "Você é um Copywriter Sênior. Crie textos persuasivos.",
-        creative: "Você é um Diretor de Arte. Dê ideias de criativos visuais.",
-        script: "Você é um Roteirista. Crie roteiros para vídeos curtos.",
-        analyst: "Você é um Analista de Performance. Peça os dados para analisar."
-      };
-      systemInstructions = instructions[type] || "Você é um assistente de marketing.";
+    // 3. Define as instruções de sistema
+    const instructions: any = {
+      copy: "Você é um Copywriter Sênior focado em conversão.",
+      creative: "Você é um Diretor de Arte criativo.",
+      script: "Você é um Roteirista de vídeos virais.",
+      analyst: "Você é um Analista de Dados de tráfego pago."
+    };
+
+    const role = instructions[type] || "Você é um assistente de marketing.";
+    
+    let fullPrompt = `${role}\n\nPedido: ${prompt}`;
+    
+    if (type === 'analyst' && contextData) {
+      fullPrompt += `\n\nContexto de dados do cliente: ${JSON.stringify(contextData)}`;
     }
 
-    const fullPrompt = `${systemInstructions}\n\nPedido: ${prompt || "Análise geral."}`;
+    // 4. Tenta gerar o conteúdo
     const result = await model.generateContent(fullPrompt);
-    const text = result.response.text();
+    
+    // 5. Forma segura de extrair o texto
+    const response = await result.response;
+    const text = response.text();
+
+    if (!text) {
+      throw new Error("IA retornou resposta vazia");
+    }
 
     return NextResponse.json({ text });
+
   } catch (error: any) {
-    return NextResponse.json({ text: "Erro no processamento da IA." }, { status: 500 });
+    console.error("ERRO NA ROTA AI:", error);
+    
+    // Retorna o erro real para facilitar o debug
+    return NextResponse.json({ 
+      text: "Erro no processamento da IA.",
+      details: error.message 
+    }, { status: 500 });
   }
 }
