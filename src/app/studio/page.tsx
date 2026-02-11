@@ -22,18 +22,32 @@ export default function AIStudio() {
   }, [router])
 
   const generateAI = async () => {
+    if (!prompt && activeTab !== 'analyst') return alert("Digite algo!")
     setLoading(true)
-    setResult("Processando inteligência...")
+    setResult("Sintonizando frequências de IA...")
+    
     try {
-      const res = await fetch('/api/ai', {
+      const res = await fetch('/api/ai', { // Verifique se o caminho é exatamente este
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: activeTab, prompt, contextData: activeTab === 'analyst' ? userMetrics : null }),
+        body: JSON.stringify({ 
+          type: activeTab, 
+          prompt, 
+          contextData: activeTab === 'analyst' ? userMetrics : null 
+        }),
       })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        setResult(`Erro do Servidor: ${errorData.text || 'Falha na comunicação'}`)
+        return
+      }
+      
       const data = await res.json()
       setResult(data.text)
     } catch (e) {
-      setResult("Erro ao conectar com a API.")
+      console.error(e)
+      setResult("Erro crítico: Verifique sua conexão ou a rota /api/ai")
     } finally {
       setLoading(false)
     }
