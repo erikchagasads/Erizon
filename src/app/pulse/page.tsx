@@ -68,16 +68,16 @@ export default function Pulse() {
           <form onSubmit={saveCard} className="space-y-5">
             <div className="space-y-2">
               <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-4">Nome_Métrica</label>
-              <input required placeholder="EX: VENDAS" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold" onChange={(e) => setLabel(e.target.value)} />
+              <input required placeholder="EX: VENDAS" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold placeholder:text-zinc-800" onChange={(e) => setLabel(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-4">Valor</label>
-                <input required placeholder="10.500" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold" onChange={(e) => setValue(e.target.value)} />
+                <input required placeholder="10.500" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold placeholder:text-zinc-800" onChange={(e) => setValue(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-4">Var</label>
-                <input required placeholder="+15%" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold" onChange={(e) => setChange(e.target.value)} />
+                <input required placeholder="+15%" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold placeholder:text-zinc-800" onChange={(e) => setChange(e.target.value)} />
               </div>
             </div>
             <div className="flex items-center justify-between p-5 bg-[#1c1d21] rounded-[22px] border border-white/5">
@@ -92,11 +92,11 @@ export default function Pulse() {
           <form onSubmit={saveChart} className="space-y-5">
             <div className="space-y-2">
               <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-4">Dia_Semana</label>
-              <input required placeholder="EX: SEG" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold" onChange={(e) => setDayName(e.target.value)} />
+              <input required placeholder="EX: SEG" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold placeholder:text-zinc-800" onChange={(e) => setDayName(e.target.value)} />
             </div>
             <div className="space-y-2">
               <label className="text-[9px] font-black text-zinc-600 uppercase tracking-widest ml-4">Telemetria_Valor</label>
-              <input required type="number" placeholder="000" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold" onChange={(e) => setAmount(e.target.value)} />
+              <input required type="number" placeholder="000" className="w-full p-5 bg-[#1c1d21] border border-white/5 rounded-[22px] outline-none focus:border-[#6c4bff]/50 text-white transition-all text-sm font-bold placeholder:text-zinc-800" onChange={(e) => setAmount(e.target.value)} />
             </div>
             <button type="submit" disabled={loading} className="w-full p-6 bg-[#6c4bff] rounded-[22px] font-black text-xs uppercase tracking-[0.3em] shadow-lg shadow-[#6c4bff]/20 active:scale-95 transition-all mt-6">
                 {loading ? 'Sincronizando...' : 'Atualizar Gráfico'}
