@@ -13,19 +13,48 @@ export default function Dashboard() {
 
   const fetchData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return; }
-      setUser(user)
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      if (!currentUser) { 
+        router.push('/login')
+        return 
+      }
+      setUser(currentUser)
+
       const [m, h] = await Promise.all([
         supabase.from('metrics').select('*').order('created_at', { ascending: true }),
         supabase.from('chart_history').select('*').order('created_at', { ascending: true })
       ])
+      
       if (m.data) setMetrics(m.data)
       if (h.data) setHistory(h.data)
-    } finally { setLoading(false) }
+    } catch (err) {
+      console.error("Erro ao carregar dados:", err)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  useEffect(() => { fetchData() }, [router])
+  useEffect(() => {
+    fetchData()
+
+    const channel = supabase
+      .channel('db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'metrics' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chart_history' }, () => fetchData())
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  const deleteMetric = async (id: any) => {
+    if (confirm('Deseja excluir esta métrica permanentemente?')) {
+      const { error } = await supabase.from('metrics').delete().eq('id', id)
+      if (error) alert(`Erro: ${error.message}`)
+      else fetchData()
+    }
+  }
 
   if (loading) return (
     <div className="bg-[#0f0f11] h-screen flex items-center justify-center">
@@ -36,63 +65,66 @@ export default function Dashboard() {
   return (
     <div className="flex h-screen bg-[#0f1013] text-[#e4e4e7]">
       
-      {/* SIDEBAR REPRODUZIDA */}
-      <aside className="w-64 bg-[#16171a] flex flex-col border-r border-white/5">
+      <aside className="w-64 bg-[#16171a] flex flex-col border-r border-white/5 shadow-2xl z-10">
         <div className="p-8">
           <h1 className="text-3xl font-extrabold tracking-tighter text-white italic">ERIZON</h1>
-          <div className="w-10 h-1 bg-[#6c4bff] mt-2 rounded-full"></div>
+          <div className="w-10 h-1 bg-[#6c4bff] mt-2 rounded-full shadow-[0_0_10px_#6c4bff]"></div>
         </div>
         
         <nav className="flex-1 px-4 space-y-1">
-          <div className="px-4 py-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Menu</div>
-          <button className="w-full flex items-center gap-3 p-3 bg-[#6c4bff] rounded-xl text-white text-sm font-semibold shadow-lg shadow-[#6c4bff]/20">
+          <div className="px-4 py-4 text-[10px] font-bold text-zinc-600 uppercase tracking-[0.3em]">Navegação</div>
+          <button onClick={() => router.push('/')} className="w-full flex items-center gap-3 p-4 bg-[#6c4bff] rounded-[20px] text-white text-sm font-bold shadow-lg shadow-[#6c4bff]/20">
             📊 Overview
           </button>
-          <button onClick={() => router.push('/pulse')} className="w-full flex items-center gap-3 p-3 text-zinc-400 hover:bg-white/5 rounded-xl text-sm font-medium transition-all">
-            ⚡ Pulse
+          <button onClick={() => router.push('/pulse')} className="w-full flex items-center gap-3 p-4 text-zinc-500 hover:text-zinc-200 hover:bg-white/5 rounded-[20px] text-sm font-bold transition-all group">
+            <span className="group-hover:animate-pulse">⚡</span> Pulse
           </button>
         </nav>
 
         <div className="p-6">
-          {/* AJUSTE: ENCERRAR */}
-          <button onClick={() => supabase.auth.signOut().then(() => router.push('/login'))} 
-            className="w-full p-3 bg-[#1c1d21] border border-white/5 rounded-xl text-xs font-bold hover:bg-red-500/10 hover:text-red-500 transition-all uppercase tracking-widest">
+          <button 
+            onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} 
+            className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 hover:text-red-500 transition-all"
+          >
             Encerrar
           </button>
         </div>
       </aside>
 
-      {/* CONTEÚDO PRINCIPAL */}
       <main className="flex-1 p-10 overflow-y-auto">
-        <header className="flex justify-between items-center mb-10 bg-[#16171a] p-8 rounded-[32px] border border-white/5">
+        <header className="flex justify-between items-center mb-10 bg-[#16171a] p-10 rounded-[40px] border border-white/5 shadow-xl">
           <div>
-            <h2 className="text-5xl font-extrabold tracking-tight text-white italic">Command</h2>
-            <p className="text-[#6c4bff] text-xs font-semibold mt-1 opacity-80 uppercase tracking-wider">{user?.email}</p>
+            <h2 className="text-6xl font-black tracking-tighter text-white italic leading-none">Command</h2>
+            <p className="text-[#6c4bff] text-xs font-bold mt-3 opacity-90 uppercase tracking-[0.2em] flex items-center gap-2">
+               {user?.email}
+            </p>
           </div>
-          {/* AJUSTE: ONLINE */}
-          <div className="bg-[#1c1d21] border border-white/10 px-6 py-3 rounded-2xl flex items-center gap-3">
-            <span className="w-2.5 h-2.5 bg-[#00ff9d] rounded-full animate-pulse shadow-[0_0_10px_#00ff9d]"></span>
-            <span className="text-white text-xs font-bold uppercase tracking-[0.2em]">Online</span>
+          <div className="bg-[#1c1d21] border border-white/10 px-8 py-4 rounded-[24px] flex items-center gap-4 shadow-inner">
+            <span className="w-3 h-3 bg-[#00ff9d] rounded-full animate-pulse shadow-[0_0_15px_#00ff9d]"></span>
+            <span className="text-white text-xs font-black uppercase tracking-[0.3em]">Online</span>
           </div>
         </header>
 
-        {/* ÁREA DE COMANDO */}
-        <div className="mb-6">
-          <h3 className="text-lg font-bold text-white mb-6 px-2 italic">Área de Comando</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="mb-10 text-white">
+          <h3 className="text-xl font-bold mb-8 px-4 italic">Área de Comando</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {metrics.map((item) => (
-              <div key={item.id} className="bg-[#1c1d21] border border-white/5 p-8 rounded-[32px] hover:border-zinc-700 transition-all group shadow-xl">
-                <div className="flex justify-between items-start mb-6">
-                  <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">{item.label}</span>
-                  <div className="flex gap-1">
-                    <div className="w-1.5 h-1.5 bg-zinc-700 rounded-full group-hover:bg-[#6c4bff] transition-colors"></div>
-                    <div className="w-1.5 h-1.5 bg-zinc-700 rounded-full group-hover:bg-[#6c4bff] transition-colors"></div>
-                  </div>
+              <div key={item.id} className="bg-[#1c1d21] border border-white/5 p-10 rounded-[45px] group relative shadow-2xl">
+                <button 
+                  onClick={() => deleteMetric(item.id)} 
+                  className="absolute top-8 right-8 opacity-0 group-hover:opacity-100 text-red-500/30 hover:text-red-500 transition-all"
+                >
+                  🗑️
+                </button>
+                <div className="flex justify-between items-start mb-8">
+                  <span className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em]">{item.label}</span>
                 </div>
                 <div className="flex justify-between items-end">
-                  <span className="text-5xl font-medium tracking-tighter text-white tabular-nums">{item.value}</span>
-                  <div className={`flex flex-col items-end ${item.is_positive ? 'text-[#00ff9d]' : 'text-red-500'}`}>
-                    <span className="text-[10px] font-bold bg-white/5 px-2 py-1 rounded-lg">{item.change}</span>
+                  <span className="text-5xl font-medium tracking-tighter tabular-nums">{item.value}</span>
+                  <div className={`${item.is_positive ? 'text-[#00ff9d]' : 'text-red-500'}`}>
+                    <span className="text-[10px] font-black bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
+                      {item.change}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -100,16 +132,9 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* GRÁFICO PRESERVADO */}
-        <div className="bg-[#16171a] border border-white/5 p-10 rounded-[40px] mt-10 shadow-2xl relative overflow-hidden">
-          <div className="flex justify-between items-center mb-10">
-            <h3 className="text-xl font-bold text-white italic">Performance Histórica</h3>
-            <div className="flex gap-1.5">
-               {[1,2,3,4].map(i => <div key={i} className="w-1.5 h-1.5 bg-zinc-800 rounded-full"></div>)}
-            </div>
-          </div>
-
-          <div className="h-80 w-full">
+        <div className="bg-[#16171a] border border-white/5 p-12 rounded-[55px] shadow-2xl overflow-hidden">
+          <h3 className="text-2xl font-black text-white italic tracking-tight mb-12">Performance Histórica</h3>
+          <div className="h-96 w-full text-white">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={history} margin={{ left: 10, right: 30, top: 0, bottom: 0 }}>
                 <defs>
@@ -128,8 +153,9 @@ export default function Dashboard() {
                   padding={{ left: 40, right: 40 }}
                   dy={15}
                 />
+                <YAxis hide domain={['auto', 'auto']} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#1c1d21', border: 'none', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
+                  contentStyle={{ backgroundColor: '#1c1d21', border: 'none', borderRadius: '16px' }}
                   itemStyle={{ color: '#6c4bff', fontWeight: 'bold' }}
                 />
                 <Area 
