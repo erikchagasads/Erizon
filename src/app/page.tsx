@@ -20,7 +20,7 @@ export default function Dashboard() {
       }
       setUser(currentUser)
 
-      // FILTRO POR USUÁRIO LOGADO (.eq('user_id', currentUser.id))
+      // FILTRO MULTI-TENANT (.eq('user_id', currentUser.id))
       const [m, h] = await Promise.all([
         supabase.from('metrics')
           .select('*')
@@ -70,7 +70,7 @@ export default function Dashboard() {
   )
 
   return (
-    <div className="flex h-screen bg-[#0f1013] text-[#e4e4e7] selection:bg-[#6c4bff]/30">
+    <div className="flex h-screen bg-[#0f1013] text-[#e4e4e7]">
       
       <aside className="w-64 bg-[#16171a] flex flex-col border-r border-white/5 shadow-2xl z-10">
         <div className="p-8">
@@ -101,8 +101,8 @@ export default function Dashboard() {
       <main className="flex-1 p-10 overflow-y-auto">
         <header className="flex justify-between items-center mb-10 bg-[#16171a] p-10 rounded-[40px] border border-white/5 shadow-xl">
           <div>
-            <h2 className="text-6xl font-black tracking-tighter text-white italic leading-none">COMMAND</h2>
-            <p className="text-[#6c4bff] text-xs font-bold mt-3 opacity-90 uppercase tracking-[0.2em] flex items-center gap-2">
+            <h2 className="text-6xl font-black tracking-tighter text-white italic leading-none uppercase">Command</h2>
+            <p className="text-[#6c4bff] text-xs font-bold mt-3 opacity-90 uppercase tracking-[0.2em]">
                {user?.email}
             </p>
           </div>
@@ -112,8 +112,8 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <div className="mb-10">
-          <h3 className="text-xl font-bold text-white mb-8 px-4 italic flex items-center gap-3 uppercase">Área de Comando</h3>
+        <div className="mb-10 text-white">
+          <h3 className="text-xl font-bold mb-8 px-4 italic uppercase">Área de Comando</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {metrics.map((item) => (
               <div key={item.id} className="bg-[#1c1d21] border border-white/5 p-10 rounded-[45px] hover:border-[#6c4bff]/30 transition-all group relative shadow-2xl">
@@ -122,7 +122,7 @@ export default function Dashboard() {
                   <span className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em]">{item.label}</span>
                 </div>
                 <div className="flex justify-between items-end">
-                  <span className="text-5xl font-medium tracking-tighter text-white tabular-nums">{item.value}</span>
+                  <span className="text-5xl font-medium tracking-tighter tabular-nums">{item.value}</span>
                   <div className={`${item.is_positive ? 'text-[#00ff9d]' : 'text-red-500'}`}>
                     <span className="text-[10px] font-black bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
                       {item.change}
@@ -134,7 +134,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-[#16171a] border border-white/5 p-12 rounded-[55px] shadow-2xl overflow-hidden group">
+        <div className="bg-[#16171a] border border-white/5 p-12 rounded-[55px] shadow-2xl overflow-hidden">
           <h3 className="text-2xl font-black text-white italic tracking-tight mb-12 uppercase">Performance Histórica</h3>
           <div className="h-96 w-full">
             <ResponsiveContainer width="100%" height="100%">

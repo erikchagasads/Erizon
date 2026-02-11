@@ -9,13 +9,10 @@ export default function Pulse() {
   const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
 
-  // Estados das Métricas
   const [label, setLabel] = useState('')
   const [value, setValue] = useState('')
   const [change, setChange] = useState('')
   const [isPositive, setIsPositive] = useState(true)
-
-  // Estados do Gráfico
   const [dayName, setDayName] = useState('')
   const [amount, setAmount] = useState('')
 
@@ -64,11 +61,11 @@ export default function Pulse() {
 
         {activeTab === 'cards' ? (
           <form onSubmit={saveCard} className="space-y-5">
-            <input required placeholder="Nome (Ex: ROI)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] transition-all" onChange={(e) => setLabel(e.target.value)} />
-            <input required placeholder="Valor (Ex: 12.500)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] transition-all" onChange={(e) => setValue(e.target.value)} />
-            <input required placeholder="Variação (Ex: +12%)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] transition-all" onChange={(e) => setChange(e.target.value)} />
+            <input required placeholder="Nome (Ex: ROI)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] text-white transition-all" onChange={(e) => setLabel(e.target.value)} />
+            <input required placeholder="Valor (Ex: 12.500)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] text-white transition-all" onChange={(e) => setValue(e.target.value)} />
+            <input required placeholder="Variação (Ex: +12%)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] text-white transition-all" onChange={(e) => setChange(e.target.value)} />
             <div className="flex items-center justify-between p-4 bg-[#1c1d21] rounded-2xl border border-white/5">
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Positivo?</span>
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Tendência Positiva?</span>
                 <input type="checkbox" checked={isPositive} onChange={() => setIsPositive(!isPositive)} className="w-5 h-5 accent-[#00ff9d]" />
             </div>
             <button type="submit" disabled={loading} className="w-full p-5 bg-[#6c4bff] rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-[#6c4bff]/20">
@@ -77,8 +74,8 @@ export default function Pulse() {
           </form>
         ) : (
           <form onSubmit={saveChart} className="space-y-5">
-            <input required placeholder="Dia (Ex: SEG, TER...)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] transition-all" onChange={(e) => setDayName(e.target.value)} />
-            <input required type="number" placeholder="Valor (Ex: 850)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] transition-all" onChange={(e) => setAmount(e.target.value)} />
+            <input required placeholder="Dia (Ex: SEG, TER...)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] text-white transition-all" onChange={(e) => setDayName(e.target.value)} />
+            <input required type="number" placeholder="Valor (Ex: 850)" className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl outline-none focus:border-[#6c4bff] text-white transition-all" onChange={(e) => setAmount(e.target.value)} />
             <button type="submit" disabled={loading} className="w-full p-5 bg-[#6c4bff] rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-[#6c4bff]/20">
                 {loading ? 'Salvando...' : 'Lançar no Gráfico'}
             </button>
