@@ -25,7 +25,7 @@ export default function Dashboard() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData() }, [router])
 
   if (loading) return (
     <div className="bg-[#0f0f11] h-screen flex items-center justify-center">
@@ -54,9 +54,10 @@ export default function Dashboard() {
         </nav>
 
         <div className="p-6">
+          {/* AJUSTE: ENCERRAR */}
           <button onClick={() => supabase.auth.signOut().then(() => router.push('/login'))} 
-            className="w-full p-3 bg-[#1c1d21] border border-white/5 rounded-xl text-xs font-bold hover:bg-red-500/10 hover:text-red-500 transition-all">
-            Terminate_Session
+            className="w-full p-3 bg-[#1c1d21] border border-white/5 rounded-xl text-xs font-bold hover:bg-red-500/10 hover:text-red-500 transition-all uppercase tracking-widest">
+            Encerrar
           </button>
         </div>
       </aside>
@@ -66,25 +67,26 @@ export default function Dashboard() {
         <header className="flex justify-between items-center mb-10 bg-[#16171a] p-8 rounded-[32px] border border-white/5">
           <div>
             <h2 className="text-5xl font-extrabold tracking-tight text-white italic">Command</h2>
-            <p className="text-[#6c4bff] text-xs font-semibold mt-1 opacity-80">{user?.email}</p>
+            <p className="text-[#6c4bff] text-xs font-semibold mt-1 opacity-80 uppercase tracking-wider">{user?.email}</p>
           </div>
+          {/* AJUSTE: ONLINE */}
           <div className="bg-[#1c1d21] border border-white/10 px-6 py-3 rounded-2xl flex items-center gap-3">
             <span className="w-2.5 h-2.5 bg-[#00ff9d] rounded-full animate-pulse shadow-[0_0_10px_#00ff9d]"></span>
-            <span className="text-white text-xs font-bold uppercase tracking-widest">System Live</span>
+            <span className="text-white text-xs font-bold uppercase tracking-[0.2em]">Online</span>
           </div>
         </header>
 
-        {/* ÁREA DE COMANDO - CARDS REDONDOS */}
+        {/* ÁREA DE COMANDO */}
         <div className="mb-6">
-          <h3 className="text-lg font-bold text-white mb-6 px-2 italic">Área de Comande</h3>
+          <h3 className="text-lg font-bold text-white mb-6 px-2 italic">Área de Comando</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {metrics.map((item) => (
-              <div key={item.id} className="bg-[#1c1d21] border border-white/5 p-8 rounded-[32px] hover:border-zinc-700 transition-all">
+              <div key={item.id} className="bg-[#1c1d21] border border-white/5 p-8 rounded-[32px] hover:border-zinc-700 transition-all group shadow-xl">
                 <div className="flex justify-between items-start mb-6">
                   <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">{item.label}</span>
                   <div className="flex gap-1">
-                    <div className="w-1.5 h-1.5 bg-zinc-700 rounded-full"></div>
-                    <div className="w-1.5 h-1.5 bg-zinc-700 rounded-full"></div>
+                    <div className="w-1.5 h-1.5 bg-zinc-700 rounded-full group-hover:bg-[#6c4bff] transition-colors"></div>
+                    <div className="w-1.5 h-1.5 bg-zinc-700 rounded-full group-hover:bg-[#6c4bff] transition-colors"></div>
                   </div>
                 </div>
                 <div className="flex justify-between items-end">
@@ -98,10 +100,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* PERFORMANCE TELEMETRY */}
-        <div className="bg-[#16171a] border border-white/5 p-10 rounded-[40px] mt-10 shadow-2xl">
+        {/* GRÁFICO PRESERVADO */}
+        <div className="bg-[#16171a] border border-white/5 p-10 rounded-[40px] mt-10 shadow-2xl relative overflow-hidden">
           <div className="flex justify-between items-center mb-10">
-            <h3 className="text-xl font-bold text-white italic">Performance_Telemetry</h3>
+            <h3 className="text-xl font-bold text-white italic">Performance Histórica</h3>
             <div className="flex gap-1.5">
                {[1,2,3,4].map(i => <div key={i} className="w-1.5 h-1.5 bg-zinc-800 rounded-full"></div>)}
             </div>
