@@ -1,7 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-// Inicializa a IA com a chave de ambiente
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
@@ -14,30 +13,26 @@ export async function POST(req: Request) {
 
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // Lógica de instruções personalizada
     let systemInstructions = "";
     if (type === 'analyst' && contextData && contextData.length > 0) {
       const metricsSummary = contextData.map((m: any) => `${m.label}: ${m.value} (${m.change})`).join(', ');
-      systemInstructions = `Você é um Analista de Performance de Elite. O cliente possui estas métricas reais: ${metricsSummary}. Analise criticamente e dê 3 sugestões práticas de otimização.`;
+      systemInstructions = `Você é um Analista de Performance de Elite. O cliente possui estas métricas: ${metricsSummary}. Analise e dê 3 sugestões práticas.`;
     } else {
       const instructions: any = {
-        copy: "Você é um Copywriter Sênior. Crie textos persuasivos para anúncios.",
-        creative: "Você é um Diretor de Arte. Dê ideias de conceitos visuais e criativos.",
-        script: "Você é um Roteirista. Crie roteiros para Reels, TikTok e VSL.",
-        analyst: "Você é um Analista de Performance. Peça os dados ao usuário ou analise o que ele enviou."
+        copy: "Você é um Copywriter Sênior. Crie textos persuasivos.",
+        creative: "Você é um Diretor de Arte. Dê ideias de criativos visuais.",
+        script: "Você é um Roteirista. Crie roteiros para vídeos curtos.",
+        analyst: "Você é um Analista de Performance. Peça os dados para analisar."
       };
       systemInstructions = instructions[type] || "Você é um assistente de marketing.";
     }
 
-    const fullPrompt = `${systemInstructions}\n\nPedido: ${prompt || "Análise baseada nos dados disponíveis."}`;
-
+    const fullPrompt = `${systemInstructions}\n\nPedido: ${prompt || "Análise geral."}`;
     const result = await model.generateContent(fullPrompt);
-    const response = await result.response;
-    const text = response.text();
+    const text = result.response.text();
 
     return NextResponse.json({ text });
   } catch (error: any) {
-    console.error("Erro na Rota AI:", error);
-    return NextResponse.json({ text: "Ocorreu um erro no processamento da IA." }, { status: 500 });
+    return NextResponse.json({ text: "Erro no processamento da IA." }, { status: 500 });
   }
 }
