@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
+// Inicializa a biblioteca
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
@@ -11,25 +12,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ text: "Chave não configurada na Vercel." }, { status: 500 });
     }
 
-    // Usando gemini-pro para evitar o erro 404 de modelo não encontrado
+    // MUDANÇA CRUCIAL: Trocamos 'gemini-1.5-flash' por 'gemini-pro'
+    // O 'gemini-pro' é o modelo estável que funciona em todas as regiões.
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
     const instructions: Record<string, string> = {
-      copy: "Você é um Copywriter Sênior. Responda de forma persuasiva em Português.",
-      creative: "Você é um Diretor de Arte. Dê ideias visuais em Português.",
-      script: "Você é um Roteirista. Crie roteiros cativantes em Português.",
-      analyst: "Você é um Analista de Dados. Dê insights estratégicos em Português."
+      copy: "Você é um Copywriter Sênior especializado em headlines. Responda em Português.",
+      creative: "Você é um Diretor de Arte. Sugira conceitos visuais em Português.",
+      script: "Você é um Roteirista de vídeos virais. Responda em Português.",
+      analyst: "Você é um Analista de Performance. Dê insights estratégicos em Português."
     };
 
     const role = instructions[type] || "Você é um assistente de marketing.";
     
-    const result = await model.generateContent(`${role}\n\nPedido: ${prompt}`);
+    // Chamada para o Google
+    const result = await model.generateContent(`${role}\n\nPedido do usuário: ${prompt}`);
     const response = await result.response;
     const text = response.text();
 
     return NextResponse.json({ text });
   } catch (error: any) {
-    console.error("Erro na API:", error);
+    console.error("ERRO NA API:", error);
+    // Retorna o erro real para o quadro "Relatório" para a gente saber se falhar
     return NextResponse.json({ 
       text: "Erro ao processar sua solicitação.", 
       details: error.message 
