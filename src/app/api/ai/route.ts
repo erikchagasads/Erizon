@@ -1,7 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-// Inicializa com a chave da Vercel
+// Força a execução em ambiente Node.js estável
+export const runtime = 'nodejs';
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
@@ -12,19 +14,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ text: "Chave não configurada na Vercel." }, { status: 500 });
     }
 
-    // Usando gemini-1.5-flash: é a versão estável mais recente e gratuita
+    // Usando o modelo estável 1.5-flash
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const instructions: Record<string, string> = {
-      copy: "Você é um Copywriter Sênior. Gere headlines persuasivas de alto padrão em Português.",
-      creative: "Você é um Diretor de Arte. Sugira conceitos visuais luxuosos em Português.",
-      script: "Você é um Roteirista de anúncios. Crie roteiros dinâmicos em Português.",
-      analyst: "Você é um Analista estratégico. Forneça insights de marketing em Português."
+      copy: "Você é um Copywriter Sênior especializado em alto padrão. Gere textos persuasivos.",
+      creative: "Você é um Diretor de Arte focado em luxo. Sugira conceitos visuais.",
+      script: "Você é um Roteirista de anúncios de elite. Crie roteiros dinâmicos.",
+      analyst: "Você é um Analista de Marketing estratégico. Forneça insights."
     };
 
     const role = instructions[type] || "Você é um assistente estratégico.";
     
-    // Chamada com timeout e persona configurada
+    // Chamada direta
     const result = await model.generateContent(`${role}\n\nSolicitação: ${prompt}`);
     const response = await result.response;
     const text = response.text();
@@ -33,10 +35,8 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Erro Gemini:", error.message);
-    
-    // Se der erro de região, esta mensagem ajudará a identificar
     return NextResponse.json({ 
-      text: "Erro no processamento da IA.",
+      text: "Erro na IA: Verifique o modelo ou a região.",
       details: error.message 
     }, { status: 500 });
   }
