@@ -1,96 +1,135 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Sparkles, Layout, Video, BarChart3, ClipboardCheck } from "lucide-react"
+import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-export default function AIStudio() {
-  const [activeTab, setActiveTab] = useState('copy')
-  const [prompt, setPrompt] = useState('')
-  const [result, setResult] = useState('')
-  const [loading, setLoading] = useState(false)
+// Inicializa o Supabase no Client (Use suas variáveis do .env)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-  const tabs = [
-    { id: 'copy', label: 'Copywriting', icon: Sparkles },
-    { id: 'creative', label: 'Criativos', icon: Layout },
-    { id: 'script', label: 'Roteiros', icon: Video },
-    { id: 'analyst', label: 'Data Analyst', icon: BarChart3 },
-  ]
+export default function StudioPage() {
+  const [prompt, setPrompt] = useState("");
+  const [resposta, setResposta] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [categoria, setCategoria] = useState("copywriting"); // Categoria padrão
+  const [historico, setHistorico] = useState<any[]>([]);
 
-  const generateAI = async () => {
-    if (!prompt) return alert("Por favor, digite seu comando!")
-    setLoading(true)
-    setResult("Conectando ao núcleo da IA...")
+  // 1. Carregar histórico do Supabase
+  const carregarHistorico = async () => {
+    const { data, error } = await supabase
+      .from("historico")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(5);
+    if (!error) setHistorico(data);
+  };
+
+  useEffect(() => {
+    carregarHistorico();
+  }, []);
+
+  // 2. Executar Comando da IA
+  const executarIA = async () => {
+    if (!prompt) return;
+    setLoading(true);
 
     try {
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: activeTab, prompt }),
-      })
-      const data = await res.json()
-      setResult(data.text || "Sem resposta da IA.")
-    } catch (error) {
-      setResult("Erro crítico de conexão.")
-    } finally {
-      setLoading(false)
-    }
-  }
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, category: categoria }),
+      });
 
-  const copyToClipboard = () => {
-    if (!result) return
-    navigator.clipboard.writeText(result)
-    alert("Copiado!")
-  }
+      const data = await res.json();
+      setResposta(data.text);
+      
+      // Recarrega o histórico para mostrar a nova gravação
+      carregarHistorico(); 
+    } catch (err) {
+      console.error("Erro ao chamar IA:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#0f1012] text-white p-8">
-      <h1 className="text-4xl font-black italic mb-10 uppercase">ERIZON <span className="text-[#6c4bff]">STUDIO</span></h1>
+    <div className="flex h-screen bg-black text-white font-sans p-6 gap-6">
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        <div className="bg-[#1c1d21] p-10 rounded-[45px] border border-white/5 relative overflow-hidden">
-          <div className="grid grid-cols-2 gap-3 mb-10">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-3 p-4 rounded-2xl text-[10px] font-bold uppercase tracking-widest transition-all ${
-                  activeTab === tab.id ? "bg-[#6c4bff] text-white" : "bg-white/5 text-zinc-500"
-                }`}
-              >
-                <tab.icon size={14} />
-                {tab.label}
-              </button>
-            ))}
-          </div>
+      {/* COLUNA ESQUERDA: INPUT E BOTÕES */}
+      <div className="flex-1 flex flex-col gap-6">
+        <h1 className="text-4xl font-black italic tracking-tighter">
+          ERIZON <span className="text-purple-500">STUDIO</span>
+        </h1>
 
-          <textarea 
-            className="w-full h-48 bg-black/20 border border-white/5 rounded-[30px] p-6 text-zinc-300 focus:outline-none"
-            placeholder="Digite aqui seu comando..."
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
-
-          <button 
-            onClick={generateAI}
-            disabled={loading}
-            className="w-full mt-8 p-6 bg-[#6c4bff] text-white rounded-[25px] font-black text-xs uppercase tracking-[0.4em] disabled:opacity-50"
-          >
-            {loading ? 'Processando...' : 'Executar Comando'}
-          </button>
+        {/* Grid de Categorias */}
+        <div className="grid grid-cols-2 gap-4">
+          {["copywriting", "roteiros", "criativos", "data analyst"].map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setCategoria(cat)}
+              className={`p-4 rounded-xl border text-xs font-bold uppercase transition-all ${
+                categoria === cat 
+                ? "bg-purple-600 border-purple-400 text-white" 
+                : "bg-white/5 border-white/10 text-gray-400 hover:bg-white/10"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
         </div>
 
-        <div className="bg-[#1c1d21] p-10 rounded-[45px] border border-white/5 min-h-[500px] flex flex-col">
-          <h3 className="text-[10px] font-black text-[#6c4bff] uppercase tracking-[0.3em] mb-6 italic">Output_Data</h3>
-          <div className="text-zinc-300 text-sm flex-1 overflow-y-auto whitespace-pre-wrap">
-            {result || "Aguardando entrada..."}
+        {/* Input de Texto */}
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder={`Digite seu comando para ${categoria}...`}
+          className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 text-lg focus:outline-none focus:border-purple-500 transition-all resize-none"
+        />
+
+        <button
+          onClick={executarIA}
+          disabled={loading}
+          className="w-full bg-purple-600 hover:bg-purple-700 py-6 rounded-3xl font-black text-xl uppercase tracking-widest transition-all disabled:opacity-50"
+        >
+          {loading ? "PROCESSANDO..." : "EXECUTAR COMANDO"}
+        </button>
+      </div>
+
+      {/* COLUNA DIREITA: OUTPUT E HISTÓRICO */}
+      <div className="w-[400px] flex flex-col gap-6">
+        
+        {/* Output Data */}
+        <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 overflow-y-auto">
+          <span className="text-[10px] font-bold text-purple-400 tracking-widest uppercase block mb-4">
+            OUTPUT_DATA
+          </span>
+          <p className="text-gray-300 leading-relaxed whitespace-pre-wrap">
+            {resposta || "Aguardando comando..."}
+          </p>
+        </div>
+
+        {/* Histórico Rápido */}
+        <div className="h-[250px] bg-white/5 border border-white/10 rounded-3xl p-6">
+          <span className="text-[10px] font-bold text-gray-500 tracking-widest uppercase block mb-4">
+            RECENT_MEMORY
+          </span>
+          <div className="space-y-3 overflow-y-auto h-full pr-2">
+            {historico.map((item) => (
+              <div key={item.id} className="text-[11px] p-3 rounded-lg bg-white/5 border border-white/5">
+                <div className="flex justify-between text-purple-500 font-bold mb-1">
+                  <span>{item.categoria.toUpperCase()}</span>
+                  <span className="text-gray-600 font-normal">
+                    {new Date(item.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <p className="text-gray-400 line-clamp-1 italic">"{item.prompt}"</p>
+              </div>
+            ))}
           </div>
-          {result && !loading && (
-            <button onClick={copyToClipboard} className="mt-6 flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase">
-              <ClipboardCheck size={14} /> [ Copiar Resultado ]
-            </button>
-          )}
         </div>
       </div>
     </div>
-  )
+  );
 }
