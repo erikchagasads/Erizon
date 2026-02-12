@@ -1,55 +1,57 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-// Força a Vercel a não usar cache para esta rota
 export const dynamic = 'force-dynamic';
-
-// Inicializa a IA usando a chave que você configurou na Vercel
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
   try {
-    const { type, prompt } = await req.json();
+    // Agora recebemos o prompt e a categoria (ex: copywriting, roteiros...)
+    const { prompt, category } = await req.json();
+    const apiKey = process.env.GROQ_API_KEY;
 
-    // Validação de segurança para garantir que a chave existe
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ 
-        text: "Erro: Chave API (GEMINI_API_KEY) não encontrada nas variáveis da Vercel." 
-      }, { status: 500 });
+    if (!apiKey) {
+      return NextResponse.json({ text: "Erro: GROQ_API_KEY não configurada." }, { status: 500 });
     }
 
-    // Usando o modelo gemini-1.5-flash (mais estável para deploys)
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Definimos o comportamento da IA com base na categoria selecionada
+    let systemInstruction = "Você é a ERIZON, uma IA de alta performance.";
+    
+    if (category === "copywriting") {
+      systemInstruction = "Você é uma Copywriter Expert em conversão e gatilhos mentais. Seu foco é vender.";
+    } else if (category === "roteiros") {
+      systemInstruction = "Você é uma Roteirista de elite para vídeos virais (Reels/TikTok). Foque em retenção e hooks fortes.";
+    } else if (category === "criativos") {
+      systemInstruction = "Você é uma Diretora de Arte. Descreva conceitos visuais e textos para anúncios de alta performance.";
+    } else if (category === "data analyst") {
+      systemInstruction = "Você é uma Analista de Dados. Ajude a interpretar métricas e sugerir otimizações baseadas em números.";
+    }
 
-    // Instruções específicas para cada aba do seu Studio
-    const instructions: Record<string, string> = {
-      copy: "Você é um Copywriter Sênior. Gere headlines de alto padrão e magnéticas.",
-      creative: "Você é um Diretor de Arte. Forneça conceitos visuais luxuosos.",
-      script: "Você é um Roteirista de anúncios de elite. Crie roteiros dinâmicos.",
-      analyst: "Você é um Analista de Marketing. Forneça insights estratégicos de escala."
-    };
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: prompt || "Olá" }
+        ],
+        temperature: 0.7, // Um pouco de criatividade
+      }),
+    });
 
-    const role = instructions[type] || "Você é um assistente estratégico da ERIZON.";
+    const data = await response.json();
 
-    // Chamada para a API do Google
-    const result = await model.generateContent(`${role}\n\nSolicitação: ${prompt}`);
-    const response = await result.response;
-    const text = response.text();
+    if (!response.ok) {
+      throw new Error(data.error?.message || "Erro na Groq");
+    }
 
-    return NextResponse.json({ text });
+    const aiResponse = data.choices[0].message.content;
+    return NextResponse.json({ text: aiResponse });
 
   } catch (error: any) {
-    console.error("Erro na API Gemini:", error.message);
-    
-    // Tratamento amigável de erro de região ou limite
-    let userMessage = "Erro no processamento da IA.";
-    if (error.message.includes("location")) {
-      userMessage = "Erro: Região não suportada. Verifique se a Vercel está em Washington (iad1).";
-    }
-
-    return NextResponse.json({ 
-      text: userMessage,
-      details: error.message 
-    }, { status: 500 });
+    console.error("--- ERRO NA ROTA AI ---");
+    return NextResponse.json({ text: "Erro na conexão.", details: error.message }, { status: 500 });
   }
 }
