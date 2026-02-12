@@ -1,0 +1,12 @@
+name: Ads Sync Automatizado
+on:
+  schedule:
+    - cron: '*/15 * * * *' # Roda a cada 15 minutos (Grátis no GitHub!)
+  workflow_dispatch: # Permite rodar manualmente pelo botão no GitHub
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamando a API de Sincronização
+        run: curl -X GET https://erizon.vercel.app/api/ads-sync
