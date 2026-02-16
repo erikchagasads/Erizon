@@ -2,7 +2,11 @@
   "crons": [
     {
       "path": "/api/ads-sync",
-      "schedule": "0,15,30,45 * * * *"
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/check-alerts",
+      "schedule": "30 4 * * *"
     }
   ]
 }

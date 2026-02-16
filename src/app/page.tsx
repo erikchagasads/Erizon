@@ -1,134 +1,102 @@
-'use client'
-import { useEffect, useState } from 'react'
-import { supabase } from './lib/supabase'
-import { useRouter } from 'next/navigation'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+"use client";
 
-export default function Dashboard() {
-  const [user, setUser] = useState<any>(null)
-  const [metrics, setMetrics] = useState<any[]>([])
-  const [history, setHistory] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const router = useRouter()
+import Image from "next/image";
+import Link from "next/link";
+import { ArrowRight, Zap, Target, BarChart3 } from "lucide-react";
 
-  const fetchData = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { router.push('/login'); return }
-      const currentUser = session.user
-      setUser(currentUser)
-
-      const [m, h] = await Promise.all([
-        supabase.from('metrics').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: true }),
-        supabase.from('chart_history').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: true })
-      ])
-      
-      if (m.data) setMetrics(m.data)
-      if (h.data) setHistory(h.data)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchData()
-    const channel = supabase.channel('db-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'metrics' }, () => fetchData()).on('postgres_changes', { event: '*', schema: 'public', table: 'chart_history' }, () => fetchData()).subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [])
-
-  const deleteMetric = async (id: any) => {
-    if (confirm('Excluir métrica?')) {
-      await supabase.from('metrics').delete().eq('id', id)
-      fetchData()
-    }
-  }
-
-  if (loading) return (
-    <div className="bg-[#0f0f11] h-screen flex items-center justify-center">
-      <div className="w-12 h-12 border-4 border-[#6c4bff]/20 border-t-[#6c4bff] rounded-full animate-spin"></div>
-    </div>
-  )
-
+export default function HomePage() {
   return (
-    <div className="flex h-screen bg-[#0f1013] text-[#e4e4e7] font-sans">
-      
-      <aside className="w-64 bg-[#16171a] flex flex-col border-r border-white/5 shadow-2xl">
-        <div className="p-8">
-          <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">ERIZON</h1>
-          <div className="w-10 h-1 bg-[#6c4bff] mt-2 rounded-full shadow-[0_0_10px_#6c4bff]"></div>
+    <div className="min-h-screen bg-[#020202] text-white selection:bg-purple-500/30 overflow-x-hidden">
+      {/* Luzes de Fundo (Glow) - Otimizadas para performance */}
+      <div className="absolute top-0 right-0 w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-purple-600/10 blur-[150px] rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[250px] md:w-[500px] h-[250px] md:h-[500px] bg-purple-900/10 blur-[130px] rounded-full translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+
+      {/* Navegação / Header */}
+      <nav className="relative z-20 flex justify-between items-center px-6 md:px-12 py-8 max-w-7xl mx-auto">
+        <div className="relative w-[120px] md:w-[150px] h-[40px] md:h-[50px]">
+          {/* Adicionei uma verificação para não quebrar se a imagem não existir */}
+          <div className="text-xl font-black italic tracking-tighter flex items-center gap-2">
+            ERIZON<span className="text-purple-600">.</span>
+          </div>
         </div>
         
-        <nav className="flex-1 px-4 space-y-1">
-          <div className="px-4 py-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Navegação</div>
-          <button onClick={() => router.push('/')} className="w-full flex items-center gap-3 p-4 bg-[#6c4bff] rounded-[20px] text-white text-sm font-bold shadow-lg shadow-[#6c4bff]/20 transition-all">
-            📊 Overview
+        <Link href="/login">
+          <button className="group relative px-6 md:px-8 py-3 bg-white text-black font-black uppercase text-[9px] md:text-[10px] tracking-[0.2em] rounded-full transition-all hover:bg-purple-600 hover:text-white active:scale-95">
+            Acessar Sistema
+            <ArrowRight className="inline-all ml-2 group-hover:translate-x-1 transition-transform" size={14} />
           </button>
-          <button onClick={() => router.push('/studio')} className="w-full flex items-center gap-3 p-4 text-zinc-500 hover:text-white hover:bg-white/5 rounded-[20px] text-sm font-bold transition-all group">
-            🧠 Studio
-          </button>
-          <button onClick={() => router.push('/pulse')} className="w-full flex items-center gap-3 p-4 text-zinc-500 hover:text-white hover:bg-white/5 rounded-[20px] text-sm font-bold transition-all group">
-            ⚡ Pulse
-          </button>
-        </nav>
+        </Link>
+      </nav>
 
-        <div className="p-6">
-          <button onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }} className="w-full p-4 bg-[#1c1d21] border border-white/5 rounded-2xl text-[10px] font-black uppercase text-zinc-500 hover:text-red-500 transition-all">
-            Encerrar
-          </button>
-        </div>
-      </aside>
-
-      <main className="flex-1 p-10 overflow-y-auto">
-        <header className="flex justify-between items-center mb-10 bg-[#16171a] p-10 rounded-[40px] border border-white/5 shadow-xl">
-          <div>
-            <h2 className="text-6xl font-black tracking-tighter text-white italic leading-none uppercase">Command</h2>
-            <p className="text-[#6c4bff] text-[10px] font-bold mt-4 uppercase tracking-[0.3em]">{user?.email}</p>
-          </div>
-          <div className="bg-[#1c1d21] border border-white/10 px-8 py-4 rounded-[24px] flex items-center gap-4 shadow-inner">
-            <span className="w-3 h-3 bg-[#00ff9d] rounded-full animate-pulse shadow-[0_0_15px_#00ff9d]"></span>
-            <span className="text-white text-[10px] font-black uppercase tracking-widest">Online</span>
-          </div>
-        </header>
-
-        <div className="mb-10">
-          <h3 className="text-xl font-bold text-white mb-8 px-4 italic uppercase tracking-tight">Métricas</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {metrics.map((item) => (
-              <div key={item.id} className="bg-[#1c1d21] border border-white/5 p-10 rounded-[45px] hover:border-[#6c4bff]/30 transition-all group relative shadow-2xl">
-                <button onClick={() => deleteMetric(item.id)} className="absolute top-8 right-10 opacity-0 group-hover:opacity-100 text-red-500/30 hover:text-red-500 transition-all">🗑️</button>
-                <div className="mb-8"><span className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em]">{item.label}</span></div>
-                <div className="flex justify-between items-end">
-                  <span className="text-5xl font-medium tracking-tighter text-white tabular-nums">{item.value}</span>
-                  <div className={`${item.is_positive ? 'text-[#00ff9d]' : 'text-red-500'}`}>
-                    <span className="text-[10px] font-black bg-white/5 px-3 py-1.5 rounded-xl border border-white/5 uppercase">{item.change}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Conteúdo Principal */}
+      <main className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 pt-16 md:pt-24 pb-32 flex flex-col items-center text-center">
+        {/* Badge de Versão */}
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/5 bg-white/5 mb-8">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+          </span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-purple-300">V.2.0 Growth Intelligence</span>
         </div>
 
-        <div className="bg-[#16171a] border border-white/5 p-12 rounded-[55px] shadow-2xl overflow-hidden">
-          <h3 className="text-2xl font-black text-white italic tracking-tight mb-12 uppercase">Histórico</h3>
-          <div className="h-96 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={history}>
-                <defs>
-                  <linearGradient id="purpleGlow" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6c4bff" stopOpacity={0.4}/><stop offset="95%" stopColor="#6c4bff" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff03" vertical={false} />
-                <XAxis dataKey="day_name" axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 11, fontWeight: 800 }} interval={0} padding={{ left: 40, right: 40 }} dy={15} />
-                <Tooltip contentStyle={{ backgroundColor: '#1c1d21', border: 'none', borderRadius: '16px' }} itemStyle={{ color: '#6c4bff', fontWeight: 'bold' }} />
-                <Area type="monotone" dataKey="amount" stroke="#6c4bff" strokeWidth={6} fill="url(#purpleGlow)" dot={{ fill: '#6c4bff', r: 6, strokeWidth: 4, stroke: '#16171a' }} activeDot={{ r: 9, fill: '#00ff9d', strokeWidth: 0 }} />
-              </AreaChart>
-            </ResponsiveContainer>
+        {/* Título de Alto Impacto */}
+        <h1 className="text-5xl md:text-8xl font-black italic tracking-tighter uppercase leading-[0.9] mb-8">
+          Escala Sem <br />
+          <span className="text-purple-600 drop-shadow-[0_0_30px_rgba(147,51,234,0.3)]">Fronteiras.</span>
+        </h1>
+
+        <p className="max-w-2xl text-gray-500 font-medium text-base md:text-lg mb-12 leading-relaxed">
+          O primeiro sistema de inteligência preditiva focado em <span className="text-white">Growth & Performance</span>. 
+          Transforme seus dados brutos em decisões que geram escala real.
+        </p>
+
+        {/* Botão de Ação Principal */}
+        <Link href="/login">
+          <button className="px-10 py-6 bg-purple-600 text-white font-black uppercase text-[11px] tracking-[0.3em] rounded-2xl hover:bg-purple-700 transition-all shadow-[0_0_40px_rgba(147,51,234,0.2)] hover:shadow-purple-600/40 active:scale-95">
+            Iniciar Operação
+          </button>
+        </Link>
+
+        {/* Grid de Diferenciais */}
+        <div className="mt-24 grid grid-cols-1 md:grid-cols-3 gap-12 w-full border-t border-white/5 pt-16">
+          <div className="flex flex-col items-center space-y-4 group">
+            <div className="p-4 bg-white/5 rounded-2xl group-hover:bg-purple-600/10 transition-colors">
+              <Zap className="text-purple-500" size={28} />
+            </div>
+            <div>
+              <h3 className="font-black italic uppercase tracking-widest text-sm text-white">Velocidade IA</h3>
+              <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mt-2 leading-loose">Análises preditivas em<br/>tempo recorde</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center space-y-4 group">
+             <div className="p-4 bg-white/5 rounded-2xl group-hover:bg-purple-600/10 transition-colors">
+              <Target className="text-purple-500" size={28} />
+            </div>
+            <div>
+              <h3 className="font-black italic uppercase tracking-widest text-sm text-white">Precisão Absoluta</h3>
+              <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mt-2 leading-loose">Algoritmos focados em<br/>ROI e conversão</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center space-y-4 group">
+            <div className="p-4 bg-white/5 rounded-2xl group-hover:bg-purple-600/10 transition-colors">
+              <BarChart3 className="text-purple-500" size={28} />
+            </div>
+            <div>
+              <h3 className="font-black italic uppercase tracking-widest text-sm text-white">War Room Dash</h3>
+              <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mt-2 leading-loose">Visualização tática<br/>em tempo real</p>
+            </div>
           </div>
         </div>
       </main>
+
+      {/* Rodapé Simples */}
+      <footer className="relative z-10 py-12 border-t border-white/5 text-center">
+        <p className="text-[9px] text-gray-700 font-black uppercase tracking-[0.4em]">
+          © 2026 Erizon Growth Intelligence — Todos os direitos reservados
+        </p>
+      </footer>
     </div>
-  )
+  );
 }
