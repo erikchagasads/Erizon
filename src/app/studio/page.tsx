@@ -1,389 +1,262 @@
 "use client";
 
+// app/studio/page.tsx — Studio IA (Analista Neural)
+// Refatorado para usar ChatShell — elimina duplicação de chat boilerplate.
+// FIX: filtra campanhas por cliente_id quando um cliente está selecionado.
+
 import { useState, useEffect, useRef } from "react";
-import { createClient } from "@supabase/supabase-js";
-import { 
-  BrainCircuit, Send, Plus, Trash2, Loader2,
-  Zap, BarChart3, MessageSquare, PenTool, Settings,
-  Sparkles, ChevronRight, ChevronDown
+import {
+  BrainCircuit, ChevronDown,
+  TrendingUp, Users, Wallet, Activity
 } from "lucide-react";
-import Link from "next/link";
+import ChatShell, { type Mensagem } from "@/components/ChatShell";
+import { getSupabase } from "@/lib/supabase";
+import { useCliente } from "@/app/hooks/useCliente";
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-
-interface Mensagem {
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
+interface Campanha {
+  id?: string;
+  cliente_id?: string;
+  nome_campanha: string;
+  status: string;
+  gasto_total: number;
+  contatos: number;
+  orcamento: number;
+  impressoes?: number;
+  alcance?: number;
 }
 
-interface Conversa {
-  id: number;
-  titulo: string;
-  mensagens: Mensagem[];
-  data_criacao: string;
-}
+const STATUS_ATIVOS = new Set(["ATIVO", "ACTIVE", "ATIVA"]);
+const isCampanhaAtiva = (c: Campanha) =>
+  STATUS_ATIVOS.has(String(c.status ?? "").toUpperCase().trim());
 
-function SideLink({ href, icon, active, label }: { href: string, icon: any, active?: boolean, label: string }) {
-  return (
-    <Link href={href} className="group relative flex flex-col items-center">
-      <div className={`
-        p-4 rounded-2xl transition-all duration-500 relative z-10
-        ${active 
-          ? 'bg-purple-600 text-white shadow-[0_0_25px_rgba(168,85,247,0.5)]' 
-          : 'text-gray-500 hover:text-white hover:bg-white/5'}
-      `}>
-        {icon}
-      </div>
-      <span className="absolute left-20 bg-purple-600 text-white text-[9px] font-black uppercase px-3 py-1.5 rounded-lg opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 pointer-events-none tracking-widest z-50 whitespace-nowrap">
-        {label}
-      </span>
-      {active && (
-        <div className="absolute -left-10 w-1.5 h-8 bg-purple-600 rounded-r-full shadow-[5px_0_15px_#a855f7]"></div>
-      )}
-    </Link>
-  );
-}
+const SUGESTOES = [
+  { text: "Analise as campanhas ativas",         emoji: "📊" },
+  { text: "Qual tem melhor performance?",         emoji: "🏆" },
+  { text: "Identifique oportunidades de escala", emoji: "🚀" },
+  { text: "Como reduzir meu CPL?",               emoji: "💡" },
+];
 
-export default function StudioChatPage() {
-  const [conversas, setConversas] = useState<Conversa[]>([]);
-  const [conversaAtual, setConversaAtual] = useState<Conversa | null>(null);
-  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [campanhas, setCampanhas] = useState<any[]>([]);
-  const [campanhaSelecionada, setCampanhaSelecionada] = useState<string>("todas");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Filtragem de campanhas ativas para o seletor e contexto
-  const campanhasAtivas = campanhas.filter(c => 
-    c.status?.toUpperCase() === 'ACTIVE' || c.status?.toUpperCase() === 'ATIVO'
-  );
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+// ─── Campaign Dropdown ────────────────────────────────────────────────────────
+function CampaignDropdown({ campanhas, value, onChange }: {
+  campanhas: Campanha[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [mensagens]);
-
-  useEffect(() => {
-    async function carregar() {
-      const { data: campData } = await supabase.from("metricas_ads").select("*");
-      if (campData) setCampanhas(campData);
-
-      const { data: convData } = await supabase
-        .from("conversas_studio")
-        .select("*")
-        .order('data_criacao', { ascending: false });
-      
-      if (convData) {
-        setConversas(convData.map(c => ({
-          ...c,
-          mensagens: JSON.parse(c.mensagens).map((m: any) => ({
-            ...m,
-            timestamp: new Date(m.timestamp)
-          }))
-        })));
-      }
-    }
-    carregar();
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const novaConversa = () => {
-    setConversaAtual(null);
-    setMensagens([]);
-    setInput("");
-  };
+  const label = value === "todas" ? `Todas as ativas (${campanhas.length})` : value;
 
-  const carregarConversa = (conversa: Conversa) => {
-    setConversaAtual(conversa);
-    setMensagens(conversa.mensagens);
-  };
+  return (
+    <div ref={ref} className="relative min-w-[280px]">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`w-full flex items-center justify-between gap-3 bg-[#0e0e10] border px-4 py-3 rounded-xl text-xs font-semibold transition-all ${
+          open ? "border-purple-500/50 text-white" : "border-white/[0.08] text-gray-400 hover:border-white/20 hover:text-white"
+        }`}
+      >
+        <span className="flex items-center gap-2 truncate">
+          {value === "todas"
+            ? <span className="text-purple-400">◈</span>
+            : <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shrink-0" />}
+          <span className="truncate">{label}</span>
+        </span>
+        <ChevronDown
+          size={13}
+          className={`text-purple-500 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="absolute top-full mt-1.5 w-full bg-[#0e0e10] border border-white/[0.08] rounded-xl overflow-hidden z-50 shadow-2xl">
+          <button
+            onClick={() => { onChange("todas"); setOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-semibold text-left transition-all ${
+              value === "todas" ? "bg-purple-600/15 text-purple-300" : "text-gray-400 hover:bg-white/[0.04] hover:text-white"
+            }`}
+          >
+            <span className="text-purple-400">◈</span>
+            Todas as ativas
+            <span className="ml-auto text-[10px] bg-purple-600/20 text-purple-400 px-1.5 py-0.5 rounded-lg">
+              {campanhas.length}
+            </span>
+          </button>
+          {campanhas.map((c, i) => (
+            <button
+              key={i}
+              onClick={() => { onChange(c.nome_campanha); setOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-xs font-semibold text-left transition-all border-t border-white/[0.04] ${
+                value === c.nome_campanha ? "bg-purple-600/15 text-purple-300" : "text-gray-400 hover:bg-white/[0.04] hover:text-white"
+              }`}
+            >
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shrink-0" />
+              <span className="truncate">{c.nome_campanha || "SEM NOME"}</span>
+            </button>
+          ))}
+          {campanhas.length === 0 && (
+            <div className="px-4 py-5 text-center text-xs text-gray-600">
+              Nenhuma campanha ativa
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
-  const deletarConversa = async (id: number) => {
-    if (!confirm("Deletar esta conversa?")) return;
-    await supabase.from("conversas_studio").delete().eq('id', id);
-    setConversas(prev => prev.filter(c => c.id !== id));
-    if (conversaAtual?.id === id) novaConversa();
-  };
+// ─── Metric Bar ───────────────────────────────────────────────────────────────
+function MetricBar({ label, value, icon, color = "text-white", bar }: {
+  label: string; value: string; icon: React.ReactNode; color?: string; bar?: number;
+}) {
+  return (
+    <div className="bg-[#0a0a0c] border border-white/[0.05] rounded-xl p-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] text-gray-600 font-medium">{label}</span>
+        <span className="text-gray-700">{icon}</span>
+      </div>
+      <p className={`text-lg font-black ${color}`}>{value}</p>
+      {bar !== undefined && (
+        <div className="mt-2 h-0.5 bg-white/5 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-700 ${bar > 90 ? "bg-red-500" : "bg-purple-500"}`}
+            style={{ width: `${Math.min(bar, 100)}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
-  const salvarConversa = async (msgs: Mensagem[]) => {
-    const titulo = msgs[0]?.content.substring(0, 50) || "Nova conversa";
-    try {
-      if (conversaAtual) {
-        const { data } = await supabase
-          .from("conversas_studio")
-          .update({ mensagens: JSON.stringify(msgs) })
-          .eq('id', conversaAtual.id)
-          .select()
-          .single();
+// ─── Empty State ──────────────────────────────────────────────────────────────
+function EmptyState({ onSelect }: { onSelect: (s: string) => void }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center py-8">
+      <div className="relative mb-6">
+        <div className="absolute -inset-6 bg-purple-600/[0.08] rounded-full blur-2xl animate-pulse" />
+        <div className="relative w-14 h-14 rounded-2xl bg-[#0e0e10] border border-white/[0.06] flex items-center justify-center">
+          <BrainCircuit size={28} className="text-purple-500/60" />
+        </div>
+      </div>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-700 mb-2">
+        Studio IA · Analista Neural
+      </p>
+      <h2 className="text-2xl font-black italic text-white/90">
+        Como posso <span className="text-purple-500">ajudar hoje?</span>
+      </h2>
+      <p className="text-sm text-gray-600 mt-2 mb-6">
+        Faça perguntas sobre suas campanhas ou peça análises
+      </p>
+      <div className="grid grid-cols-2 gap-2 max-w-sm w-full">
+        {SUGESTOES.map(s => (
+          <button
+            key={s.text}
+            onClick={() => onSelect(s.text)}
+            className="flex items-center gap-2.5 px-4 py-3 bg-[#0a0a0c] border border-white/[0.06] hover:border-purple-500/30 rounded-xl text-left transition-all hover:bg-purple-600/5 group"
+          >
+            <span className="text-base shrink-0">{s.emoji}</span>
+            <span className="text-xs text-gray-500 group-hover:text-white/80 transition-colors leading-snug">
+              {s.text}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-        if (data) {
-          const conversaAtualizada = { ...data, mensagens: msgs };
-          setConversas(prev => prev.map(c => c.id === data.id ? conversaAtualizada : c));
-        }
-      } else {
-        const { data, error } = await supabase
-          .from("conversas_studio")
-          .insert([{
-            titulo,
-            mensagens: JSON.stringify(msgs),
-            data_criacao: new Date().toISOString()
-          }])
-          .select()
-          .single();
+// ─── Page ─────────────────────────────────────────────────────────────────────
+export default function StudioPage() {
+  const supabase = getSupabase();
+  const { clienteAtual } = useCliente(); // null = conta própria, objeto = cliente selecionado
+  const clienteId = clienteAtual?.id ?? null;
 
-        if (data && !error) {
-          const novaConv: Conversa = {
-            id: data.id,
-            titulo: data.titulo,
-            mensagens: msgs,
-            data_criacao: data.data_criacao
-          };
-          setConversaAtual(novaConv);
-          setConversas(prev => [novaConv, ...prev]);
-        }
+  const [campanhas, setCampanhas]               = useState<Campanha[]>([]);
+  const [campanhaSelecionada, setCampanhaSelecionada] = useState("todas");
+
+  // Recarrega campanhas quando o cliente muda
+  useEffect(() => {
+    setCampanhaSelecionada("todas"); // reset dropdown ao trocar cliente
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      let query = supabase
+        .from("metricas_ads")
+        .select("*")
+        .eq("user_id", user.id);
+
+      // FIX: filtra por cliente_id se um cliente estiver selecionado
+      if (clienteId) {
+        query = query.eq("cliente_id", clienteId);
       }
-    } catch (e: any) {}
+
+      const { data } = await query;
+      if (data) setCampanhas(data as Campanha[]);
+    }
+    init();
+  }, [supabase, clienteId]);
+
+  const campanhasAtivas = campanhas.filter(isCampanhaAtiva);
+  const campData = campanhaSelecionada !== "todas"
+    ? campanhas.find(c => c.nome_campanha === campanhaSelecionada)
+    : null;
+  const cpl      = campData && campData.contatos > 0 ? campData.gasto_total / campData.contatos : 0;
+  const pctGasto = campData && campData.orcamento > 0 ? (campData.gasto_total / campData.orcamento) * 100 : 0;
+
+  const buildPayload = (input: string, msgs: Mensagem[]) => {
+    const filtradas = campanhaSelecionada === "todas"
+      ? campanhasAtivas
+      : campanhas.filter(c => c.nome_campanha === campanhaSelecionada);
+    const contexto =
+      `ANALISTA GROWTH OS — MÉTRICAS ATUAIS:\n` +
+      filtradas.map(c => {
+        const cpl = c.contatos > 0 ? (c.gasto_total / c.contatos).toFixed(2) : "0.00";
+        return `• ${c.nome_campanha} | Status: ${c.status} | Gasto: R$${c.gasto_total?.toFixed(2)} | Leads: ${c.contatos} | CPL: R$${cpl}`;
+      }).join("\n") +
+      `\n\nHISTÓRICO:\n${msgs.slice(-4).map(m => `${m.role}: ${m.content}`).join("\n")}`;
+    return { metrics: filtradas, objetivo: "DIAGNÓSTICO COMPLETO", mensagemUsuario: input, contexto };
   };
 
-  const enviarMensagem = async () => {
-    if (!input.trim() || loading) return;
-
-    const mensagemUser: Mensagem = {
-      role: "user",
-      content: input,
-      timestamp: new Date()
-    };
-
-    const novasMensagens = [...mensagens, mensagemUser];
-    setMensagens(novasMensagens);
-    const perguntaOriginal = input;
-    setInput("");
-    setLoading(true);
-
-    try {
-      const campanhasFiltradas = campanhaSelecionada === "todas" 
-        ? campanhasAtivas 
-        : campanhas.filter(c => c.nome_campanha === campanhaSelecionada);
-
-      const contexto = `
-        ANALISTA GROWTH OS - MÉTRICAS ATUAIS:
-        ${campanhasFiltradas.map(c => `
-        • ${c.nome_campanha} | Status: ${c.status} | Gasto: R$ ${c.gasto_total?.toFixed(2)} | Leads: ${c.contatos} | CPL: R$ ${c.contatos > 0 ? (c.gasto_total / c.contatos).toFixed(2) : '0.00'}
-        `).join('\n')}
-
-        HISTÓRICO RECENTE:
-        ${novasMensagens.slice(-4).map(m => `${m.role}: ${m.content}`).join('\n')}
-      `;
-
-      const res = await fetch("/api/ai-analyst", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          metrics: campanhasFiltradas[0] || campanhasAtivas[0], 
-          objetivo: "DIAGNÓSTICO COMPLETO",
-          mensagemUsuario: perguntaOriginal,
-          contexto: contexto
-        }),
-      });
-
-      const data = await res.json();
-      const respostaIA: Mensagem = {
-        role: "assistant",
-        content: data.analysis || data.error || "Desculpe, ocorreu um erro.",
-        timestamp: new Date()
-      };
-
-      const mensagensFinais = [...novasMensagens, respostaIA];
-      setMensagens(mensagensFinais);
-      await salvarConversa(mensagensFinais);
-
-    } catch (e) {
-      setMensagens(prev => [...prev, { role: "assistant", content: "❌ Erro na conexão.", timestamp: new Date() }]);
-    } finally {
-      setLoading(false);
+  const extractReply = (data: unknown) => {
+    if (data && typeof data === "object") {
+      const d = data as Record<string, unknown>;
+      return String(d.analysis ?? d.error ?? "Desculpe, ocorreu um erro.");
     }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      enviarMensagem();
-    }
+    return "Desculpe, ocorreu um erro.";
   };
 
   return (
-    <div className="flex h-screen bg-[#020202] text-white overflow-hidden font-sans">
-      
-      <aside className="w-24 border-r border-white/[0.03] flex flex-col items-center py-10 fixed h-full bg-black/40 backdrop-blur-3xl z-50">
-        <div className="mb-16 text-3xl font-black italic text-purple-600 tracking-tighter">E.</div>
-        <nav className="flex flex-col gap-8 flex-1">
-          <SideLink href="/pulse" icon={<Zap size={22}/>} label="Pulse" />
-          <SideLink href="/dados" icon={<BarChart3 size={22}/>} label="Dados" />
-          <SideLink href="/studio" icon={<BrainCircuit size={22}/>} active={true} label="Studio IA" />
-          <SideLink href="/copy" icon={<PenTool size={22}/>} label="Copy" />
-          <SideLink href="/settings" icon={<Settings size={22}/>} label="Settings" />
-        </nav>
-      </aside>
-
-      <aside className="w-80 ml-24 border-r border-white/5 bg-[#050505]/50 flex flex-col">
-        <div className="p-6 border-b border-white/5">
-          <button onClick={novaConversa} className="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[10px] tracking-widest rounded-[20px] flex items-center justify-center gap-2 transition-all">
-            <Plus size={16} /> Nova Conversa
-          </button>
+    <ChatShell
+      tabelaSupabase="conversas_studio"
+      sidebarLabel="Nova Conversa"
+      headerLabel="Studio IA"
+      placeholder="Pergunte sobre suas campanhas..."
+      endpoint="/api/ai-analyst"
+      buildPayload={buildPayload}
+      extractReply={extractReply}
+      headerRight={
+        <CampaignDropdown
+          campanhas={campanhasAtivas}
+          value={campanhaSelecionada}
+          onChange={setCampanhaSelecionada}
+        />
+      }
+      headerBottom={campData ? (
+        <div className="grid grid-cols-4 gap-2 mt-4">
+          <MetricBar label="Status"       value="Ativa"                     icon={<Activity size={12} />}   color="text-emerald-400" />
+          <MetricBar label="CPL"          value={`R$${cpl.toFixed(2)}`}     icon={<TrendingUp size={12} />} color={cpl > 25 ? "text-red-400" : cpl < 15 ? "text-emerald-400" : "text-yellow-400"} />
+          <MetricBar label="Leads"        value={String(campData.contatos)}  icon={<Users size={12} />}      color="text-purple-400" />
+          <MetricBar label="Budget usado" value={`${pctGasto.toFixed(0)}%`} icon={<Wallet size={12} />}     color={pctGasto > 90 ? "text-red-400" : "text-white"} bar={pctGasto} />
         </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {conversas.length > 0 ? (
-            conversas.map((conv) => (
-              <div key={conv.id} className={`group relative p-4 rounded-[20px] cursor-pointer transition-all ${conversaAtual?.id === conv.id ? 'bg-purple-600/20 border-2 border-purple-500' : 'bg-white/5 hover:bg-white/10 border-2 border-transparent'}`} onClick={() => carregarConversa(conv)}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-bold text-white truncate mb-1">{conv.titulo}</p>
-                    <p className="text-[9px] text-gray-500 font-medium">{new Date(conv.data_criacao).toLocaleDateString('pt-BR')}</p>
-                  </div>
-                  <button onClick={(e) => { e.stopPropagation(); deletarConversa(conv.id); }} className="opacity-0 group-hover:opacity-100 p-2 hover:bg-red-600/20 rounded-lg transition-all">
-                    <Trash2 size={14} className="text-red-500" />
-                  </button>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-20 text-gray-600">
-              <MessageSquare size={40} className="mx-auto mb-4 opacity-20" />
-              <p className="text-[10px] font-black uppercase tracking-widest">Nenhuma conversa</p>
-            </div>
-          )}
-        </div>
-      </aside>
-
-      <main className="flex-1 flex flex-col">
-        <header className="px-12 py-6 border-b border-white/5 bg-black/20">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                <p className="text-[10px] font-black text-gray-600 tracking-[0.5em] uppercase">Growth OS / Studio IA</p>
-                <div className="flex items-center gap-2 bg-purple-600/10 border border-purple-500/20 px-3 py-1 rounded-full">
-                  <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse"></div>
-                  <span className="text-[8px] font-black text-purple-400 uppercase tracking-widest">Llama 3.3 Online</span>
-                </div>
-              </div>
-              <h1 className="text-4xl font-black italic tracking-tighter uppercase">{conversaAtual ? conversaAtual.titulo : "Nova Conversa"}</h1>
-            </div>
-
-            <div className="relative group min-w-[350px]">
-              <div className="absolute -inset-1 bg-purple-600/20 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
-              <select 
-                value={campanhaSelecionada} 
-                onChange={(e) => setCampanhaSelecionada(e.target.value)}
-                className="relative w-full bg-[#0A0A0A] border border-white/10 py-4 px-6 rounded-full text-[10px] font-black uppercase tracking-widest outline-none focus:border-purple-500 appearance-none transition-all cursor-pointer"
-              >
-                <option value="todas" className="bg-[#0A0A0A]">📊 TODAS AS CAMPANHAS ATIVAS</option>
-                {campanhasAtivas.map(c => (
-                  <option key={c.nome_campanha} value={c.nome_campanha} className="bg-[#0A0A0A]">
-                    🟢 {c.nome_campanha.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-              <ChevronRight size={14} className="absolute right-6 top-1/2 -translate-y-1/2 text-purple-600 pointer-events-none rotate-90" />
-            </div>
-          </div>
-
-          {campanhaSelecionada !== "todas" && (
-            <div className="grid grid-cols-4 gap-3 mt-4">
-              {(() => {
-                const camp = campanhas.find(c => c.nome_campanha === campanhaSelecionada);
-                if (!camp) return null;
-                const cpl = camp.contatos > 0 ? (camp.gasto_total / camp.contatos) : 0;
-                const percentualGasto = camp.orcamento > 0 ? (camp.gasto_total / camp.orcamento) * 100 : 0;
-                return (
-                  <>
-                    <div className="bg-[#0A0A0A] border border-white/5 rounded-[20px] p-3 text-center">
-                      <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mb-1">Status</p>
-                      <p className="text-sm font-black italic text-green-500">🟢 Ativa</p>
-                    </div>
-                    <div className="bg-[#0A0A0A] border border-white/5 rounded-[20px] p-3 text-center">
-                      <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mb-1">CPL</p>
-                      <p className={`text-sm font-black italic ${cpl > 25 ? 'text-red-500' : cpl < 15 ? 'text-green-500' : 'text-yellow-500'}`}>R$ {cpl.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-[#0A0A0A] border border-white/5 rounded-[20px] p-3 text-center">
-                      <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mb-1">Leads</p>
-                      <p className="text-sm font-black italic text-purple-500">{camp.contatos}</p>
-                    </div>
-                    <div className="bg-[#0A0A0A] border border-white/5 rounded-[20px] p-3 text-center">
-                      <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mb-1">Budget</p>
-                      <p className={`text-sm font-black italic ${percentualGasto > 90 ? 'text-red-500' : 'text-white'}`}>{percentualGasto.toFixed(0)}%</p>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          )}
-        </header>
-
-        <div className="flex-1 overflow-y-auto px-12 py-8">
-          {mensagens.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center">
-              <div className="relative mb-8">
-                <div className="absolute -inset-10 bg-purple-600/10 rounded-full blur-3xl animate-pulse"></div>
-                <BrainCircuit size={100} className="relative text-purple-500/20" />
-              </div>
-              <h2 className="text-2xl font-black italic text-white/80 mb-4">Como posso ajudar hoje?</h2>
-              <div className="grid grid-cols-2 gap-4 max-w-2xl">
-                {["Analise as campanhas ativas", "Qual tem melhor performance?", "Oportunidades de escala", "Como reduzir meu CPL?"].map((sugestao, i) => (
-                  <button key={i} onClick={() => setInput(sugestao)} className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-500/50 rounded-[20px] text-left text-sm text-gray-400 hover:text-white transition-all">
-                    <ChevronRight size={14} className="inline mr-2 text-purple-500" /> {sugestao}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="max-w-4xl mx-auto space-y-6">
-              {mensagens.map((msg, idx) => (
-                <div key={idx} className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  {msg.role === 'assistant' && (
-                    <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center shrink-0"><Sparkles size={18} /></div>
-                  )}
-                  <div className={`max-w-2xl p-6 rounded-[25px] ${msg.role === 'user' ? 'bg-purple-600 text-white' : 'bg-[#0A0A0A] border border-white/10 text-gray-200'}`}>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                    <p className="text-[9px] text-gray-500 mt-3 font-mono">{msg.timestamp.toLocaleTimeString('pt-BR')}</p>
-                  </div>
-                  {msg.role === 'user' && (
-                    <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0 font-black text-sm">VC</div>
-                  )}
-                </div>
-              ))}
-              {loading && (
-                <div className="flex gap-4 justify-start">
-                  <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center shrink-0"><Loader2 size={18} className="animate-spin" /></div>
-                  <div className="max-w-2xl p-6 rounded-[25px] bg-[#0A0A0A] border border-white/10"><p className="text-sm text-gray-400 italic">Analisando dados...</p></div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-        </div>
-
-        <div className="p-8 border-t border-white/5 bg-black/20">
-          <div className="max-w-4xl mx-auto relative">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Digite sua mensagem... (Shift+Enter para nova linha)"
-              className="w-full bg-[#0A0A0A] border border-white/10 rounded-[30px] py-5 px-8 pr-20 text-sm text-white placeholder-gray-600 outline-none focus:border-purple-500 resize-none transition-all"
-              rows={1}
-              disabled={loading}
-            />
-            <button onClick={enviarMensagem} disabled={loading || !input.trim()} className="absolute right-4 top-1/2 -translate-y-1/2 p-4 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-full transition-all">
-              {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-            </button>
-          </div>
-        </div>
-      </main>
-    </div>
+      ) : null}
+      emptyState={<EmptyState onSelect={() => {}} />}
+    />
   );
 }

@@ -1,44 +1,27 @@
+/**
+ * ia_roteirista.ts  —  Endpoint unificado de roteiros e copy
+ *
+ * Substitui tanto o ia_roteirista.ts quanto o ia_report.ts antigos.
+ *
+ * Aceita dois formatos de body:
+ *   A) { mensagemUsuario, tipoRoteiro, contexto }           → fluxo Studio
+ *   B) { promptAdicional, clienteNome, data }               → fluxo Pulse/Report
+ */
+
 import { NextResponse, NextRequest } from "next/server";
 import { Groq } from "groq-sdk";
 
-export async function POST(req: NextRequest) {
-  try {
-    const { mensagemUsuario, tipoRoteiro, contexto } = await req.json();
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    if (!mensagemUsuario) {
-      return NextResponse.json({ 
-        roteiro: "❌ Nenhuma mensagem recebida. Descreva o roteiro que você precisa." 
-      });
-    }
+// ── Prompts por tipo de roteiro ──────────────────────────────────────────────
+const PROMPTS_POR_TIPO: Record<string, string> = {
+  vsl_curto: `Você é um ROTEIRISTA MASTER de vídeos de vendas curtos (30-60 segundos).
 
-    // PROMPTS ESPECIALIZADOS POR TIPO DE ROTEIRO
-    const promptsPorTipo: Record<string, string> = {
-      vsl_curto: `Você é um ROTEIRISTA MASTER de vídeos de vendas curtos (30-60 segundos).
-
-MISSÃO: Criar roteiro que CONVERTE em menos de 1 minuto.
-
-ESTRUTURA VSL CURTO (30-60s):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[0-3s] GANCHO
-   → Padrão interrompido que para o scroll
-   → Exemplo: "Você está fazendo isso errado..."
-
-[3-15s] PROBLEMA/DOR
-   → Identificação rápida
-   → "Eu também tentava X e nunca funcionava..."
-
-[15-40s] SOLUÇÃO
-   → Apresentar método/produto como resposta
-   → Prova social rápida (número, resultado)
-
-[40-60s] CTA
-   → Ação clara + urgência
-   → "Link na bio / Clique aqui"
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-TOM: Conversacional, direto, humanizado
-USE: Pausas naturais [...], indicações de ênfase
+ESTRUTURA VSL CURTO:
+[0-3s]   GANCHO — Para o scroll. Ex: "Você está fazendo isso errado..."
+[3-15s]  PROBLEMA — Identificação rápida e emocional
+[15-40s] SOLUÇÃO — Apresentar método + prova social rápida
+[40-60s] CTA — Ação clara + urgência
 
 FORMATO:
 [VISUAL] o que aparece na tela
@@ -47,314 +30,218 @@ NARRAÇÃO: o que fala
 
 Crie roteiro VSL CURTO para:`,
 
-      vsl_medio: `Você é um EXPERT em VSLs de 2-5 minutos que vendem MUITO.
+  vsl_medio: `Você é um EXPERT em VSLs de 2-5 minutos.
 
-MISSÃO: Criar roteiro com storytelling + conversão.
+ESTRUTURA VSL MÉDIO:
+[0-15s]  GANCHO — Curiosidade + promessa
+[15-60s] IDENTIFICAÇÃO — "Eu era como você..."
+[1-2min] JORNADA — O que tentou + momento da descoberta
+[2-3min] SOLUÇÃO — Método/produto + por que funciona
+[3-4min] PROVA — Resultados + números
+[4-5min] OFERTA + CTA — Preço/benefício + garantia + urgência
 
-ESTRUTURA VSL MÉDIO (2-5min):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[0-15s] GANCHO FORTE
-   → Curiosidade + promessa
-
-[15-60s] IDENTIFICAÇÃO
-   → "Eu era exatamente como você..."
-   → Estabelecer conexão emocional
-
-[1-2min] JORNADA
-   → O que tentou e não funcionou
-   → O momento da descoberta
-
-[2-3min] MÉTODO/SOLUÇÃO
-   → Explicar o "como" (sem entregar tudo)
-   → Mostrar que é simples/acessível
-
-[3-4min] PROVA
-   → Resultados próprios
-   → Depoimentos (se tiver)
-   → Números que impressionam
-
-[4-5min] OFERTA + CTA
-   → Preço/benefício claro
-   → Garantia/remoção de risco
-   → Chamada pra ação urgente
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-REGRAS:
-• Storytelling REAL (evitar clichês)
-• Transições naturais
-• Quebrar objeções no caminho
-• Tom de conversa, não de venda
+REGRAS: Storytelling real | Transições naturais | Quebrar objeções no caminho
 
 Crie roteiro VSL MÉDIO para:`,
 
-      vsl_longo: `Você é um SPECIALIST em VSLs longas (10-20min) estilo webinar.
+  vsl_longo: `Você é um SPECIALIST em VSLs longas (10-20min).
 
-MISSÃO: Roteiro completo que educa E vende.
-
-ESTRUTURA VSL LONGO (10-20min):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[0-2min] INTRODUÇÃO
-   → Gancho épico
-   → Estabelecer autoridade
-   → Promessa de transformação
-
-[2-5min] PROBLEMA PROFUNDO
-   → Amplificar a dor
-   → Mostrar consequências
-   → "Não é sua culpa"
-
-[5-8min] JORNADA PESSOAL
-   → Sua história de fracasso → sucesso
-   → Vulnerabilidade + relatabilidade
-   → O "momento AHA"
-
-[8-12min] MÉTODO/SOLUÇÃO
-   → Explicar o sistema em 3-5 pilares
-   → Cada pilar com exemplo prático
-   → Por que funciona (lógica + emocional)
-
-[12-15min] PROVA SOCIAL
-   → Casos de transformação (3-5 histórias)
-   → Números impressionantes
-   → Autoridade (mídia, prêmios, certificações)
-
-[15-17min] OFERTA DETALHADA
-   → O que está incluído (stack de valor)
-   → Bônus irresistíveis
-   → Preço com contexto (valor real vs investimento)
-
-[17-19min] GARANTIA + FAQ
-   → Reverter risco totalmente
-   → Responder objeções principais
-
-[19-20min] CTA FINAL
-   → Urgência/escassez REAL
-   → Última chamada emocional
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-TOM: Autoridade + Acessibilidade
-Ensinar enquanto vende
+ESTRUTURA VSL LONGO:
+[0-2min]   INTRODUÇÃO — Gancho épico + autoridade + promessa
+[2-5min]   PROBLEMA PROFUNDO — Amplificar dor + "não é sua culpa"
+[5-8min]   JORNADA PESSOAL — Fracasso → descoberta → virada
+[8-12min]  MÉTODO — 3-5 pilares + exemplos práticos
+[12-15min] PROVA SOCIAL — 3-5 histórias de transformação
+[15-17min] OFERTA — Stack de valor + bônus + preço com contexto
+[17-19min] GARANTIA + FAQ — Reverter risco + objeções principais
+[19-20min] CTA FINAL — Urgência real + chamada emocional final
 
 Crie roteiro VSL LONGO para:`,
 
-      ugc: `Você é um CREATOR de conteúdo UGC (User Generated Content) AUTÊNTICO.
+  ugc: `Você é um CREATOR de conteúdo UGC AUTÊNTICO.
 
-MISSÃO: Roteiro que parece REAL, não anúncio.
-
-CARACTERÍSTICAS UGC:
-• Tom pessoal (primeira pessoa)
-• Ambiente casual (em casa, no carro, etc)
-• Linguagem natural (como fala de verdade)
-• Demonstração real do produto
-• Sem produção excessiva
+CARACTERÍSTICAS: Tom pessoal | Ambiente casual | Linguagem natural | Demonstração real | Sem produção excessiva
 
 ESTRUTURA UGC (15-60s):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[0-3s] GANCHO PESSOAL
-   "Gente, preciso contar uma coisa..."
-   "Vocês me pediram muito isso..."
+[0-3s]  GANCHO PESSOAL — "Gente, preciso contar..."
+[3-30s] STORYTELLING — Problema → produto → experiência
+[30-50s] DEMONSTRAÇÃO — Mostra na prática + "antes X, agora Y"
+[50-60s] RECOMENDAÇÃO — CTA natural + "link na bio"
 
-[3-30s] STORYTELLING RÁPIDO
-   → Problema que você tinha
-   → Como descobriu o produto
-   → Experiência de uso
-
-[30-50s] DEMONSTRAÇÃO
-   → Mostra na prática
-   → Benefícios reais percebidos
-   → "Antes eu X, agora Y"
-
-[50-60s] RECOMENDAÇÃO
-   → CTA natural
-   → "Link na bio", "Corre lá"
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-DICAS:
-• Use "gente", "vey", "nossa" naturalmente
-• Fale rápido em alguns momentos
-• Inclua "erros" naturais [pausa, riso]
-• Seja específico nos detalhes
+DICAS: Use "gente", "nossa", pausas naturais [pausa], seja específico nos detalhes
 
 Crie roteiro UGC para:`,
 
-      storytelling: `Você é um MESTRE em STORYTELLING que emociona e converte.
+  storytelling: `Você é um MESTRE em STORYTELLING que emociona e converte.
 
-MISSÃO: Contar história que prende do início ao fim.
+ESTRUTURA:
+1. SITUAÇÃO INICIAL — Personagem + cenário + normalidade
+2. CONFLITO — Problema surge + tensão + crise
+3. JORNADA — Tentativas + fracassos + descoberta
+4. TRANSFORMAÇÃO — Solução aplicada + mudanças + novo estado
+5. LIÇÃO/CTA — O que aprendeu + convite pra ação
 
-ESTRUTURA STORYTELLING:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. SITUAÇÃO INICIAL
-   → Apresentar personagem/cenário
-   → Estabelecer normalidade
-
-2. CONFLITO
-   → Problema surge
-   → Tensão aumenta
-   → Momento de crise
-
-3. JORNADA
-   → Tentativas de resolver
-   → Fracassos que ensinam
-   → Descoberta do caminho
-
-4. TRANSFORMAÇÃO
-   → Aplicação da solução
-   → Mudanças acontecem
-   → Novo estado alcançado
-
-5. LIÇÃO/CTA
-   → O que aprendeu
-   → Como outros podem fazer igual
-   → Convite pra ação
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-TÉCNICAS:
-• Detalhes sensoriais (o que viu, ouviu, sentiu)
-• Diálogos internos
-• Momentos de vulnerabilidade
-• Reviravolta quando possível
-• Lição clara no final
-
-TOM: Íntimo, honesto, emocional
+TÉCNICAS: Detalhes sensoriais | Diálogos internos | Vulnerabilidade | Reviravolta | Lição clara
 
 Crie storytelling para:`,
 
-      tutorial: `Você é um EDUCADOR que ensina de forma clara e engajante.
+  tutorial: `Você é um EDUCADOR que ensina de forma clara e engajante.
 
-MISSÃO: Tutorial que educa E mantém atenção.
+ESTRUTURA:
+[INTRO 0-20s] — Promessa do que vai aprender + resultado final
+[PASSO A PASSO] — 3-7 passos numerados, cada um com: explicação + demonstração + dica/alerta
+[ERRO COMUM] — O que NÃO fazer
+[RESULTADO FINAL] — Revisão + aplicação prática
+[CTA] — Próxima ação
 
-ESTRUTURA TUTORIAL:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[INTRO 0-20s]
-   → Promessa clara do que vai aprender
-   → "Neste vídeo você vai descobrir..."
-   → Resultado final visual (se possível)
-
-[PASSO A PASSO]
-   → Dividir em 3-7 passos numerados
-   → Cada passo com:
-     • Explicação clara
-     • Demonstração visual
-     • Dica/alerta importante
-
-[ERRO COMUM]
-   → Mostrar o que NÃO fazer
-   → "Cuidado com..."
-
-[RESULTADO FINAL]
-   → Revisar o que foi feito
-   → Mostrar aplicação prática
-
-[CTA]
-   → Se gostou, [ação]
-   → Próximo vídeo sobre [relacionado]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-TOM: Didático mas descontraído
-Explique como se fosse pra um amigo
-
-FORMATO:
-Use emojis/numeração pra clareza
-Indique [NA TELA] quando necessário
+TOM: Didático mas descontraído. Explique como a um amigo.
 
 Crie tutorial sobre:`,
 
-      gancho: `Você é um SPECIALIST em GANCHOS VIRAIS que param o scroll.
+  gancho: `Você é um SPECIALIST em GANCHOS VIRAIS.
 
-MISSÃO: Criar ganchos IRRESISTÍVEIS para primeiros 3 segundos.
+TIPOS:
+1. CURIOSITY GAP — "O que acontece quando..."
+2. CONTRARIAN — "Pare de fazer X se quer Y"
+3. SEGREDO — "O segredo que mudou tudo..."
+4. ERRO COMUM — "Você está fazendo X errado..."
+5. TRANSFORMAÇÃO — "Como fui de X para Y em [tempo]"
+6. PERGUNTA PODEROSA — "E se você pudesse X sem Y?"
+7. DECLARAÇÃO OUSADA — "X é mentira. A verdade é..."
+8. LISTA/NÚMERO — "3 coisas que [grupo] faz"
 
-TIPOS DE GANCHO:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. CURIOSITY GAP
-   "O que acontece quando você mistura X com Y..."
-   "Ninguém sabe disso sobre..."
+REGRAS: Máximo 10 palavras | Específico | Gera curiosidade OU identificação imediata
 
-2. CONTRARIAN (Contra-intuitivo)
-   "Pare de fazer X se você quer Y"
-   "X não funciona. Faça isso."
+FORMATO: Crie 10-15 ganchos com a técnica entre [colchetes]
 
-3. SEGREDO/REVELAÇÃO
-   "O segredo que mudou tudo..."
-   "Descobri algo que [autoridade] não quer que você saiba"
+Crie ganchos para:`,
 
-4. ERRO COMUM
-   "Você está fazendo X errado..."
-   "97% das pessoas erram isso"
+  // Fluxo Pulse/Report — geração de copy com contexto de métricas
+  pulse_report: `Você é o SCRIPT ENGINE da Erizon — Roteirista e Copywriter de Resposta Direta de elite.
 
-5. TRANSFORMAÇÃO CHOCANTE
-   "Como fui de X para Y em [tempo]"
-   "Antes: [ruim]. Depois: [incrível]"
-
-6. PERGUNTA PODEROSA
-   "E se você pudesse X sem Y?"
-   "Por que [grupo] sempre [resultado]?"
-
-7. DECLARAÇÃO OUSADA
-   "X é mentira. A verdade é..."
-   "Vou provar que X é possível"
-
-8. LISTA/NÚMERO
-   "3 coisas que [grupo bem-sucedido] faz"
-   "5 sinais de que você deveria..."
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Estrutura recomendada: [GANCHO] → [CORPO] → [CTA]
 
 REGRAS:
-• Máximo 10 palavras
-• Específico (não genérico)
-• Gera curiosidade OU identificação imediata
-• Promessa implícita de valor
+1. Foque em escrita persuasiva, ganchos fortes e linguagem humanizada
+2. Use dados de tráfego apenas se fizerem sentido para validar a copy
+3. Fale como roteirista que quer vender muito, não como analista de planilhas
+4. Nunca diga "não posso fazer"
+5. Responda sempre em português BR
 
-FORMATO:
-Crie 10-15 ganchos diferentes usando técnicas variadas.
-Indique a técnica entre [colchetes]
+Crie o roteiro/copy para:`,
+};
 
-Crie ganchos para:`
-    };
+// ── Handler principal ────────────────────────────────────────────────────────
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
 
-    // Selecionar prompt baseado no tipo
-    const promptBase = promptsPorTipo[tipoRoteiro] || promptsPorTipo.vsl_curto;
+    // Detecta qual fluxo está sendo usado
+    const isFluxoPulse = !!body.promptAdicional;
 
-    // Montar prompt final
-    const promptFinal = `${promptBase}
+    if (isFluxoPulse) {
+      return await handleFluxoPulse(body);
+    } else {
+      return await handleFluxoStudio(body);
+    }
+  } catch (error: any) {
+    console.error("Erro no endpoint de roteiros:", error);
+    return NextResponse.json(
+      { error: `Erro interno: ${error.message}` },
+      { status: 500 }
+    );
+  }
+}
+
+// ── Fluxo A: Studio (tipoRoteiro + mensagemUsuario) ─────────────────────────
+async function handleFluxoStudio(body: any) {
+  const { mensagemUsuario, tipoRoteiro, contexto } = body;
+
+  if (!mensagemUsuario?.trim()) {
+    return NextResponse.json({
+      roteiro: "Nenhuma mensagem recebida. Descreva o roteiro que você precisa.",
+    });
+  }
+
+  const promptBase =
+    PROMPTS_POR_TIPO[tipoRoteiro] ?? PROMPTS_POR_TIPO.vsl_curto;
+
+  const promptFinal = `${promptBase}
 
 ${mensagemUsuario}
 
-${contexto ? `\nCONTEXTO ADICIONAL:\n${contexto}` : ''}
+${contexto ? `\nCONTEXTO ADICIONAL:\n${contexto}` : ""}
 
 INSTRUÇÕES FINAIS:
 - 100% HUMANIZADO (sem soar robótico)
-- Use linguagem natural e coloquial
-- Inclua pausas, respirações, ênfases
+- Linguagem natural e coloquial em português BR
+- Inclua pausas [...], respirações, ênfases quando relevante
 - Roteiro PRONTO PARA GRAVAR
-- Seja criativo mas crível
-- Emocione quando apropriado
+- Emocione quando apropriado`;
 
-Responda AGORA com um roteiro EXCEPCIONAL:`;
+  const completion = await groq.chat.completions.create({
+    messages: [
+      {
+        role: "system",
+        content:
+          "Você é um roteirista expert com 10+ anos criando vídeos virais e de alta conversão. Seus roteiros geram milhões em vendas. Você escreve de forma HUMANIZADA, como pessoas REAIS falam. Nunca soa como IA ou roteiro corporativo. Responde sempre em português BR.",
+      },
+      { role: "user", content: promptFinal },
+    ],
+    model: "llama-3.3-70b-versatile",
+    temperature: 0.85,
+    max_tokens: 3500,
+  });
 
-    const completion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: "system",
-          content: "Você é um roteirista expert com mais de 10 anos criando vídeos virais e de alta conversão. Seus roteiros já geraram milhões em vendas e bilhões de views. Você escreve de forma HUMANIZADA, como pessoas REAIS falam, sem soar como IA ou roteiro corporativo. Cada palavra é pensada para prender atenção e gerar ação."
-        },
-        {
-          role: "user",
-          content: promptFinal
-        }
-      ],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.85, // Criativo mas controlado
-      max_tokens: 3500,
-    });
+  return NextResponse.json({
+    roteiro: completion.choices[0].message.content,
+  });
+}
 
-    return NextResponse.json({ 
-      roteiro: completion.choices[0].message.content 
-    });
+// ── Fluxo B: Pulse/Report (promptAdicional + dados de métricas) ─────────────
+async function handleFluxoPulse(body: any) {
+  const { promptAdicional, clienteNome = "Erizon Partner", data = {} } = body;
 
-  } catch (error: any) {
-    console.error("Erro na API Roteirista:", error);
-    return NextResponse.json({ 
-      error: `❌ Erro ao gerar roteiro: ${error.message}\n\nVerifique se a GROQ_API_KEY está configurada.` 
-    }, { status: 500 });
+  if (!promptAdicional?.trim()) {
+    return NextResponse.json(
+      { error: "Descreva o roteiro ou copy que você precisa." },
+      { status: 400 }
+    );
   }
+
+  const spend = data.spend ? Number(data.spend).toFixed(2) : null;
+  const leads = data.leads ? Number(data.leads) : null;
+  const cpl = data.cpl ? Number(data.cpl).toFixed(2) : null;
+
+  const contextoDados =
+    spend && Number(spend) > 0
+      ? `\nCONTEXTO DE PERFORMANCE (use somente se relevante para a copy):
+- Cliente/Projeto: ${clienteNome}
+- Investimento: R$ ${spend}
+- Leads: ${leads}
+- CPL: R$ ${cpl}`
+      : `\nCliente/Projeto: ${clienteNome}`;
+
+  const promptBase = PROMPTS_POR_TIPO.pulse_report;
+  const promptFinal = `${promptBase}\n${contextoDados}\n\nPEDIDO:\n${promptAdicional}`;
+
+  const completion = await groq.chat.completions.create({
+    messages: [
+      {
+        role: "system",
+        content:
+          "Você é um copywriter e roteirista de resposta direta de elite com +10 anos de experiência. Persuasivo, humanizado e orientado a conversão. Responde sempre em português BR.",
+      },
+      { role: "user", content: promptFinal },
+    ],
+    model: "llama-3.3-70b-versatile",
+    temperature: 0.75,
+    max_tokens: 2500,
+  });
+
+  return NextResponse.json({
+    // Compatível com ambas as chamadas anteriores (roteiro e analysis)
+    roteiro: completion.choices[0]?.message?.content ?? "",
+    analysis: completion.choices[0]?.message?.content ?? "",
+  });
 }

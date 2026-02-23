@@ -1,12 +1,12 @@
 {
   "crons": [
     {
-      "path": "/api/ads-sync",
-      "schedule": "0 4 * * *"
+      "path": "/api/check-alerts",
+      "schedule": "0/30 * * * *"
     },
     {
-      "path": "/api/check-alerts",
-      "schedule": "30 4 * * *"
+      "path": "/api/snapshot-diario",
+      "schedule": "0 5 * * *"
     }
   ]
 }

@@ -1,0 +1,13 @@
+
+[functions.alertar-cpl]
+enabled = true
+verify_jwt = true
+import_map = "./functions/alertar-cpl/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/alertar-cpl/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/alertar-cpl/*.html" ]
+[functions.monitor-campanhas]
+verify_jwt = false
