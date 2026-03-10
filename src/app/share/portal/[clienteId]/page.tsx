@@ -177,10 +177,7 @@ export default function PortalPublico() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className={`text-xs font-bold ${scoreColor(c.score)}`}>{c.score}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${recBadge(c.recomendacao)}`}>
-                            {c.recomendacao}
-                          </span>
+                          <span className="text-[11px] text-white/30">{fmtBRL(c.gasto)}</span>
                         </div>
                       </div>
                     </div>
