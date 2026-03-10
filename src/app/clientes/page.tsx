@@ -1,0 +1,562 @@
+"use client";
+
+import { useEffect, useState, useMemo, useCallback } from "react";
+import Sidebar from "@/components/Sidebar";
+import {
+  Plus, X, Loader2, Check, AlertTriangle, Users,
+  Link, Unlink, RefreshCw, Pencil, Trash2, Zap,
+  BarChart3, Target, DollarSign, CheckSquare, Square,
+  Search,
+} from "lucide-react";
+
+interface Cliente {
+  id: string;
+  nome: string;
+  nome_cliente?: string;
+  cor: string;
+  meta_account_id?: string;
+  ticket_medio?: number;
+  total_campanhas?: number;
+  campanhas_ativas?: number;
+  campanhas_criticas?: number;
+  gasto_total?: number;
+  total_leads?: number;
+  cpl_medio?: number;
+}
+
+interface CampanhaItem {
+  id: string;
+  nome: string;
+  status: string;
+  gasto: number;
+  leads: number;
+  cliente_id: string | null;
+}
+
+const fmtBRL0 = (v: number) =>
+  `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+const CORES = ["#6366f1","#8b5cf6","#ec4899","#f59e0b","#10b981","#3b82f6","#ef4444","#14b8a6"];
+
+// ─── Modal Cadastro/Edição ────────────────────────────────────────────────────
+function ModalCliente({ cliente, onClose, onSave }: {
+  cliente?: Cliente | null; onClose: () => void; onSave: () => void;
+}) {
+  const [nome, setNome]         = useState(cliente?.nome ?? "");
+  const [metaId, setMetaId]     = useState(cliente?.meta_account_id ?? "");
+  const [ticket, setTicket]     = useState(cliente?.ticket_medio ? String(cliente.ticket_medio) : "");
+  const [cor, setCor]           = useState(cliente?.cor ?? CORES[0]);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro]         = useState<string | null>(null);
+
+  async function salvar() {
+    if (!nome.trim()) { setErro("Nome é obrigatório."); return; }
+    setSalvando(true); setErro(null);
+    try {
+      const body = { nome: nome.trim(), meta_account_id: metaId.trim() || null, ticket_medio: ticket ? parseFloat(ticket) : null, cor };
+      const res = cliente
+        ? await fetch(`/api/clientes?id=${cliente.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        : await fetch("/api/clientes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro ao salvar");
+      onSave(); onClose();
+    } catch (e: any) { setErro(e.message); }
+    finally { setSalvando(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#0e0e12] shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+          <h2 className="text-base font-semibold text-white">{cliente ? "Editar cliente" : "Novo cliente"}</h2>
+          <button onClick={onClose} className="text-white/30 hover:text-white transition-colors"><X size={16} /></button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">Nome do cliente *</label>
+            <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Clínica São Paulo"
+              className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 transition-all" />
+          </div>
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
+              Meta Account ID <span className="text-white/20 normal-case">(vínculo automático)</span>
+            </label>
+            <input value={metaId} onChange={e => setMetaId(e.target.value)} placeholder="Ex: act_123456789"
+              className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 transition-all font-mono" />
+            <p className="text-[10px] text-white/25 mt-1">Meta Ads Manager → Configurações da conta → ID da conta</p>
+          </div>
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
+              Ticket médio (R$) <span className="text-white/20 normal-case">(cálculo de ROAS)</span>
+            </label>
+            <input value={ticket} onChange={e => setTicket(e.target.value)} placeholder="Ex: 297" type="number"
+              className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 transition-all" />
+          </div>
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-2">Cor</label>
+            <div className="flex items-center gap-2">
+              {CORES.map(c => (
+                <button key={c} onClick={() => setCor(c)} className="w-7 h-7 rounded-lg transition-all"
+                  style={{ backgroundColor: c, outline: cor === c ? `2px solid ${c}` : "none", outlineOffset: "2px", opacity: cor === c ? 1 : 0.5 }} />
+              ))}
+            </div>
+          </div>
+          {erro && <p className="text-[12px] text-red-400 bg-red-500/5 border border-red-500/15 rounded-lg px-3 py-2">{erro}</p>}
+        </div>
+        <div className="px-6 pb-5 flex items-center gap-2">
+          <button onClick={salvar} disabled={salvando}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-all">
+            {salvando ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            {salvando ? "Salvando..." : cliente ? "Salvar" : "Criar cliente"}
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-white/[0.08] text-white/40 hover:text-white text-sm transition-all">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Painel de Campanhas ──────────────────────────────────────────────────────
+function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () => void }) {
+  const [vinculadas, setVinculadas]     = useState<CampanhaItem[]>([]);
+  const [todas, setTodas]               = useState<CampanhaItem[]>([]);
+  const [buscaInput, setBuscaInput]     = useState("");
+  const [busca, setBusca]               = useState("");
+  const [sel, setSel]                   = useState<Set<string>>(new Set());
+  const [loadingV, setLoadingV]         = useState(true);
+  const [loadingT, setLoadingT]         = useState(false);
+  const [vinculando, setVinculando]     = useState(false);
+  const [progresso, setProgresso]       = useState<string | null>(null);
+  const [msg, setMsg]                   = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
+
+  // campanhas sem cliente (livres)
+  const livres = useMemo(() =>
+    todas.filter(c => !c.cliente_id),
+  [todas]);
+
+  const livresFiltradas = useMemo(() => {
+    if (!busca.trim()) return livres;
+    const q = busca.toLowerCase();
+    return livres.filter(c => c.nome.toLowerCase().includes(q));
+  }, [livres, busca]);
+
+  const todasSelecionadas = livresFiltradas.length > 0 && livresFiltradas.every(c => sel.has(c.id));
+
+  async function carregarVinculadas() {
+    setLoadingV(true);
+    const res = await fetch(`/api/relatorio-pdf?cliente_id=${cliente.id}`);
+    const json = await res.json();
+    const camps: CampanhaItem[] = (json.relatorio?.campanhas ?? []).map((c: any) => ({
+      id: String(c.id ?? ""), nome: String(c.nome ?? "—"),
+      status: String(c.status ?? ""), gasto: Number(c.gasto ?? 0),
+      leads: Number(c.leads ?? 0), cliente_id: cliente.id,
+    }));
+    setVinculadas(camps);
+    setLoadingV(false);
+  }
+
+  async function carregarTodas(termo = "") {
+    setLoadingT(true);
+    const url = termo.trim()
+      ? `/api/relatorio-pdf?busca=${encodeURIComponent(termo.trim())}`
+      : `/api/relatorio-pdf`;
+    const res  = await fetch(url);
+    const json = await res.json();
+    const camps: CampanhaItem[] = (json.relatorio?.campanhas ?? []).map((c: any) => ({
+      id: String(c.id ?? ""), nome: String(c.nome ?? "—"),
+      status: String(c.status ?? ""), gasto: Number(c.gasto ?? 0),
+      leads: Number(c.leads ?? 0), cliente_id: c.cliente_id ?? null,
+    }));
+    setTodas(camps);
+    setLoadingT(false);
+  }
+
+  useEffect(() => { carregarVinculadas(); carregarTodas(); }, []);
+
+  // debounce busca
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setBusca(buscaInput);
+      carregarTodas(buscaInput);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [buscaInput]);
+
+  function toggleSel(id: string) {
+    setSel(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  function toggleTodas() {
+    if (todasSelecionadas) {
+      setSel(prev => { const n = new Set(prev); livresFiltradas.forEach(c => n.delete(c.id)); return n; });
+    } else {
+      setSel(prev => { const n = new Set(prev); livresFiltradas.forEach(c => n.add(c.id)); return n; });
+    }
+  }
+
+  async function vincularSelecionadas() {
+    if (sel.size === 0) return;
+    setVinculando(true); setMsg(null);
+    setProgresso(`Vinculando ${sel.size} campanhas...`);
+    const res = await fetch("/api/clientes/vincular-campanhas", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cliente_id: cliente.id, campanha_ids: Array.from(sel) }),
+    });
+    const json = await res.json();
+    setProgresso(null);
+    setMsg(json.ok
+      ? { tipo: "ok", texto: `${json.vinculadas} campanha${json.vinculadas !== 1 ? "s" : ""} vinculada${json.vinculadas !== 1 ? "s" : ""} com sucesso.` }
+      : { tipo: "err", texto: json.error });
+    if (json.ok) { setSel(new Set()); carregarVinculadas(); carregarTodas(buscaInput); }
+    setVinculando(false);
+  }
+
+  async function desvincular(ids: string[]) {
+    setVinculando(true);
+    const res = await fetch("/api/clientes/vincular-campanhas", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campanha_ids: ids }),
+    });
+    const json = await res.json();
+    setMsg(json.ok ? { tipo: "ok", texto: "Desvinculada." } : { tipo: "err", texto: json.error });
+    if (json.ok) { carregarVinculadas(); carregarTodas(buscaInput); }
+    setVinculando(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="w-full max-w-2xl max-h-[88vh] flex flex-col rounded-2xl border border-white/[0.08] bg-[#0e0e12] shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-lg shrink-0" style={{ backgroundColor: cliente.cor }} />
+            <div>
+              <h2 className="text-base font-semibold text-white">{cliente.nome}</h2>
+              <p className="text-[11px] text-white/30">
+                {vinculadas.length} campanha{vinculadas.length !== 1 ? "s" : ""} vinculada{vinculadas.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/30 hover:text-white transition-colors"><X size={16} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+
+          {/* Mensagem de status */}
+          {(msg || progresso) && (
+            <div className="px-6 pt-4">
+              {progresso && (
+                <div className="flex items-center gap-2 text-[12px] text-purple-300 bg-purple-500/10 border border-purple-500/20 rounded-lg px-3 py-2">
+                  <Loader2 size={12} className="animate-spin" />{progresso}
+                </div>
+              )}
+              {msg && (
+                <p className={`text-[12px] px-3 py-2 rounded-lg border ${
+                  msg.tipo === "ok" ? "text-emerald-400 bg-emerald-500/5 border-emerald-500/15" : "text-red-400 bg-red-500/5 border-red-500/15"
+                }`}>
+                  {msg.tipo === "ok" ? "✅ " : "⚠️ "}{msg.texto}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Vinculadas */}
+          <div className="px-6 pt-5 pb-3">
+            <p className="text-[11px] text-white/30 uppercase tracking-wider font-medium mb-2">
+              Vinculadas ({loadingV ? "…" : vinculadas.length})
+            </p>
+            {loadingV ? (
+              <div className="flex items-center justify-center py-4"><Loader2 size={14} className="animate-spin text-white/20" /></div>
+            ) : vinculadas.length === 0 ? (
+              <p className="text-[12px] text-white/20 py-2 text-center">Nenhuma campanha vinculada ainda.</p>
+            ) : (
+              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                {vinculadas.map(c => (
+                  <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-white/[0.05] bg-white/[0.02]">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="text-[12px] text-white/80 truncate">{c.nome}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] text-white/30">{fmtBRL0(c.gasto)}</span>
+                      <span className="text-[11px] text-white/25">{c.leads}L</span>
+                      <button onClick={() => desvincular([c.id])} disabled={vinculando}
+                        className="text-white/20 hover:text-red-400 disabled:opacity-30 transition-colors">
+                        <Unlink size={11} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-white/[0.05] mx-6" />
+
+          {/* Buscar e vincular */}
+          <div className="px-6 pt-4 pb-5 space-y-3">
+            {/* Header da seção com ações em massa */}
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] text-white/30 uppercase tracking-wider font-medium">
+                Campanhas sem cliente
+                {!loadingT && livres.length > 0 && (
+                  <span className="ml-1.5 text-white/20">({livresFiltradas.length}{busca ? ` de ${livres.length}` : ""})</span>
+                )}
+              </p>
+              {sel.size > 0 && (
+                <button onClick={vincularSelecionadas} disabled={vinculando}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-[11px] font-semibold transition-all shrink-0">
+                  {vinculando ? <Loader2 size={11} className="animate-spin" /> : <Link size={11} />}
+                  Vincular {sel.size}
+                </button>
+              )}
+            </div>
+
+            {/* Campo de busca */}
+            <div className="relative">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25 pointer-events-none" />
+              <input
+                value={buscaInput}
+                onChange={e => setBuscaInput(e.target.value)}
+                placeholder="Buscar por nome da campanha..."
+                className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 transition-all"
+              />
+              {loadingT && (
+                <Loader2 size={12} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-white/25" />
+              )}
+            </div>
+
+            {/* Selecionar todos */}
+            {livresFiltradas.length > 0 && (
+              <button onClick={toggleTodas}
+                className="flex items-center gap-2 text-[11px] text-white/40 hover:text-white transition-colors">
+                {todasSelecionadas
+                  ? <CheckSquare size={13} className="text-purple-400" />
+                  : <Square size={13} />}
+                {todasSelecionadas ? "Desmarcar todos" : `Selecionar todos (${livresFiltradas.length})`}
+              </button>
+            )}
+
+            {/* Lista de campanhas livres */}
+            {loadingT && livres.length === 0 ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 size={14} className="animate-spin text-white/20" />
+              </div>
+            ) : livresFiltradas.length === 0 ? (
+              <p className="text-[12px] text-white/20 py-4 text-center">
+                {buscaInput.trim()
+                  ? "Nenhuma campanha encontrada para essa busca."
+                  : livres.length === 0
+                    ? "Todas as campanhas já estão vinculadas a um cliente. 🎉"
+                    : "Nenhuma campanha disponível."}
+              </p>
+            ) : (
+              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                {livresFiltradas.map(c => (
+                  <div key={c.id} onClick={() => toggleSel(c.id)}
+                    className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all select-none ${
+                      sel.has(c.id)
+                        ? "border-purple-500/30 bg-purple-500/[0.06]"
+                        : "border-white/[0.05] bg-white/[0.02] hover:border-white/[0.10]"
+                    }`}>
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                      <div className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 transition-all ${
+                        sel.has(c.id) ? "bg-purple-600 border-purple-500" : "border-white/20"
+                      }`}>
+                        {sel.has(c.id) && <Check size={9} className="text-white" />}
+                      </div>
+                      <span className="text-[12px] text-white/75 truncate">{c.nome}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] text-white/30">{fmtBRL0(c.gasto)}</span>
+                      <span className="text-[10px] text-white/20">{c.leads}L</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-white/[0.06] shrink-0 flex items-center gap-2">
+          {sel.size > 0 && (
+            <button onClick={vincularSelecionadas} disabled={vinculando}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-semibold transition-all">
+              {vinculando ? <Loader2 size={14} className="animate-spin" /> : <Link size={14} />}
+              {vinculando ? "Vinculando..." : `Vincular ${sel.size} campanha${sel.size !== 1 ? "s" : ""}`}
+            </button>
+          )}
+          <button onClick={onClose}
+            className={`py-2.5 rounded-xl border border-white/[0.08] text-white/40 hover:text-white text-sm transition-all ${sel.size > 0 ? "px-4" : "flex-1"}`}>
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Card do Cliente ──────────────────────────────────────────────────────────
+function ClienteCard({ c, onEdit, onDelete, onVincular }: {
+  c: Cliente; onEdit: () => void; onDelete: () => void; onVincular: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden group">
+      <div className="h-0.5" style={{ backgroundColor: c.cor }} />
+      <div className="p-5">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0"
+              style={{ backgroundColor: c.cor }}>
+              {c.nome.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-white">{c.nome}</h3>
+              {c.meta_account_id
+                ? <p className="text-[10px] text-white/25 font-mono mt-0.5">{c.meta_account_id}</p>
+                : <p className="text-[10px] text-amber-500/50 mt-0.5">Sem Meta Account ID</p>}
+            </div>
+          </div>
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={onEdit} className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/[0.05] transition-all"><Pencil size={12} /></button>
+            <button onClick={onDelete} className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/[0.06] transition-all"><Trash2 size={12} /></button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {[
+            { icon: BarChart3, label: "Campanhas", value: `${c.campanhas_ativas ?? 0} ativas` },
+            { icon: DollarSign, label: "Investimento", value: fmtBRL0(c.gasto_total ?? 0) },
+            { icon: Target, label: "Leads", value: String(c.total_leads ?? 0) },
+            { icon: Zap, label: "CPL médio", value: c.cpl_medio && c.cpl_medio > 0 ? fmtBRL0(c.cpl_medio) : "—" },
+          ].map(m => (
+            <div key={m.label} className="rounded-xl border border-white/[0.04] bg-white/[0.01] px-3 py-2">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <m.icon size={9} className="text-white/20" />
+                <p className="text-[9px] text-white/20 uppercase tracking-wider">{m.label}</p>
+              </div>
+              <p className="text-[13px] font-semibold text-white/80">{m.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {(c.campanhas_criticas ?? 0) > 0 && (
+          <div className="flex items-center gap-2 mb-3 rounded-lg border border-amber-500/15 bg-amber-500/5 px-3 py-1.5">
+            <AlertTriangle size={10} className="text-amber-400 shrink-0" />
+            <p className="text-[11px] text-amber-400">{c.campanhas_criticas} crítica{(c.campanhas_criticas ?? 0) > 1 ? "s" : ""}</p>
+          </div>
+        )}
+
+        <button onClick={onVincular}
+          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-purple-500/20 bg-purple-500/[0.04] text-purple-400 text-xs font-medium hover:bg-purple-500/10 transition-all">
+          <Link size={11} />
+          Gerenciar campanhas ({c.total_campanhas ?? 0})
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+export default function ClientesPage() {
+  const [clientes, setClientes]               = useState<Cliente[]>([]);
+  const [loading, setLoading]                 = useState(true);
+  const [modalNovo, setModalNovo]             = useState(false);
+  const [clienteEditando, setClienteEditando] = useState<Cliente | null>(null);
+  const [clienteVincular, setClienteVincular] = useState<Cliente | null>(null);
+
+  async function carregar() {
+    setLoading(true);
+    const res = await fetch("/api/clientes");
+    const json = await res.json();
+    setClientes(json.clientes ?? []);
+    setLoading(false);
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  async function excluir(id: string) {
+    if (!confirm("Remover este cliente? As campanhas vinculadas não serão apagadas.")) return;
+    await fetch(`/api/clientes?id=${id}`, { method: "DELETE" });
+    carregar();
+  }
+
+  return (
+    <>
+      <Sidebar />
+      <div className="ml-[60px] min-h-screen bg-[#040406] text-white">
+        <div className="max-w-5xl mx-auto px-6 py-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <p className="text-[11px] text-purple-400 font-semibold uppercase tracking-wider mb-1">Clientes</p>
+              <h1 className="text-2xl font-bold text-white">Gestão de Clientes</h1>
+              <p className="text-sm text-white/40 mt-1">Cadastre clientes e vincule as campanhas de cada um.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={carregar} className="p-2 rounded-xl border border-white/[0.06] text-white/30 hover:text-white transition-all"><RefreshCw size={14} /></button>
+              <button onClick={() => setModalNovo(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-all">
+                <Plus size={14} />Novo cliente
+              </button>
+            </div>
+          </div>
+
+          {/* Banner de instruções */}
+          <div className="rounded-2xl border border-blue-500/15 bg-blue-500/[0.04] p-5 mb-6">
+            <p className="text-[11px] text-blue-400 font-semibold uppercase tracking-wider mb-3">Fluxo de uso</p>
+            <div className="flex items-start gap-6 flex-wrap">
+              {[
+                { n: "1", t: "Crie o cliente", d: "Nome e cor. Meta Account ID é opcional." },
+                { n: "2", t: "Vincule campanhas", d: "Busca por nome + selecionar todos de uma vez." },
+                { n: "3", t: "Relatório e Portal", d: "Dados automáticos por cliente em /relatorios e /portal." },
+              ].map(s => (
+                <div key={s.n} className="flex items-start gap-3 flex-1 min-w-[160px]">
+                  <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</div>
+                  <div>
+                    <p className="text-[12px] font-semibold text-white/80">{s.t}</p>
+                    <p className="text-[11px] text-white/30 mt-0.5 leading-relaxed">{s.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 size={20} className="animate-spin text-purple-400" />
+            </div>
+          ) : clientes.length === 0 ? (
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-12 text-center">
+              <Users size={36} className="text-white/15 mx-auto mb-4" />
+              <p className="text-white/40 text-sm">Nenhum cliente cadastrado ainda.</p>
+              <p className="text-white/25 text-xs mt-1 mb-5">Crie o primeiro cliente para começar.</p>
+              <button onClick={() => setModalNovo(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-all">
+                <Plus size={14} />Criar primeiro cliente
+              </button>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {clientes.map(c => (
+                <ClienteCard key={c.id} c={c}
+                  onEdit={() => setClienteEditando(c)}
+                  onDelete={() => excluir(c.id)}
+                  onVincular={() => setClienteVincular(c)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {modalNovo && <ModalCliente onClose={() => setModalNovo(false)} onSave={carregar} />}
+      {clienteEditando && <ModalCliente cliente={clienteEditando} onClose={() => setClienteEditando(null)} onSave={carregar} />}
+      {clienteVincular && (
+        <PainelCampanhas cliente={clienteVincular} onClose={() => { setClienteVincular(null); carregar(); }} />
+      )}
+    </>
+  );
+}

@@ -1,0 +1,62 @@
+# ─── Dependências ────────────────────────────────────────────
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ─── Next.js ─────────────────────────────────────────────────
+/.next/
+/out/
+/build
+
+# ─── SEGREDOS — NUNCA commitar ───────────────────────────────
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+*.env
+# Exceção: .env.example é seguro (sem valores reais)
+!.env.example
+
+# ─── Vercel ──────────────────────────────────────────────────
+.vercel
+.vercel/
+
+# ─── Artefatos de build ──────────────────────────────────────
+*.tsbuildinfo
+next-env.d.ts
+
+# ─── Testes / cobertura ──────────────────────────────────────
+/coverage
+/test-results
+
+# ─── OS / Editor ─────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.suo
+Thumbs.db
+
+# ─── Debug / Logs ────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+
+# ─── Certificados e chaves ───────────────────────────────────
+*.pem
+*.key
+*.p12
+
+# ─── ZIPs de distribuição ────────────────────────────────────
+*.zip
