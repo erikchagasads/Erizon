@@ -177,7 +177,7 @@ export default function PortalPublico() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-[11px] text-white/30">{fmtBRL(c.gasto)}</span>
+                          <span className="text-[11px] text-white/30">{fmtBRL(c.gasto_total)}</span>
                         </div>
                       </div>
                     </div>
