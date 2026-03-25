@@ -4,7 +4,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Zap, ArrowLeft, Clock, Eye, Calendar } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import { Metadata } from "next";
+import Sidebar from "@/components/Sidebar";
 
 export const revalidate = 3600;
 
@@ -109,11 +112,25 @@ function markdownToHtml(md: string): string {
     .replace(/^(?!<[h|l|p])(.+)$/gm, '<p class="text-[15px] text-white/55 leading-relaxed mb-4">$1</p>');
 }
 
+async function getSession() {
+  try {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
+    );
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
+  } catch { return null; }
+}
+
 export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const post = await getPost(slug);
+  const [post, user] = await Promise.all([getPost(slug), getSession()]);
   if (!post) notFound();
 
+  const logado = !!user;
   const html = markdownToHtml(post.content);
 
   const jsonLd = {
@@ -132,21 +149,25 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
     <div className="min-h-screen bg-gradient-to-b from-[#060608] via-[#0b0b0d] to-[#060608] text-white">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <nav className="sticky top-0 z-50 border-b border-white/[0.05] bg-[#060608]/80 backdrop-blur-xl">
-        <div className="max-w-3xl mx-auto px-6 h-14 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-purple-600 flex items-center justify-center">
-              <Zap size={12} className="text-white" />
-            </div>
-            <span className="text-[14px] font-black italic uppercase tracking-tight text-white">Erizon</span>
-          </Link>
-          <Link href="/blog" className="flex items-center gap-1.5 text-[13px] text-white/40 hover:text-white transition-colors">
-            <ArrowLeft size={13} /> Blog
-          </Link>
-        </div>
-      </nav>
+      {logado ? (
+        <Sidebar />
+      ) : (
+        <nav className="sticky top-0 z-50 border-b border-white/[0.05] bg-[#060608]/80 backdrop-blur-xl">
+          <div className="max-w-3xl mx-auto px-6 h-14 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-purple-600 flex items-center justify-center">
+                <Zap size={12} className="text-white" />
+              </div>
+              <span className="text-[14px] font-black italic uppercase tracking-tight text-white">Erizon</span>
+            </Link>
+            <Link href="/blog" className="flex items-center gap-1.5 text-[13px] text-white/40 hover:text-white transition-colors">
+              <ArrowLeft size={13} /> Blog
+            </Link>
+          </div>
+        </nav>
+      )}
 
-      <article className="max-w-3xl mx-auto px-6 py-16">
+      <article className={`max-w-3xl mx-auto px-6 py-16 ${logado ? "ml-[60px]" : ""}`}
         {/* Meta */}
         <div className="flex items-center gap-3 mb-6 flex-wrap">
           <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">

@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { Zap, ArrowRight, Clock, Eye } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+import Sidebar from "@/components/Sidebar";
 
 export const revalidate = 3600; // ISR — revalida a cada hora
 
@@ -56,29 +59,48 @@ async function getPosts(): Promise<BlogPost[]> {
   } catch { return []; }
 }
 
+async function getSession() {
+  try {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
+    );
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
+  } catch { return null; }
+}
+
 export default async function BlogPage() {
-  const posts = await getPosts();
+  const [posts, user] = await Promise.all([getPosts(), getSession()]);
   const categorias = [...new Set(posts.map(p => p.category))];
+  const logado = !!user;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#060608] via-[#0b0b0d] to-[#060608] text-white">
-      <nav className="sticky top-0 z-50 border-b border-white/[0.05] bg-[#060608]/80 backdrop-blur-xl">
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-purple-600 flex items-center justify-center">
-              <Zap size={12} className="text-white" />
-            </div>
-            <span className="text-[14px] font-black italic uppercase tracking-tight text-white">Erizon</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/sobre" className="text-[13px] text-white/40 hover:text-white transition-colors">Sobre</Link>
-            <Link href="/login" className="text-[13px] text-white/40 hover:text-white transition-colors">Entrar</Link>
-            <Link href="/signup" className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-[13px] font-semibold text-white transition-all">Começar grátis</Link>
-          </div>
-        </div>
-      </nav>
 
-      <div className="max-w-5xl mx-auto px-6 py-16">
+      {logado ? (
+        <Sidebar />
+      ) : (
+        <nav className="sticky top-0 z-50 border-b border-white/[0.05] bg-[#060608]/80 backdrop-blur-xl">
+          <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-purple-600 flex items-center justify-center">
+                <Zap size={12} className="text-white" />
+              </div>
+              <span className="text-[14px] font-black italic uppercase tracking-tight text-white">Erizon</span>
+            </Link>
+            <div className="flex items-center gap-4">
+              <Link href="/sobre" className="text-[13px] text-white/40 hover:text-white transition-colors">Sobre</Link>
+              <Link href="/login" className="text-[13px] text-white/40 hover:text-white transition-colors">Entrar</Link>
+              <Link href="/signup" className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-[13px] font-semibold text-white transition-all">Começar grátis</Link>
+            </div>
+          </div>
+        </nav>
+      )}
+
+      <div className={`max-w-5xl mx-auto px-6 py-16 ${logado ? "ml-[60px]" : ""}`}
         <div className="mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-400 font-medium mb-4">
             <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
