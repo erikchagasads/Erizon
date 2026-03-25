@@ -124,8 +124,10 @@ export default function OnboardingChecklist() {
     if (pathname === "/pulse" && !concluidos.has("primeiro_pulse")) {
       const novos = new Set(concluidos);
       novos.add("primeiro_pulse");
-      setConcluidos(novos);
-      salvarSteps(novos);
+      queueMicrotask(() => {
+        setConcluidos(novos);
+        void salvarSteps(novos);
+      });
     }
   }, [pathname, carregou, fechado, concluidos, salvarSteps]);
 
@@ -148,76 +150,100 @@ export default function OnboardingChecklist() {
     } catch {}
   }
 
-  // Não renderiza enquanto carrega, se fechado, ou se tudo feito
+  // Não renderiza enquanto carrega ou se fechado manualmente
   if (!carregou || fechado) return null;
 
-  const total  = STEPS.length;
-  const feitos = STEPS.filter(s => concluidos.has(s.id)).length;
-  const pct    = Math.round((feitos / total) * 100);
-
-  // Some automaticamente quando todos os 5 passos estiverem concluídos
-  if (feitos >= total) return null;
+  const total    = STEPS.length;
+  const feitos   = STEPS.filter(s => concluidos.has(s.id)).length;
+  const pct      = Math.round((feitos / total) * 100);
+  const completo = feitos >= total;
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-80 shadow-2xl">
-      <div className="bg-[#111113] border border-white/[0.09] rounded-[20px] overflow-hidden">
+    <div className="fixed bottom-6 right-6 z-50 w-72 shadow-2xl">
+      <div className={`border rounded-[20px] overflow-hidden transition-all duration-500 ${
+        completo
+          ? "bg-[#0d1a12] border-emerald-500/20"
+          : "bg-[#111113] border-white/[0.09]"
+      }`}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.05]">
+        <div className={`flex items-center justify-between px-5 py-4 border-b ${completo ? "border-emerald-500/10" : "border-white/[0.05]"}`}>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-purple-600/15 border border-purple-500/25 flex items-center justify-center">
-              <Zap size={13} className="text-purple-400" />
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+              completo
+                ? "bg-emerald-500/15 border border-emerald-500/25"
+                : "bg-purple-600/15 border border-purple-500/25"
+            }`}>
+              {completo
+                ? <CheckCircle2 size={13} className="text-emerald-400" />
+                : <Zap size={13} className="text-purple-400" />
+              }
             </div>
             <div>
-              <p className="text-[12px] font-bold text-white">Primeiros passos</p>
-              <p className="text-[10px] text-white/25">{feitos}/{total} concluídos · {pct}%</p>
+              <p className="text-[12px] font-bold text-white">
+                {completo ? "Setup concluído" : "Primeiros passos"}
+              </p>
+              <p className={`text-[10px] ${completo ? "text-emerald-400/50" : "text-white/25"}`}>
+                {completo ? "Tudo configurado ✓" : `${feitos}/${total} concluídos · ${pct}%`}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => setAberto(v => !v)}
-              className="p-1.5 rounded-lg text-white/25 hover:text-white transition-colors">
-              {aberto ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-            </button>
+            {!completo && (
+              <button onClick={() => setAberto(v => !v)}
+                className="p-1.5 rounded-lg text-white/25 hover:text-white transition-colors">
+                {aberto ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+              </button>
+            )}
             <button onClick={fecharDefinitivamente}
-              className="p-1.5 rounded-lg text-white/15 hover:text-white/40 transition-colors" title="Fechar e não mostrar mais">
+              className="p-1.5 rounded-lg text-white/15 hover:text-white/40 transition-colors" title="Fechar">
               <X size={13} />
             </button>
           </div>
         </div>
 
         {/* Barra de progresso */}
-        <div className="px-5 pt-3">
-          <div className="h-1 w-full bg-white/[0.05] rounded-full overflow-hidden">
-            <div className="h-full bg-purple-500 rounded-full transition-all duration-700"
-              style={{ width: `${pct}%` }} />
+        {!completo && (
+          <div className="px-5 pt-3">
+            <div className="h-1 w-full bg-white/[0.05] rounded-full overflow-hidden">
+              <div className="h-full bg-purple-500 rounded-full transition-all duration-700"
+                style={{ width: `${pct}%` }} />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Steps */}
-        {aberto && (
+        {(aberto || completo) && (
           <div className="px-4 py-3 space-y-1">
             {STEPS.map(step => {
-              const feito = concluidos.has(step.id);
+              const feito = completo || concluidos.has(step.id);
               const Icon  = step.icon;
               return (
                 <div key={step.id}
-                  className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${feito ? "opacity-40" : "hover:bg-white/[0.03] cursor-default"}`}>
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all ${feito ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-white/[0.03] border border-white/[0.07]"}`}>
+                  className={`flex items-center gap-3 p-2.5 rounded-xl transition-colors ${
+                    feito ? "opacity-50" : "hover:bg-white/[0.03]"
+                  }`}>
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-all ${
+                    feito
+                      ? "bg-emerald-500/10 border border-emerald-500/20"
+                      : "bg-white/[0.03] border border-white/[0.07]"
+                  }`}>
                     {feito
-                      ? <CheckCircle2 size={13} className="text-emerald-400" />
-                      : <Icon size={13} className="text-white/30" />
+                      ? <CheckCircle2 size={11} className="text-emerald-400" />
+                      : <Icon size={11} className="text-white/30" />
                     }
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-[12px] font-semibold truncate ${feito ? "line-through text-white/25" : "text-white"}`}>
+                    <p className={`text-[11px] font-semibold truncate transition-all ${
+                      feito ? "line-through text-white/20" : "text-white/80"
+                    }`}>
                       {step.titulo}
                     </p>
-                    {!feito && <p className="text-[10px] text-white/25 leading-snug mt-0.5 line-clamp-1">{step.desc}</p>}
                   </div>
                   {!feito && (
                     <a href={step.href}
                       onClick={() => marcarConcluido(step.id)}
-                      className="shrink-0 text-[10px] font-semibold text-purple-400 hover:text-purple-300 transition-colors whitespace-nowrap">
+                      className="shrink-0 text-[10px] font-semibold text-purple-400 hover:text-purple-300 transition-colors">
                       Ir →
                     </a>
                   )}

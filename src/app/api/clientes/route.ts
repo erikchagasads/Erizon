@@ -13,7 +13,12 @@ async function getSupabaseUser() {
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (name) => cookieStore.get(name)?.value } }
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(values) { values.forEach(({ name, value, options }) => { try { cookieStore.set(name, value, options); } catch {} }); },
+      },
+    }
   );
   const { data: { user } } = await supabase.auth.getUser();
   return { supabase, user };
@@ -38,7 +43,7 @@ export async function GET() {
       (clientes ?? []).map(async (c) => {
         const { data: ads } = await supabase
           .from("metricas_ads")
-          .select("gasto_total, contatos, status")
+          .select("gasto_total, contatos, status, alcance, impressoes")
           .eq("cliente_id", c.id);
 
         const total_campanhas  = ads?.length ?? 0;
@@ -46,6 +51,9 @@ export async function GET() {
         const gasto_total      = ads?.reduce((s, x) => s + (x.gasto_total ?? 0), 0) ?? 0;
         const total_leads      = ads?.reduce((s, x) => s + (x.contatos ?? 0), 0) ?? 0;
         const cpl_medio        = total_leads > 0 ? gasto_total / total_leads : 0;
+
+        const total_alcance    = ads?.filter(x => ["ATIVO","ACTIVE","ATIVA"].includes(x.status)).reduce((s, x) => s + (x.alcance ?? 0), 0) ?? 0;
+        const total_impressoes  = ads?.filter(x => ["ATIVO","ACTIVE","ATIVA"].includes(x.status)).reduce((s, x) => s + (x.impressoes ?? 0), 0) ?? 0;
 
         const campanhas_criticas = ads?.filter(x => {
           if (!["ATIVO","ACTIVE","ATIVA"].includes(x.status)) return false;
@@ -61,6 +69,8 @@ export async function GET() {
           cor:                 c.cor ?? "#6366f1",
           logo_url:            c.logo_url,
           meta_account_id:     c.meta_account_id,
+          ig_user_id:          c.ig_user_id ?? null,
+          campanha_keywords:    c.campanha_keywords ?? null,
           ticket_medio:        c.ticket_medio,
           ativo:               c.ativo ?? true,
           ultima_atualizacao:  c.ultima_atualizacao,
@@ -70,6 +80,8 @@ export async function GET() {
           gasto_total,
           total_leads,
           cpl_medio: Math.round(cpl_medio * 100) / 100,
+          total_alcance,
+          total_impressoes,
         };
       })
     );
@@ -89,7 +101,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
 
     const body = await req.json();
-    const { nome, meta_account_id, ticket_medio, cor } = body;
+    const { nome, meta_account_id, ticket_medio, cor, ig_user_id, campanha_keywords, whatsapp, whatsapp_mensagem } = body;
 
     if (!nome?.trim()) {
       return NextResponse.json({ error: "Nome é obrigatório." }, { status: 400 });
@@ -101,7 +113,11 @@ export async function POST(req: NextRequest) {
         user_id:         user.id,
         nome:            nome.trim(),
         meta_account_id: meta_account_id || null,
-        ticket_medio:    ticket_medio    || null,
+        ig_user_id:      ig_user_id      || null,
+        campanha_keywords:   campanha_keywords    || null,
+        ticket_medio:        ticket_medio         || null,
+        whatsapp:            whatsapp             || null,
+        whatsapp_mensagem:   whatsapp_mensagem    || null,
         cor:             cor             ?? "#6366f1",
         ativo:           true,
       })
@@ -132,7 +148,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
 
     // Campos permitidos para atualização via PATCH
-    const camposPermitidos = ["meta_account_id", "ticket_medio", "cor", "nome", "nome_cliente"];
+    const camposPermitidos = ["meta_account_id", "ticket_medio", "cor", "nome", "nome_cliente", "ig_user_id", "campanha_keywords", "whatsapp", "whatsapp_mensagem"];
     const updates: Record<string, unknown> = {};
     for (const campo of camposPermitidos) {
       if (campo in body) updates[campo] = body[campo];

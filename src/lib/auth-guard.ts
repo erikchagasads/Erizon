@@ -24,7 +24,8 @@ export type AuthResult =
  * Valida autenticação via cookie de sessão Supabase.
  * Usar em Server-side API routes (não em Client Components).
  */
-export async function requireAuth(request?: NextRequest): Promise<AuthResult> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function requireAuth(_request?: NextRequest): Promise<AuthResult> {
   try {
     const cookieStore = await cookies();
 

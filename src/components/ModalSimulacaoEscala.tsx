@@ -40,7 +40,7 @@ function ComparativoBar({ label, antes, depois, cor, prefixo = "R$", sufixo = ""
 }
 
 // ── Aviso ─────────────────────────────────────────────────────────────────────
-function Aviso({ texto }: { texto: string }) {
+function Aviso({ texto }: { texto: string; key?: string | number }) {
   return (
     <div className="flex items-start gap-2.5 p-3 bg-amber-500/[0.06] border border-amber-500/15 rounded-xl">
       <AlertTriangle size={13} className="text-amber-400 shrink-0 mt-0.5" />

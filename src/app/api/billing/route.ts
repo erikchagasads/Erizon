@@ -6,14 +6,15 @@ import { cookies } from "next/headers";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-01-28.clover",
+  apiVersion: "2026-02-25.clover",
 });
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 const PRICE_MAP: Record<string, string> = {
-  gestor:  process.env.STRIPE_PRICE_GESTOR  ?? "",
-  agencia: process.env.STRIPE_PRICE_AGENCIA ?? "",
+  core:    process.env.STRIPE_PRICE_CORE    ?? "",
+  pro:     process.env.STRIPE_PRICE_PRO     ?? "",
+  command: process.env.STRIPE_PRICE_COMMAND  ?? "",
 };
 
 function getAdminClient() {
@@ -42,9 +43,10 @@ async function resolveCustomerId(
       return null;
     }
     return savedCustomerId;
-  } catch (e: any) {
+  } catch (e: unknown) {
     // Customer não existe nesse ambiente (ex: era de test mode, agora é live)
-    if (e?.code === "resource_missing" || e?.statusCode === 404) {
+    const err = e as { code?: string; statusCode?: number };
+    if (err?.code === "resource_missing" || err?.statusCode === 404) {
       console.warn(`[billing] Customer ${savedCustomerId} inválido para esse ambiente. Limpando...`);
       await admin.from("subscriptions").update({
         stripe_customer_id: null,

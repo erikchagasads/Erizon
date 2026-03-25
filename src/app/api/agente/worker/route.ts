@@ -18,7 +18,10 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
 });
 
-const WORKER_SECRET = process.env.WORKER_SECRET ?? "erizon-worker-secret-2026";
+const WORKER_SECRET = process.env.WORKER_SECRET;
+if (!WORKER_SECRET) {
+  console.error("[worker] WORKER_SECRET não configurado — endpoint desabilitado em produção.");
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function calcScore(gasto: number, leads: number, receita: number): number {
@@ -32,7 +35,8 @@ function calcScore(gasto: number, leads: number, receita: number): number {
   return Math.min(100, Math.max(0, Math.round(s)));
 }
 
-function isAtivo(status: string) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _isAtivo(status: string) {
   return ["ATIVO","ACTIVE","ATIVA"].includes(status?.toUpperCase?.() ?? "");
 }
 
@@ -90,7 +94,6 @@ async function analisarUsuario(userId: string): Promise<void> {
 
   const totalInvest  = campanhas.reduce((s, c) => s + (c.gasto_total ?? 0), 0);
   const totalLeads   = campanhas.reduce((s, c) => s + (c.contatos ?? 0), 0);
-  const totalReceita = campanhas.reduce((s, c) => s + (c.receita_estimada ?? 0), 0);
   const scoreGlobal  = campanhas.length > 0
     ? Math.round(campanhas.reduce((s, c) => s + calcScore(c.gasto_total, c.contatos, c.receita_estimada ?? 0), 0) / campanhas.length)
     : 0;
@@ -280,21 +283,20 @@ export async function POST(req: NextRequest) {
       .select("user_id")
       .eq("ativo", true);
 
-    const userIds = [...new Set((usuarios ?? []).map(u => u.user_id))];
+    const userIds = [...new Set((usuarios ?? []).map(u => String(u.user_id ?? '')))];
 
     if (userIds.length === 0) {
       return NextResponse.json({ ok: true, msg: "Nenhum usuário ativo.", alertas: 0 });
     }
 
     // Analisa cada usuário
-    let totalAlertas = 0;
     const resultados: Array<{ userId: string; status: string }> = [];
 
     for (const userId of userIds) {
       try {
         await analisarUsuario(userId);
         resultados.push({ userId: userId.substring(0, 8) + "...", status: "ok" });
-      } catch (e) {
+      } catch {
         resultados.push({ userId: userId.substring(0, 8) + "...", status: "erro" });
       }
     }

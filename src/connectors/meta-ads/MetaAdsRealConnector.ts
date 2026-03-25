@@ -116,7 +116,8 @@ const LEAD_ACTION_TYPES = [
 
 const PURCHASE_ACTION_TYPES = ["purchase", "omni_purchase"];
 
-function normalizeCampaignStatus(effectiveStatus: string, stopTime?: string): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _normalizeCampaignStatus(effectiveStatus: string, stopTime?: string): string {
   const now = new Date();
   if (effectiveStatus === "ACTIVE") {
     if (stopTime && new Date(stopTime) < now) return "CONCLUIDO";

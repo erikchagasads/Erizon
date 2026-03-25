@@ -136,6 +136,39 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error;
 
+    // ── ENA Attribution: registra touchpoint 'lead' (sem PII) ────────────────
+    if (lead && telefone) {
+      try {
+        // Hash anônimo do telefone (sem depender de crypto nativo — compatível com edge)
+        const encoder = new TextEncoder();
+        const data    = encoder.encode(telefone.trim());
+        const hashBuf = await crypto.subtle.digest("SHA-256", data);
+        const hashArr = Array.from(new Uint8Array(hashBuf));
+        const contactHash = hashArr.map(b => b.toString(16).padStart(2, "0")).join("");
+
+        // Busca workspaceId pelo userId (para routing da attribution)
+        const { data: wsMember } = await supabase
+          .from("workspace_members")
+          .select("workspace_id")
+          .eq("user_id", userId)
+          .limit(1)
+          .maybeSingle();
+
+        if (wsMember?.workspace_id) {
+          await supabase.from("attribution_touchpoints").insert({
+            workspace_id:    wsMember.workspace_id,
+            campaign_id:     campanhaId  || null,
+            stage:           "lead",
+            contact_hash:    contactHash,
+            contact_channel: canal,
+            lead_id:         lead.id,
+            utm_campaign:    campanhaNome || null,
+            occurred_at:     new Date().toISOString(),
+          });
+        }
+      } catch { /* Attribution é best-effort — não bloqueia o lead */ }
+    }
+
     return NextResponse.json({ ok: true, lead });
 
   } catch (err: unknown) {

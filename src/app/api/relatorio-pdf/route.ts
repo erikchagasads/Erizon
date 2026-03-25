@@ -10,14 +10,15 @@ async function getSupabaseUser() {
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (name) => cookieStore.get(name)?.value } }
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(values) { values.forEach(({ name, value, options }) => { try { cookieStore.set(name, value, options); } catch {} }); },
+      },
+    }
   );
   const { data: { user } } = await supabase.auth.getUser();
   return { supabase, user };
-}
-
-function fmtBRL(v: number) {
-  return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function calcScore(gasto: number, leads: number, roas: number): number {
@@ -101,7 +102,9 @@ export async function GET(req: NextRequest) {
           ctr:             c.ctr ?? 0,
           cpm:             c.cpm ?? 0,
           impressoes:      c.impressoes ?? 0,
-          meta_account_id: c.meta_account_id ?? null,
+          meta_account_id:  c.meta_account_id ?? null,
+          meta_campaign_id: c.meta_campaign_id ?? null,
+          analise_criativo: c.analise_criativo ?? null,
           score:           calcScore(c.gasto_total ?? 0, c.contatos ?? 0, c.gasto_total > 0 ? (c.receita_estimada ?? 0) / c.gasto_total : 0),
           diasAtivo:       c.dias_ativo ?? 0,
           dataInicio:      c.data_inicio ?? null,

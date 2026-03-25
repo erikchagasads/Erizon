@@ -6,7 +6,7 @@
 import { useState, useEffect } from "react";
 import {
   ChevronRight, CheckCircle2, Loader2, AlertCircle, ShieldAlert,
-  ArrowUpRight, ArrowDownRight, Zap, Target, DollarSign,
+  ArrowUpRight, ArrowDownRight, Zap, Target,
   PauseCircle, TrendingUp, RotateCcw,
 } from "lucide-react";
 import ModalSimulacaoEscala from "@/components/ModalSimulacaoEscala";
@@ -96,7 +96,7 @@ const FLAG_ICON: Record<string, React.ElementType> = {
   amber:   ShieldAlert,
   purple:  Zap,
 };
-export function FlagBadge({ flag }: { flag: Flag }) {
+export function FlagBadge({ flag }: { flag: Flag; key?: string | number }) {
   const Icon  = FLAG_ICON[flag?.cor] ?? AlertCircle;
   const style = FLAG_S[flag?.cor]    ?? "bg-white/[0.06] border-white/[0.08] text-white/40";
   return (
@@ -143,7 +143,7 @@ export function UrgenciaBadge({ urgencia, label }: { urgencia: string; label: st
 }
 
 // ─── AlertaChip ───────────────────────────────────────────────────────────────
-export function AlertaChip({ alerta }: { alerta: Alerta }) {
+export function AlertaChip({ alerta }: { alerta: Alerta; key?: string | number }) {
   const s = {
     danger:  "bg-red-500/[0.06] text-red-400/70 border-red-500/[0.08]",
     warning: "bg-amber-500/[0.06] text-amber-400/70 border-amber-500/[0.08]",
@@ -417,7 +417,7 @@ export function EmptyState({ periodo, filtrando, onLimpar }: { periodo: Periodo;
 }
 
 // ─── Skeletons ────────────────────────────────────────────────────────────────
-function Skeleton({ className }: { className?: string }) {
+function Skeleton({ className }: { className?: string; key?: string | number }) {
   return <div className={`animate-pulse rounded-2xl bg-white/[0.04] ${className ?? ""}`} />;
 }
 export function PageSkeleton() {
@@ -496,7 +496,7 @@ export default function CampanhaCard({ c, rank, delay = 0, onDecisao, flags, sco
               <div className="flex items-center gap-3 flex-wrap mb-1.5">
                 <TipoCampanhaBadge
                   nomeCampanha={c.nome_campanha}
-                  tipoBanco={(c as any).tipo_campanha}
+                  tipoBanco={c.tipo_campanha}
                   dados={{
                     gasto_total: c.gasto_total,
                     contatos:    c.contatos,

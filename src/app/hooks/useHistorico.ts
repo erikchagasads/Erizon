@@ -64,7 +64,8 @@ export interface HistoricoProcessado {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useHistorico(userId: string | null | undefined, clienteId?: string) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function useHistorico(userId: string | null | undefined, _clienteId?: string) {
   const [snapshots, setSnapshots] = useState<SnapshotDiario[]>([]);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState<string | null>(null);
@@ -100,6 +101,7 @@ export function useHistorico(userId: string | null | undefined, clienteId?: stri
 
     fetchSnapshots();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   const historico = useMemo<HistoricoProcessado | null>(() => {

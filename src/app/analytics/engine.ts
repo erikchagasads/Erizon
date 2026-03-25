@@ -387,6 +387,22 @@ export function gerarAlertasPorTipo(
 // calcMetricas — v3: usa tipo de campanha quando disponível
 // ─────────────────────────────────────────────────────────────────────────────
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAPEAMENTO objective Meta → TipoCampanha interno
+// ─────────────────────────────────────────────────────────────────────────────
+
+function mapearObjectiveMeta(objective?: string | null): string | null {
+  if (!objective) return null;
+  const o = objective.toUpperCase();
+  if (o === "OUTCOME_LEADS"    || o === "LEAD_GENERATION")  return "leads";
+  if (o === "OUTCOME_TRAFFIC"  || o === "LINK_CLICKS")      return "trafego";
+  if (o === "OUTCOME_SALES"    || o === "CONVERSIONS")      return "conversao";
+  if (o === "OUTCOME_AWARENESS"|| o === "REACH" || o === "BRAND_AWARENESS") return "alcance";
+  // OUTCOME_ENGAGEMENT é ambíguo — deixa resolverTipo() decidir por métricas
+  return null;
+}
+
 export function calcMetricas(c: Campanha, ticket = 450, conv = 0.04): Metricas {
   const investimento = c.gasto_total ?? 0;
   const resultado    = c.contatos ?? 0;
@@ -406,7 +422,7 @@ export function calcMetricas(c: Campanha, ticket = 450, conv = 0.04): Metricas {
   // ── v3: resolve tipo e delega para calcMetricasPorTipo ──────────────────
   const tipo = resolverTipo(
     c.nome_campanha ?? "",
-    (c as any).tipo_campanha,
+    mapearObjectiveMeta(c.objective) ?? c.tipo_campanha,
     { cliques, contatos: resultado, impressoes, ctr, cpm, gasto_total: investimento }
   );
 
@@ -419,11 +435,11 @@ export function calcMetricas(c: Campanha, ticket = 450, conv = 0.04): Metricas {
     cpm,
     alcance,
     orcamento: c.orcamento ?? 0,
-    visualizacoes:     (c as any).visualizacoes,
-    instalacoes:       (c as any).instalacoes,
-    engajamentos:      (c as any).engajamentos,
-    mensagens_iniciadas: (c as any).mensagens_iniciadas,
-    receita_estimada:  (c as any).receita_estimada,
+    visualizacoes:       c.visualizacoes,
+    instalacoes:         c.instalacoes,
+    engajamentos:        c.engajamentos,
+    mensagens_iniciadas: c.mensagens_iniciadas,
+    receita_estimada:    c.receita_estimada,
   };
 
   const mt = calcMetricasPorTipo(inputTipo, tipo, ticket, conv);
@@ -599,7 +615,8 @@ export function calcularRiscoProgressivo(campanha: CampanhaBase): RiscoProgressi
 
 export function calcularTendenciaConta(
   snapshots: SnapshotCampanha[],
-  campanhas: CampanhaBase[]
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _campanhas: CampanhaBase[]
 ): TendenciaConta {
   const agora = new Date();
   const dia7  = new Date(agora.getTime() - 7  * 24 * 3600 * 1000);

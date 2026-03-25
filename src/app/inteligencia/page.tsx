@@ -5,8 +5,10 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
+
 import { getSupabase } from "@/lib/supabase";
-import { Loader2, TrendingUp, TrendingDown, Minus, Globe } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Globe } from "lucide-react";
+import { useSessionGuard } from "@/app/hooks/useSessionGuard";
 
 interface Campanha {
   id: string; nome_campanha: string;
@@ -50,7 +52,11 @@ function gerarInsights(campanhas: Campanha[]): Insight[] {
   const insights: Insight[] = [];
   if (campanhas.length === 0) return insights;
   const comLeads   = campanhas.filter(c => c.contatos > 0 && c.gasto_total > 0);
-  const semLeads   = campanhas.filter(c => c.contatos === 0 && c.gasto_total > 100);
+  const semLeads   = campanhas.filter(c => {
+    const nome = (c.nome_campanha ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const isAwareness = /alcance|reach|awareness|trafego|traffic/.test(nome);
+    return c.contatos === 0 && c.gasto_total > 100 && !isAwareness;
+  });
   const melhorCTR  = [...campanhas].filter(c => c.ctr > 0).sort((a, b) => b.ctr - a.ctr)[0];
   const melhorROAS = campanhas.filter(c => c.gasto_total > 0).sort((a, b) => (b.receita_estimada / b.gasto_total) - (a.receita_estimada / a.gasto_total))[0];
   if (semLeads.length > 0) {
@@ -96,8 +102,9 @@ function TendIcon({ t }: { t: "up" | "down" | "neutral" }) {
   return <Minus size={14} className="text-white/30" />;
 }
 
-function BenchCard({ b }: { b: Benchmark }) {
+function BenchCard({ b }: { b: Benchmark; key?: string | number }) {
   const cor = b.tendencia === "up" ? "text-emerald-400" : b.tendencia === "down" ? "text-red-400" : "text-white";
+
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
       <div className="flex items-center justify-between mb-3">
@@ -112,6 +119,8 @@ function BenchCard({ b }: { b: Benchmark }) {
 
 export default function InteligenciaPage() {
   const supabase = useMemo(() => getSupabase(), []);
+  useSessionGuard();
+
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [loading, setLoading]     = useState(true);
 
@@ -148,11 +157,7 @@ export default function InteligenciaPage() {
             </p>
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 size={20} className="animate-spin text-purple-400" />
-            </div>
-          ) : (
+          {!loading ? (
             <div className="space-y-6">
               {/* Totais */}
               <div className="grid grid-cols-3 gap-3">
@@ -215,7 +220,7 @@ export default function InteligenciaPage() {
                 )}
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </>

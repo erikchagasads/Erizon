@@ -319,24 +319,31 @@ export function detectarTipoPorMetricas(dados: {
 }
 
 /**
- * Resolve o tipo final combinando nome + métricas + campo do banco.
- * Prioridade: campo banco > nome > métricas
+ * Resolve o tipo final combinando nome + objective Meta + métricas.
+ *
+ * Prioridade:
+ *   1. Nome da campanha  — o gestor nomeia intencionalmente (ex: "BOUND – ALCANCE")
+ *   2. Objective do Meta — fallback quando o nome é genérico/sem palavras-chave
+ *   3. Métricas          — último recurso heurístico
+ *
+ * Motivo da mudança: o Meta retorna OUTCOME_LEADS para campanhas que na prática
+ * são de alcance/tráfego. O nome dado pelo gestor é mais confiável.
  */
 export function resolverTipo(
   nomeCampanha: string,
   tipoBanco?: string | null,
   metricas?: Parameters<typeof detectarTipoPorMetricas>[0]
 ): TipoCampanha {
-  // 1. Campo explícito no banco
+  // 1. Detecção por nome (maior confiança — o gestor nomeia com intenção)
+  const porNome = detectarTipoPorNome(nomeCampanha);
+  if (porNome !== "desconhecido") return porNome;
+
+  // 2. Campo do banco / objective Meta (fallback quando nome é genérico)
   if (tipoBanco && tipoBanco !== "desconhecido" && tipoBanco in BENCHMARKS_POR_TIPO) {
     return tipoBanco as TipoCampanha;
   }
 
-  // 2. Detecção por nome
-  const porNome = detectarTipoPorNome(nomeCampanha);
-  if (porNome !== "desconhecido") return porNome;
-
-  // 3. Detecção por métricas
+  // 3. Detecção por métricas (último recurso)
   if (metricas) {
     const porMetricas = detectarTipoPorMetricas(metricas);
     if (porMetricas !== "desconhecido") return porMetricas;
@@ -504,6 +511,7 @@ function scoreEficiencia(tipo: TipoCampanha, dados: MetricasCalculadas, bench: B
   return 20;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function scoreVolume(tipo: TipoCampanha, dados: InputMetricasTipo, bench: BenchmarkTipo): number {
   const { contatos = 0, impressoes = 0, visualizacoes = 0, instalacoes = 0, engajamentos = 0 } = dados;
 

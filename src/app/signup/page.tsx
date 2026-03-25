@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import ErizonLogo from "@/components/ErizonLogo";
 import Link from "next/link";
 import { createBrowserClient } from "@supabase/ssr";
 import { useState } from "react";
@@ -38,6 +38,7 @@ export default function SignupPage() {
       } else {
         setSuccess(true);
       }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       setError(error.message || "Erro ao criar conta. Tente novamente.");
     } finally {
@@ -58,21 +59,24 @@ export default function SignupPage() {
     <div className="min-h-screen bg-[#060608] text-white flex overflow-hidden">
 
       {/* Glows */}
-      <div className="fixed top-0 right-0 w-[600px] h-[600px] bg-purple-700/6 blur-[200px] rounded-full pointer-events-none" />
-      <div className="fixed bottom-0 left-0 w-[400px] h-[400px] bg-purple-900/6 blur-[160px] rounded-full pointer-events-none" />
-      <div className="fixed top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent z-50" />
+      <div className="fixed top-0 right-0 w-[600px] h-[600px] bg-fuchsia-700/6 blur-[200px] rounded-full pointer-events-none" />
+      <div className="fixed bottom-0 left-0 w-[400px] h-[400px] bg-fuchsia-900/6 blur-[160px] rounded-full pointer-events-none" />
+      <div className="fixed top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-fuchsia-500/20 to-transparent z-50" />
 
       {/* ── Lado esquerdo — branding ── */}
       <div className="hidden lg:flex flex-col justify-between w-[45%] p-16 border-r border-white/[0.04]">
 
-        <Link href="/">
-          <Image src="/logo-erizon.png" alt="Erizon" width={140} height={46} className="object-contain opacity-90 hover:opacity-60 transition-opacity" priority />
+        <Link href="/" className="flex items-center gap-3 w-fit group">
+          <ErizonLogo size={40} />
+          <span className="text-[18px] font-black tracking-tight text-white group-hover:text-white/70 transition-colors">
+            Erizon
+          </span>
         </Link>
 
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-purple-500/70 mb-5">Novo Acesso</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-fuchsia-500/70 mb-5">Novo Acesso</p>
           <h2 className="text-[52px] font-black italic uppercase tracking-tighter leading-[0.88] mb-6">
-            Crie sua conta<br />e comece<br /><span className="text-purple-500">a escalar.</span>
+            Crie sua conta<br />e comece<br /><span className="text-fuchsia-500">a escalar.</span>
           </h2>
           <p className="text-gray-500 text-sm leading-relaxed max-w-xs">
             Acesso completo ao sistema. Configure em minutos, resultados a partir do primeiro dia.
@@ -88,7 +92,7 @@ export default function SignupPage() {
           ].map((s) => (
             <div key={s.num} className="flex items-center gap-4">
               <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-[11px] font-black border transition-all ${
-                s.active ? "bg-purple-600 border-purple-600 text-white" : "border-white/10 text-gray-700"
+                s.active ? "bg-gradient-to-r from-fuchsia-600 to-violet-700 border-fuchsia-600 text-white" : "border-white/10 text-gray-700"
               }`}>
                 {s.num}
               </div>
@@ -104,8 +108,9 @@ export default function SignupPage() {
       <div className="flex-1 flex flex-col items-center justify-center p-6 lg:p-16 overflow-y-auto">
 
         <div className="lg:hidden mb-10">
-          <Link href="/">
-            <Image src="/logo-erizon.png" alt="Erizon" width={120} height={40} className="object-contain" priority />
+          <Link href="/" className="flex items-center gap-3 w-fit">
+            <ErizonLogo size={36} />
+            <span className="text-[17px] font-black tracking-tight text-white">Erizon</span>
           </Link>
         </div>
 
@@ -127,7 +132,7 @@ export default function SignupPage() {
                 Confirme seu email e volte para fazer login.<br />Verifique também a caixa de spam.
               </p>
               <Link href="/login">
-                <button className="group w-full flex items-center justify-center gap-3 bg-purple-600 hover:bg-purple-500 px-6 py-4 rounded-2xl font-bold text-sm tracking-wide transition-all shadow-[0_0_30px_rgba(147,51,234,0.2)] hover:shadow-[0_0_50px_rgba(147,51,234,0.35)]">
+                <button className="group w-full flex items-center justify-center gap-3 bg-gradient-to-r from-fuchsia-600 to-violet-700 hover:from-fuchsia-500 hover:to-violet-600 px-6 py-4 rounded-2xl font-bold text-sm tracking-wide transition-all shadow-[0_0_30px_rgba(147,51,234,0.2)] hover:shadow-[0_0_50px_rgba(147,51,234,0.35)]">
                   Ir para o Login
                   <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
                 </button>
@@ -136,15 +141,15 @@ export default function SignupPage() {
           ) : (
             <>
               <div className="mb-8">
-                <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full border border-purple-500/15 bg-purple-500/5 mb-6">
+                <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full border border-fuchsia-500/15 bg-fuchsia-500/5 mb-6">
                   <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-purple-500" />
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-fuchsia-500" />
                   </span>
-                  <span className="text-[10px] font-semibold text-purple-400 tracking-wide">Cadastro Gratuito</span>
+                  <span className="text-[10px] font-semibold text-fuchsia-400 tracking-wide">Cadastro Gratuito</span>
                 </div>
                 <h1 className="text-4xl font-black italic uppercase tracking-tighter leading-tight mb-2">
-                  Criar<br /><span className="text-purple-500">nova conta.</span>
+                  Criar<br /><span className="text-fuchsia-500">nova conta.</span>
                 </h1>
                 <p className="text-gray-600 text-sm">Preencha os dados abaixo para começar.</p>
               </div>
@@ -162,7 +167,7 @@ export default function SignupPage() {
                   <input
                     type="text"
                     placeholder="Seu nome"
-                    className="w-full bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.14] focus:border-purple-500/60 px-5 py-4 rounded-2xl outline-none transition-all text-sm text-white placeholder-gray-700"
+                    className="w-full bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.14] focus:border-fuchsia-500/60 px-5 py-4 rounded-2xl outline-none transition-all text-sm text-white placeholder-gray-700"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
@@ -174,7 +179,7 @@ export default function SignupPage() {
                   <input
                     type="email"
                     placeholder="seu@email.com"
-                    className="w-full bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.14] focus:border-purple-500/60 px-5 py-4 rounded-2xl outline-none transition-all text-sm text-white placeholder-gray-700"
+                    className="w-full bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.14] focus:border-fuchsia-500/60 px-5 py-4 rounded-2xl outline-none transition-all text-sm text-white placeholder-gray-700"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -186,7 +191,7 @@ export default function SignupPage() {
                   <input
                     type="password"
                     placeholder="Mínimo 6 caracteres"
-                    className="w-full bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.14] focus:border-purple-500/60 px-5 py-4 rounded-2xl outline-none transition-all text-sm text-white placeholder-gray-700"
+                    className="w-full bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.14] focus:border-fuchsia-500/60 px-5 py-4 rounded-2xl outline-none transition-all text-sm text-white placeholder-gray-700"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -211,7 +216,7 @@ export default function SignupPage() {
                     className={`w-full bg-white/[0.03] border px-5 py-4 rounded-2xl outline-none transition-all text-sm text-white placeholder-gray-700 ${
                       confirmPassword.length > 0
                         ? password === confirmPassword ? "border-emerald-500/40" : "border-red-500/40"
-                        : "border-white/[0.08] hover:border-white/[0.14] focus:border-purple-500/60"
+                        : "border-white/[0.08] hover:border-white/[0.14] focus:border-fuchsia-500/60"
                     }`}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
@@ -228,14 +233,14 @@ export default function SignupPage() {
                 <div
                   className={`flex items-start gap-3 p-4 rounded-2xl border cursor-pointer transition-all ${
                     aceitouTermos
-                      ? "border-purple-500/30 bg-purple-500/[0.04]"
+                      ? "border-fuchsia-500/30 bg-fuchsia-500/[0.04]"
                       : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.10]"
                   }`}
                   onClick={() => setAceitouTermos(v => !v)}
                 >
                   <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 mt-0.5 transition-all ${
                     aceitouTermos
-                      ? "bg-purple-600 border-purple-600"
+                      ? "bg-gradient-to-r from-fuchsia-600 to-violet-700 border-fuchsia-600"
                       : "border-white/20 bg-transparent"
                   }`}>
                     {aceitouTermos && (
@@ -249,7 +254,7 @@ export default function SignupPage() {
                     <Link
                       href="/termos"
                       target="_blank"
-                      className="text-purple-400 hover:text-purple-300 underline underline-offset-2 transition-colors"
+                      className="text-fuchsia-400 hover:text-fuchsia-300 underline underline-offset-2 transition-colors"
                       onClick={(e) => e.stopPropagation()}
                     >
                       Termos de Uso
@@ -258,7 +263,7 @@ export default function SignupPage() {
                     <Link
                       href="/privacidade"
                       target="_blank"
-                      className="text-purple-400 hover:text-purple-300 underline underline-offset-2 transition-colors"
+                      className="text-fuchsia-400 hover:text-fuchsia-300 underline underline-offset-2 transition-colors"
                       onClick={(e) => e.stopPropagation()}
                     >
                       Política de Privacidade
@@ -271,7 +276,7 @@ export default function SignupPage() {
                   <button
                     type="submit"
                     disabled={loading || !aceitouTermos}
-                    className="group w-full flex items-center justify-center gap-3 bg-purple-600 hover:bg-purple-500 px-6 py-4 rounded-2xl font-bold text-sm tracking-wide transition-all shadow-[0_0_30px_rgba(147,51,234,0.2)] hover:shadow-[0_0_50px_rgba(147,51,234,0.35)] disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99]"
+                    className="group w-full flex items-center justify-center gap-3 bg-gradient-to-r from-fuchsia-600 to-violet-700 hover:from-fuchsia-500 hover:to-violet-600 px-6 py-4 rounded-2xl font-bold text-sm tracking-wide transition-all shadow-[0_0_30px_rgba(147,51,234,0.2)] hover:shadow-[0_0_50px_rgba(147,51,234,0.35)] disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99]"
                   >
                     {loading ? (
                       <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Criando conta...</>
@@ -285,9 +290,9 @@ export default function SignupPage() {
               <div className="mt-8 flex flex-col items-center gap-3">
                 <p className="text-sm text-gray-600">
                   Já tem uma conta?{" "}
-                  <Link href="/login" className="text-purple-400 hover:text-purple-300 font-semibold transition-colors">Entrar</Link>
+                  <Link href="/login" className="text-fuchsia-400 hover:text-fuchsia-300 font-semibold transition-colors">Entrar</Link>
                 </p>
-                <Link href="/" className="text-[10px] font-semibold uppercase tracking-widest text-gray-700 hover:text-purple-400 transition-colors">
+                <Link href="/" className="text-[10px] font-semibold uppercase tracking-widest text-gray-700 hover:text-fuchsia-400 transition-colors">
                   ← Voltar ao início
                 </Link>
               </div>

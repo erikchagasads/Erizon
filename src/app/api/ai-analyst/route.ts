@@ -3,6 +3,9 @@ import { Groq } from "groq-sdk";
 import { z, validationError } from "@/lib/validate";
 import { requireAuth } from "@/lib/auth-guard";
 import { checkRateLimit, rateLimitHeaders, RATE_LIMIT_PRESETS } from "@/lib/rate-limiter";
+import { getContextoCliente } from "@/lib/agente-memoria";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -40,6 +43,16 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return NextResponse.json(validationError(parsed), { status: 422 });
 
     const { metrics, mensagemUsuario, contexto } = parsed.data;
+    const cliente_id = (body as Record<string, unknown>).cliente_id as string | undefined;
+
+    // Buscar memoria do cliente
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
+    );
+    const memoriaCliente = await getContextoCliente(supabase, auth.user.id, cliente_id, "analista");
     const listaCampanhas = Array.isArray(metrics) ? metrics : metrics ? [metrics] : [];
 
     if (listaCampanhas.length === 0) {
@@ -50,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     // ── Formata resumo das campanhas para o prompt ─────────────────────────
     const resumoCampanhas = listaCampanhas
-      .map((c: any) => {
+      .map((c: Record<string, unknown>) => {
         const gasto = Number(c.gasto_total ?? 0);
         const contatos = Number(c.contatos ?? 0);
         const orcamento = Number(c.orcamento ?? 0);
@@ -75,7 +88,7 @@ export async function POST(req: NextRequest) {
 
     const isTodas = listaCampanhas.length > 1;
 
-    const promptBase = `Você é um ANALISTA SÊNIOR de Meta Ads com 10+ anos de experiência.
+    const promptBase = `Você é um ANALISTA SÊNIOR de Meta Ads com 10+ anos de experiência no mercado brasileiro.
 
 ${
   isTodas
@@ -85,28 +98,83 @@ ${
 
 ${resumoCampanhas}
 
-${contexto ? `\nCONTEXTO ADICIONAL:\n${contexto}` : ""}
+${contexto ? `\nCONTEXTO ADICIONAL:\n${contexto}` : ""}${memoriaCliente}
 
-CRITÉRIOS DE AVALIAÇÃO (use estes benchmarks):
-- CPL: abaixo de R$15 = excelente | R$15-30 = bom | R$30-50 = atenção | acima de R$50 = crítico
-- Frequência: acima de 2.5 = sinal de alarme de saturação de audiência
-- Budget consumo: acima de 90% = risco de interrupção de entrega
+── BENCHMARKS DO MERCADO BRASILEIRO ──
+CPL:
+  • Excelente: abaixo de R$15
+  • Bom: R$15-30
+  • Atenção: R$30-50
+  • Crítico: acima de R$50
 
-REGRAS DE RESPOSTA:
-- Use APENAS os dados fornecidos acima, nunca invente números
-- Se for pergunta específica → responda diretamente ao ponto
-- Se for diagnóstico geral → use o formato: DIAGNÓSTICO → PROBLEMAS → OPORTUNIDADES → TOP 3 AÇÕES
-- Seja objetivo, máximo 400 palavras
-- Quando analisar múltiplas campanhas, destaque sempre a melhor e a pior performance
-- Indique frequência alta (>2.5) como alarme explícito
-- Termine com uma ação concreta e prioritária`;
+ROAS:
+  • Excelente: acima de 3×
+  • Bom: 2-3×
+  • Atenção: 1-2×
+  • Crítico: abaixo de 1× (prejuízo)
+
+CTR:
+  • Excelente: acima de 2%
+  • Bom: 1-2%
+  • Atenção: 0.5-1%
+  • Crítico: abaixo de 0.5% (criativo saturado)
+
+FREQUÊNCIA:
+  • Seguro: abaixo de 2.0
+  • Atenção: 2.0-2.5 (monitorar saturação)
+  • Alarme: acima de 2.5 (público esgotado, trocar criativo)
+  • Crítico: acima de 3.5 (pausar e reformular)
+
+CPM:
+  • Eficiente: abaixo de R$15
+  • Normal: R$15-30
+  • Alto: acima de R$30 (revisar segmentação)
+
+CONSUMO DE BUDGET:
+  • Saudável: 70-90% no período
+  • Sub-entrega: abaixo de 70% (problema de lance ou público)
+  • Risco: acima de 95% (pode interromper entrega)
+
+── SKILLS DE ANÁLISE ──
+
+DIAGNÓSTICO RÁPIDO: Identifique o status geral (Crítico/Atenção/Saudável/Oportunidade)
+CAUSA RAIZ: O que está causando o problema real (criativo, público, oferta, orçamento, timing)
+IMPACTO FINANCEIRO: Quanto está sendo desperdiçado ou quanto pode ser ganho
+AÇÃO PRIORITÁRIA: Uma ação concreta para implementar HOJE
+PRÓXIMO TESTE: O que testar na próxima semana para validar melhoria
+
+── REGRAS ──
+- Use APENAS os dados fornecidos, nunca invente números
+- Se pergunta específica → responda diretamente sem rodeios
+- Se diagnóstico geral → formato: DIAGNÓSTICO → CAUSA → IMPACTO → AÇÕES
+- Destaque sempre a melhor e pior campanha quando houver múltiplas
+- Frequência > 2.5 = alarme explícito obrigatório
+- Termine SEMPRE com uma ação concreta e prioritária com prazo`;
 
     const completion = await groq.chat.completions.create({
       messages: [
         {
           role: "system",
-          content:
-            "Você é um analista sênior de Meta Ads. Direto, preciso, orientado a dados. Responde sempre em português BR. Foca no que o gestor precisa fazer AGORA para melhorar resultados.",
+          content: `Você é o Analista Neural da Erizon — analista sênior de Meta Ads integrado à plataforma de gestão de tráfego.
+
+IDENTIDADE:
+- 10+ anos analisando campanhas de performance no Brasil
+- Especialista em identificar causa raiz de problemas de campanha
+- Orientado a dados reais — nunca inventa métricas
+- Parceiro de trabalho do gestor, não consultor distante
+
+COMO VOCÊ ANALISA:
+1. Vê os números → identifica o padrão
+2. Identifica a causa raiz (não o sintoma)
+3. Quantifica o impacto financeiro
+4. Entrega ação concreta com prazo
+
+ESTILO DE RESPOSTA:
+- Direto ao ponto — sem enrolação
+- Use bullets e formatação clara
+- Números reais com contexto (não só o dado bruto)
+- Tom de parceiro que entende o negócio, não de robô analítico
+- Sempre em português BR`,
         },
         {
           role: "system",
@@ -129,10 +197,10 @@ REGRAS DE RESPOSTA:
     return NextResponse.json({
       analysis: completion.choices[0].message.content,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Erro na API AI Analyst:", error);
     return NextResponse.json(
-      { error: `Erro ao processar análise: ${error.message}` },
+      { error: `Erro ao processar análise: ${error instanceof Error ? error.message : String(error)}` },
       { status: 500 }
     );
   }

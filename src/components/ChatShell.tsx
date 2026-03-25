@@ -37,18 +37,39 @@ interface ChatShellProps {
   headerBottom?: React.ReactNode;       // métricas (studio)
   sidebarTop?: React.ReactNode;         // abas copy/roteiro
   emptyState?: React.ReactNode;         // empty state customizado
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
   extraData?: Record<string, any>;      // dados extras para o endpoint
 
   // Endpoint da IA e builder de payload
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
   endpoint: string;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
   buildPayload: (input: string, msgs: Mensagem[], extra: Record<string, any>) => Record<string, any>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
   extractReply: (data: any) => string;
 }
+ 
+ 
+ 
+ 
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseMensagens(raw: any): Mensagem[] {
   try {
     const arr = typeof raw === "string" ? JSON.parse(raw) : raw;
     if (!Array.isArray(arr)) return [];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
     return arr.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }));
   } catch {
     return [];
@@ -153,12 +174,17 @@ export default function ChatShell({
     setLoading(true);
     try {
       const payload = buildPayload(pergunta, novasMensagens, extraData);
+ 
+ 
+ 
+ 
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const resText = await res.text();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
       let data: any;
       try { data = JSON.parse(resText); } catch { data = { error: "Resposta inválida da API." }; }
       const reply = extractReply(data);

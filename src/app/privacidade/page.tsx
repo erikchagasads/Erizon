@@ -1,8 +1,8 @@
 // src/app/privacidade/page.tsx
 
 export const metadata = {
-  title: "Política de Privacidade | ErizonAI",
-  description: "Política de Privacidade da plataforma ErizonAI — como coletamos, usamos e protegemos seus dados.",
+  title: "Política de Privacidade | Erizon",
+  description: "Política de Privacidade da plataforma Erizon — como coletamos, usamos e protegemos seus dados.",
 };
 
 export default function PrivacidadePage() {
@@ -11,9 +11,9 @@ export default function PrivacidadePage() {
       <div className="max-w-3xl mx-auto">
 
         <div className="mb-12">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-purple-400/60 mb-3">Legal</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-fuchsia-400/60 mb-3">Legal</p>
           <h1 className="text-[2.2rem] font-black italic uppercase tracking-tight mb-4">Política de Privacidade</h1>
-          <p className="text-[13px] text-white/30">Última atualização: fevereiro de 2025</p>
+          <p className="text-[13px] text-white/30">Última atualização: março de 2026</p>
         </div>
 
         <div className="space-y-10 text-[14px] text-white/50 leading-relaxed">
@@ -21,7 +21,7 @@ export default function PrivacidadePage() {
           <section>
             <h2 className="text-[16px] font-bold text-white mb-3">1. Quem somos</h2>
             <p>
-              A <strong className="text-white">ErizonAI</strong> ("Erizon", "nós", "nossa") é uma plataforma brasileira de inteligência artificial para gestão de campanhas de tráfego pago, acessível em <strong className="text-white">erizon.vercel.app</strong>. Somos responsáveis pelo tratamento dos dados pessoais coletados através da nossa plataforma, nos termos da Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD).
+              A <strong className="text-white">Erizon</strong> (&quot;Erizon&quot;, &quot;nós&quot;, &quot;nossa&quot;) é uma plataforma brasileira de inteligência artificial para gestão de campanhas de tráfego pago, acessível em <strong className="text-white">erizonai.com.br</strong>. O serviço é operado por <strong className="text-white">Erik Chagas</strong>, CPF 437.982.XXX-XX, responsável pelo tratamento dos dados pessoais coletados através da plataforma, nos termos da Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD).
             </p>
           </section>
 
@@ -35,7 +35,7 @@ export default function PrivacidadePage() {
                 { titulo: "Dados de campanhas", desc: "Métricas de campanhas sincronizadas via Meta API: gasto, leads, ROAS, CPL, CTR, impressões e outros indicadores de performance." },
                 { titulo: "Dados de clientes", desc: "Informações inseridas pelo usuário sobre seus clientes (nome, segmento, configurações de campanha) para organização interna da plataforma." },
                 { titulo: "Dados de uso", desc: "Logs de acesso, páginas visitadas, ações realizadas na plataforma — usados para melhorar a experiência e identificar erros." },
-                { titulo: "Dados de pagamento", desc: "Processados exclusivamente pelo Stripe. A ErizonAI não armazena dados de cartão de crédito." },
+                { titulo: "Dados de pagamento", desc: "Processados exclusivamente pelo Stripe. A Erizon não armazena dados de cartão de crédito." },
               ].map((item, i) => (
                 <div key={i} className="pl-4 border-l border-white/[0.08]">
                   <p className="text-white font-semibold mb-1">{item.titulo}</p>
@@ -50,7 +50,7 @@ export default function PrivacidadePage() {
             <p className="mb-4">Utilizamos seus dados exclusivamente para:</p>
             <ul className="space-y-2">
               {[
-                "Operar e fornecer os serviços da plataforma ErizonAI",
+                "Operar e fornecer os serviços da plataforma Erizon",
                 "Sincronizar e analisar dados de campanhas via Meta API",
                 "Enviar alertas e notificações via Telegram quando configurado",
                 "Processar pagamentos e gerenciar assinaturas",
@@ -58,7 +58,7 @@ export default function PrivacidadePage() {
                 "Cumprir obrigações legais e regulatórias",
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-purple-400 shrink-0 mt-1">·</span>
+                  <span className="text-fuchsia-400 shrink-0 mt-1">·</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -67,9 +67,7 @@ export default function PrivacidadePage() {
 
           <section>
             <h2 className="text-[16px] font-bold text-white mb-3">4. Base legal para o tratamento</h2>
-            <p>
-              O tratamento dos seus dados é realizado com base nas seguintes hipóteses previstas na LGPD:
-            </p>
+            <p>O tratamento dos seus dados é realizado com base nas seguintes hipóteses previstas na LGPD:</p>
             <ul className="space-y-2 mt-3">
               {[
                 "Execução de contrato — para fornecer os serviços contratados",
@@ -78,7 +76,7 @@ export default function PrivacidadePage() {
                 "Cumprimento de obrigação legal — para atender exigências fiscais e regulatórias",
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-purple-400 shrink-0 mt-1">·</span>
+                  <span className="text-fuchsia-400 shrink-0 mt-1">·</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -101,9 +99,7 @@ export default function PrivacidadePage() {
                 </div>
               ))}
             </div>
-            <p className="mt-4">
-              Não vendemos, alugamos ou compartilhamos seus dados com terceiros para fins comerciais.
-            </p>
+            <p className="mt-4">Não vendemos, alugamos ou compartilhamos seus dados com terceiros para fins comerciais.</p>
           </section>
 
           <section>
@@ -134,13 +130,13 @@ export default function PrivacidadePage() {
                 "Solicitar a exclusão completa da sua conta e dados",
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-purple-400 shrink-0 mt-1">·</span>
+                  <span className="text-fuchsia-400 shrink-0 mt-1">·</span>
                   <span>{item}</span>
                 </li>
               ))}
             </ul>
             <p className="mt-4">
-              Para exercer seus direitos, entre em contato pelo e-mail: <strong className="text-white">privacidade@erizon.com.br</strong>
+              Para exercer seus direitos, entre em contato pelo e-mail: <strong className="text-white">privacidade@erizonai.com.br</strong>
             </p>
           </section>
 
@@ -160,13 +156,12 @@ export default function PrivacidadePage() {
 
           <section>
             <h2 className="text-[16px] font-bold text-white mb-3">11. Contato</h2>
-            <p>
-              Para dúvidas, solicitações ou exercício dos seus direitos como titular de dados:
-            </p>
+            <p>Para dúvidas, solicitações ou exercício dos seus direitos como titular de dados:</p>
             <div className="mt-3 p-4 rounded-xl border border-white/[0.06] bg-white/[0.02] space-y-1">
-              <p><strong className="text-white">ErizonAI</strong></p>
-              <p>E-mail: <strong className="text-purple-400">privacidade@erizon.com.br</strong></p>
-              <p>Site: <strong className="text-purple-400">erizon.vercel.app</strong></p>
+              <p><strong className="text-white">Erik Chagas</strong></p>
+              <p>CPF: <strong className="text-white">437.982.XXX-XX</strong></p>
+              <p>E-mail: <strong className="text-fuchsia-400">privacidade@erizonai.com.br</strong></p>
+              <p>Site: <strong className="text-fuchsia-400">erizonai.com.br</strong></p>
             </div>
           </section>
 

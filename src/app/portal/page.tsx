@@ -4,7 +4,7 @@
 // O cliente acessa e vê só os dados dele: investimento, campanhas, leads, CPL.
 // O gestor economiza tempo de WhatsApp. O cliente ganha transparência.
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import {
   Users, TrendingUp, Target, DollarSign,
@@ -136,7 +136,10 @@ function PortalView({ data, clienteId }: { data: PortalData; clienteId: string }
           <p className="text-[11px] text-white/30 mt-0.5">O que o cliente vê no portal público</p>
         </div>
         {data.campanhas.length === 0 ? (
-          <div className="px-5 py-10 text-center text-white/30 text-sm">Nenhuma campanha ativa</div>
+          <div className="px-5 py-10 text-center space-y-2">
+            <p className="text-white/30 text-sm">Nenhuma campanha encontrada para este cliente.</p>
+            <p className="text-white/20 text-xs leading-relaxed">Verifique se o cliente tem campanhas vinculadas em <span className="text-purple-400">/clientes</span> ou se o Meta Account ID está configurado e o sync foi executado.</p>
+          </div>
         ) : (
           <div className="divide-y divide-white/[0.04]">
             {data.campanhas.map((c, i) => (
@@ -192,6 +195,7 @@ export default function PortalPage() {
     fetch("/api/clientes")
       .then(r => r.json())
       .then(json => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
         const lista: Cliente[] = (json.clientes ?? json ?? []).map((c: any) => ({
           id: c.id,
           nome: c.nome_cliente ?? c.nome ?? "—",
@@ -205,6 +209,7 @@ export default function PortalPage() {
 
   useEffect(() => {
     if (!clienteId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingP(true);
     setErro(null);
     setPortalData(null);

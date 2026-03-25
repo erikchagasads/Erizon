@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import {
-  FileText, Download, Loader2, Users,
+  Loader2, Users,
   DollarSign, Target, TrendingUp, BarChart3,
   CheckCircle2, AlertTriangle, XCircle, Printer,
 } from "lucide-react";
@@ -237,7 +237,7 @@ export default function RelatoriosPage() {
     fetch("/api/clientes")
       .then(r => r.json())
       .then(json => {
-        const lista: Cliente[] = (json.clientes ?? json ?? []).map((c: any) => ({
+        const lista: Cliente[] = (json.clientes ?? json ?? []).map((c: { id: string; nome_cliente?: string; nome?: string; cor?: string }) => ({
           id: c.id,
           nome: c.nome_cliente ?? c.nome ?? "—",
           cor: c.cor,
@@ -250,17 +250,23 @@ export default function RelatoriosPage() {
 
   useEffect(() => {
     if (!clienteId) return;
-    setLoadingR(true);
-    setErro(null);
-    setRelatorio(null);
-    fetch(`/api/relatorio-pdf?cliente_id=${clienteId}`)
-      .then(r => r.ok ? r.json() : Promise.reject("Erro"))
-      .then(json => {
+    async function carregarRelatorio() {
+      setLoadingR(true);
+      setErro(null);
+      setRelatorio(null);
+      try {
+        const r = await fetch(`/api/relatorio-pdf?cliente_id=${clienteId}`);
+        if (!r.ok) throw new Error("Erro");
+        const json = await r.json();
         if (json.ok && json.relatorio) setRelatorio(json.relatorio);
         else setErro("Nenhum dado encontrado para este cliente.");
-      })
-      .catch(() => setErro("Erro ao gerar relatório."))
-      .finally(() => setLoadingR(false));
+      } catch {
+        setErro("Erro ao gerar relatório.");
+      } finally {
+        setLoadingR(false);
+      }
+    }
+    void carregarRelatorio();
   }, [clienteId]);
 
   return (

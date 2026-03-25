@@ -1,8 +1,8 @@
 // src/app/termos/page.tsx
 
 export const metadata = {
-  title: "Termos de Uso | ErizonAI",
-  description: "Termos de Uso da plataforma ErizonAI.",
+  title: "Termos de Uso | Erizon",
+  description: "Termos de Uso da plataforma Erizon.",
 };
 
 export default function TermosPage() {
@@ -11,9 +11,9 @@ export default function TermosPage() {
       <div className="max-w-3xl mx-auto">
 
         <div className="mb-12">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-purple-400/60 mb-3">Legal</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-fuchsia-400/60 mb-3">Legal</p>
           <h1 className="text-[2.2rem] font-black italic uppercase tracking-tight mb-4">Termos de Uso</h1>
-          <p className="text-[13px] text-white/30">Última atualização: fevereiro de 2025</p>
+          <p className="text-[13px] text-white/30">Última atualização: março de 2026</p>
         </div>
 
         <div className="space-y-10 text-[14px] text-white/50 leading-relaxed">
@@ -21,14 +21,14 @@ export default function TermosPage() {
           <section>
             <h2 className="text-[16px] font-bold text-white mb-3">1. Aceitação dos termos</h2>
             <p>
-              Ao acessar ou usar a plataforma <strong className="text-white">ErizonAI</strong>, você concorda com estes Termos de Uso. Se não concordar com qualquer parte destes termos, não utilize a plataforma.
+              Ao acessar ou usar a plataforma <strong className="text-white">Erizon</strong>, você concorda com estes Termos de Uso. Se não concordar com qualquer parte destes termos, não utilize a plataforma.
             </p>
           </section>
 
           <section>
             <h2 className="text-[16px] font-bold text-white mb-3">2. O serviço</h2>
             <p>
-              A ErizonAI é uma plataforma SaaS de inteligência artificial para análise e otimização de campanhas de tráfego pago no Meta Ads. O serviço inclui análise de campanhas, alertas automáticos, recomendações de IA, relatórios e ferramentas de gestão multi-cliente.
+              A Erizon é uma plataforma SaaS de inteligência artificial para análise e otimização de campanhas de tráfego pago no Meta Ads. O serviço inclui análise de campanhas, alertas automáticos, recomendações de IA, relatórios e ferramentas de gestão multi-cliente. A plataforma é operada por <strong className="text-white">Erik Chagas</strong>, CPF 437.982.XXX-XX.
             </p>
           </section>
 
@@ -43,7 +43,7 @@ export default function TermosPage() {
                 "Deve nos notificar imediatamente sobre qualquer uso não autorizado",
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-purple-400 shrink-0 mt-1">·</span>
+                  <span className="text-fuchsia-400 shrink-0 mt-1">·</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -72,18 +72,16 @@ export default function TermosPage() {
 
           <section>
             <h2 className="text-[16px] font-bold text-white mb-3">5. Integração com Meta Ads</h2>
-            <p>
-              Para usar as funcionalidades de análise de campanhas, você precisa fornecer um Access Token da Meta. Ao fazer isso, você:
-            </p>
+            <p>Para usar as funcionalidades de análise de campanhas, você precisa fornecer um Access Token da Meta. Ao fazer isso, você:</p>
             <ul className="space-y-2 mt-3">
               {[
                 "Confirma que tem autorização para acessar as contas de anúncios conectadas",
                 "É responsável pelo uso adequado das permissões concedidas",
-                "Entende que a ErizonAI acessa dados de campanhas apenas para fornecer o serviço contratado",
+                "Entende que a Erizon acessa dados de campanhas apenas para fornecer o serviço contratado",
                 "Concorda em cumprir os Termos de Serviço da Meta Platforms",
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-purple-400 shrink-0 mt-1">·</span>
+                  <span className="text-fuchsia-400 shrink-0 mt-1">·</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -102,7 +100,7 @@ export default function TermosPage() {
                 "Em caso de inadimplência, o acesso é suspenso após 3 dias",
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-purple-400 shrink-0 mt-1">·</span>
+                  <span className="text-fuchsia-400 shrink-0 mt-1">·</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -112,18 +110,16 @@ export default function TermosPage() {
           <section>
             <h2 className="text-[16px] font-bold text-white mb-3">7. Propriedade intelectual</h2>
             <p>
-              Todo o conteúdo da plataforma — incluindo código, design, algoritmos, textos e marca — é de propriedade exclusiva da ErizonAI e protegido por lei. É proibida qualquer reprodução, distribuição ou criação de obras derivadas sem autorização expressa.
+              Todo o conteúdo da plataforma — incluindo código, design, algoritmos, textos e marca — é de propriedade exclusiva da Erizon e protegido por lei. É proibida qualquer reprodução, distribuição ou criação de obras derivadas sem autorização expressa.
             </p>
             <p className="mt-3">
-              Os dados das suas campanhas pertencem a você. A ErizonAI não reivindica propriedade sobre os dados que você insere na plataforma.
+              Os dados das suas campanhas pertencem a você. A Erizon não reivindica propriedade sobre os dados que você insere na plataforma.
             </p>
           </section>
 
           <section>
             <h2 className="text-[16px] font-bold text-white mb-3">8. Limitação de responsabilidade</h2>
-            <p>
-              A ErizonAI fornece análises e recomendações com base em dados históricos e algoritmos de IA. No entanto:
-            </p>
+            <p>A Erizon fornece análises e recomendações com base em dados históricos e algoritmos de IA. No entanto:</p>
             <ul className="space-y-2 mt-3">
               {[
                 "As recomendações são sugestões — a decisão final é sempre do usuário",
@@ -149,7 +145,7 @@ export default function TermosPage() {
           <section>
             <h2 className="text-[16px] font-bold text-white mb-3">10. Cancelamento e encerramento</h2>
             <p>
-              Você pode cancelar sua conta a qualquer momento pelo painel de configurações. A ErizonAI pode encerrar contas que violem estes termos, com ou sem aviso prévio. Após o cancelamento, seus dados são mantidos por 90 dias antes da exclusão definitiva.
+              Você pode cancelar sua conta a qualquer momento pelo painel de configurações. A Erizon pode encerrar contas que violem estes termos, com ou sem aviso prévio. Após o cancelamento, seus dados são mantidos por 90 dias antes da exclusão definitiva.
             </p>
           </section>
 
@@ -163,9 +159,10 @@ export default function TermosPage() {
           <section>
             <h2 className="text-[16px] font-bold text-white mb-3">12. Contato</h2>
             <div className="p-4 rounded-xl border border-white/[0.06] bg-white/[0.02] space-y-1">
-              <p><strong className="text-white">ErizonAI</strong></p>
-              <p>E-mail: <strong className="text-purple-400">contato@erizon.com.br</strong></p>
-              <p>Site: <strong className="text-purple-400">erizon.vercel.app</strong></p>
+              <p><strong className="text-white">Erik Chagas</strong></p>
+              <p>CPF: <strong className="text-white">437.982.XXX-XX</strong></p>
+              <p>E-mail: <strong className="text-fuchsia-400">contato@erizonai.com.br</strong></p>
+              <p>Site: <strong className="text-fuchsia-400">erizonai.com.br</strong></p>
             </div>
           </section>
 

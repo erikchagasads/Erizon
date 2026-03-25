@@ -14,7 +14,7 @@ import Stripe from "stripe";
 export const runtime = "nodejs"; // precisa de raw body
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-01-28.clover",
+  apiVersion: "2026-02-25.clover",
 });
 
 function getAdmin() {
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
           trial_end: sub.trial_end
             ? new Date(sub.trial_end * 1000).toISOString()
             : null,
-          // Na API 2026-01-28.clover, current_period_end fica em cada item
+          // Na API 2026-02-25.clover, current_period_end fica em cada item
           current_period_end: sub.items.data[0]?.current_period_end
             ? new Date((sub.items.data[0].current_period_end as number) * 1000).toISOString()
             : null,
@@ -147,7 +147,7 @@ export async function POST(req: Request) {
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
 
-        // Na API 2026-01-28.clover, o subscription ID fica em subscription_details
+        // Na API 2026-02-25.clover, o subscription ID fica em subscription_details
         const subId = (invoice as unknown as Record<string, unknown>).subscription_details
           ? ((invoice as unknown as Record<string, unknown>).subscription_details as Record<string, unknown>)?.subscription as string | null
           : (invoice as unknown as Record<string, unknown>).subscription as string | null;

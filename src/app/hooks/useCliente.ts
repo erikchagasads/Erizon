@@ -81,6 +81,7 @@ export function useCliente() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     carregarClientes();
 
     if (typeof BroadcastChannel !== "undefined") {

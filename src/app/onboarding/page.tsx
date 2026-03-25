@@ -5,135 +5,99 @@ import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import {
   CheckCircle2, Loader2, AlertCircle,
-  Zap, DollarSign, Bell, Users, Plus, X, Check,
+  Zap, DollarSign, Users, ArrowRight,
+  ChevronRight, Sparkles, TrendingUp,
 } from "lucide-react";
+import ErizonLogo from "@/components/ErizonLogo";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-interface Passo {
-  id: number;
-  titulo: string;
-  descricao: string;
-  icon: React.ElementType;
-}
+const CORES = ["#6366f1","#8b5cf6","#ec4899","#f59e0b","#10b981","#3b82f6","#ef4444","#14b8a6"];
 
-const CORES_CLIENTE = ["#6366f1","#8b5cf6","#ec4899","#f59e0b","#10b981","#3b82f6","#ef4444","#14b8a6"];
-
-const PASSOS: Passo[] = [
-  { id: 1, titulo: "Conectar Meta Ads",     descricao: "Token de acesso à API",              icon: Zap        },
-  { id: 2, titulo: "Configurar financeiro", descricao: "Ticket médio e taxa de conversão",   icon: DollarSign },
-  { id: 3, titulo: "Alertas Telegram",      descricao: "CPL limite e chat ID (opcional)",    icon: Bell       },
-  { id: 4, titulo: "Criar clientes",        descricao: "Organize suas contas por cliente",   icon: Users      },
-];
-
-function StepIndicator({ passo, atual }: { passo: Passo; atual: number }) {
-  const concluido = atual > passo.id;
-  const ativo     = atual === passo.id;
-  const Icon      = passo.icon;
+// ── Progress bar ───────────────────────────────────────────────────────────────
+function ProgressBar({ passo, total }: { passo: number; total: number }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all ${
-        concluido ? "bg-emerald-500/20 border-emerald-500/40" :
-        ativo     ? "bg-white/10 border-white/20" :
-                    "bg-white/[0.03] border-white/[0.06]"
-      }`}>
-        {concluido
-          ? <CheckCircle2 size={16} className="text-emerald-400" />
-          : <Icon size={16} className={ativo ? "text-white" : "text-white/20"} />
-        }
-      </div>
-      <div>
-        <p className={`text-[13px] font-semibold ${ativo ? "text-white" : concluido ? "text-white/50" : "text-white/20"}`}>
-          {passo.titulo}
-        </p>
-        <p className="text-[11px] text-white/25">{passo.descricao}</p>
-      </div>
+    <div className="flex items-center gap-1.5 mb-8">
+      {Array.from({ length: total }).map((_, i) => (
+        <div
+          key={i}
+          className={`h-1 flex-1 rounded-full transition-all duration-500 ${
+            i < passo ? "bg-purple-500" : i === passo ? "bg-purple-500/40" : "bg-white/[0.06]"
+          }`}
+        />
+      ))}
     </div>
   );
 }
 
-// ── Passo 1: Meta ─────────────────────────────────────────────
-function Passo1({ onNext }: { onNext: () => void }) {
-  const [token, setToken]         = useState("");
-  const [accountId, setAccountId] = useState("");
-  const [loading, setLoading]     = useState(false);
-  const [erro, setErro]           = useState("");
-  const [validado, setValidado]   = useState(false);
+// ── Passo 1: Boas-vindas ───────────────────────────────────────────────────────
+function Passo1({ onNext }: { onNext: (nomeCliente: string, cor: string) => void }) {
+  const [nome, setNome] = useState("");
+  const [cor, setCor]   = useState(CORES[0]);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
 
-  async function validarEAvancar() {
-    if (!token.trim()) {
-      setErro("Preencha o token de acesso.");
-      return;
-    }
-    setLoading(true);
+  async function avancar() {
+    if (!nome.trim()) { setErro("Coloca o nome do seu primeiro cliente."); return; }
+    setSalvando(true);
     setErro("");
     try {
-      const res = await fetch("/api/meta-validate", {
+      const res = await fetch("/api/clientes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: token.trim(), accountId: accountId.trim() || "act_0" }),
+        body: JSON.stringify({ nome: nome.trim(), cor }),
       });
-
-      const result = await res.json();
-
-      if (!res.ok || result.error) {
-        const code = result.error?.code;
-        if (code === 190)      setErro("Token inválido ou expirado. Gere um novo no Meta Business.");
-        else if (code === 100) setErro("Account ID inválido. Verifique o ID da conta de anúncios.");
-        else                   setErro(`Erro Meta: ${result.error?.message ?? "Resposta inválida"}`);
-        setLoading(false);
+      if (!res.ok) {
+        const json = await res.json();
+        setErro(json.error ?? "Erro ao criar cliente.");
+        setSalvando(false);
         return;
       }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setErro("Sessão expirada. Faça login novamente."); setLoading(false); return; }
-
-      await supabase.from("user_settings").upsert({
-        user_id:            user.id,
-        meta_access_token:  token.trim(),
-        meta_ad_account_id: accountId.trim() || null,
-      }, { onConflict: "user_id" });
-
-      setValidado(true);
-      setTimeout(onNext, 800);
+      onNext(nome.trim(), cor);
     } catch {
-      setErro("Erro ao validar. Verifique sua conexão.");
+      setErro("Erro de conexão.");
+      setSalvando(false);
     }
-    setLoading(false);
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div>
-        <p className="text-[11px] text-white/30 mb-1.5">Token de acesso Meta *</p>
-        <input
-          type="password"
-          placeholder="EAAxxxxxxxxxx..."
-          value={token}
-          onChange={e => setToken(e.target.value)}
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-[13px] text-white placeholder-white/20 focus:outline-none focus:border-white/20 transition-colors font-mono"
-        />
-        <p className="text-[10px] text-white/20 mt-1.5">
-          Meta Business → Configurações → Usuários do sistema → Gerar token
+        <h2 className="text-[22px] font-bold text-white mb-1">Bem-vindo ao Erizon</h2>
+        <p className="text-[14px] text-white/40 leading-relaxed">
+          Vamos começar pelo mais simples: qual é o nome do seu primeiro cliente?
         </p>
       </div>
-      <div>
-        <p className="text-[11px] text-white/30 mb-1.5">
-          Account ID principal <span className="text-white/15">(opcional — pode adicionar mais depois)</span>
-        </p>
+
+      <div className="space-y-3">
         <input
-          type="text"
-          placeholder="act_xxxxxxxxxx"
-          value={accountId}
-          onChange={e => setAccountId(e.target.value)}
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-[13px] text-white placeholder-white/20 focus:outline-none focus:border-white/20 transition-colors font-mono"
+          autoFocus
+          value={nome}
+          onChange={e => { setNome(e.target.value); setErro(""); }}
+          onKeyDown={e => e.key === "Enter" && avancar()}
+          placeholder="Ex: Clínica São Paulo, Loja do João..."
+          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-[14px] text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 focus:bg-white/[0.06] transition-all"
         />
-        <p className="text-[10px] text-white/20 mt-1.5">
-          Ads Manager → URL da página (act_123456). Se tiver múltiplas contas, configure depois em Clientes.
-        </p>
+
+        <div className="flex items-center gap-2">
+          <p className="text-[11px] text-white/25 mr-1">Cor:</p>
+          {CORES.map(c => (
+            <button
+              key={c}
+              onClick={() => setCor(c)}
+              className="w-5 h-5 rounded-md transition-all"
+              style={{
+                backgroundColor: c,
+                outline: cor === c ? `2px solid ${c}` : "none",
+                outlineOffset: "2px",
+                opacity: cor === c ? 1 : 0.45,
+              }}
+            />
+          ))}
+        </div>
       </div>
 
       {erro && (
@@ -143,44 +107,44 @@ function Passo1({ onNext }: { onNext: () => void }) {
         </div>
       )}
 
-      {validado && (
-        <div className="flex items-center gap-2 p-3 bg-emerald-500/[0.06] border border-emerald-500/15 rounded-xl">
-          <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
-          <p className="text-[12px] text-emerald-400">Token validado com sucesso!</p>
-        </div>
-      )}
-
       <button
-        onClick={validarEAvancar}
-        disabled={loading || validado}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.07] border border-white/[0.12] text-[13px] font-semibold text-white hover:bg-white/[0.10] transition-all disabled:opacity-50"
+        onClick={avancar}
+        disabled={salvando || !nome.trim()}
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-[14px] font-semibold text-white transition-all disabled:opacity-40"
       >
-        {loading  ? <><Loader2 size={14} className="animate-spin" /> Validando...</> :
-         validado ? <><CheckCircle2 size={14} className="text-emerald-400" /> Validado!</> :
-                    <><Zap size={14} /> Validar e conectar</>}
+        {salvando
+          ? <><Loader2 size={15} className="animate-spin" /> Salvando...</>
+          : <><ArrowRight size={15} /> Continuar</>}
       </button>
+
+      <p className="text-[11px] text-white/20 text-center">
+        Você pode adicionar mais clientes depois
+      </p>
     </div>
   );
 }
 
-// ── Passo 2: Financeiro ───────────────────────────────────────
+// ── Passo 2: Financeiro ────────────────────────────────────────────────────────
 function Passo2({ onNext }: { onNext: () => void }) {
-  const [ticket, setTicket]   = useState("");
-  const [conv, setConv]       = useState("4");
+  const [ticket, setTicket] = useState("");
+  const [conv, setConv]     = useState("4");
   const [loading, setLoading] = useState(false);
   const [erro, setErro]       = useState("");
+
+  const ticketNum = parseFloat(ticket) || 0;
+  const convNum   = parseFloat(conv) / 100 || 0.04;
+  const cplIdeal  = ticketNum > 0 ? Math.round(ticketNum * convNum * 0.3) : null;
 
   async function salvarEAvancar() {
     const t = parseFloat(ticket);
     const c = parseFloat(conv) / 100;
-    if (!t || t <= 0)     { setErro("Informe um ticket médio válido."); return; }
-    if (c <= 0 || c > 1)  { setErro("Taxa de conversão deve ser entre 0 e 100%."); return; }
+    if (!t || t <= 0)   { setErro("Informe um ticket médio válido."); return; }
+    if (c <= 0 || c > 1){ setErro("Taxa deve ser entre 0 e 100%."); return; }
 
     setLoading(true);
     setErro("");
-
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setErro("Sessão expirada. Faça login novamente."); setLoading(false); return; }
+    if (!user) { setErro("Sessão expirada."); setLoading(false); return; }
 
     const { error } = await supabase.from("user_configs").upsert({
       user_id:             user.id,
@@ -193,45 +157,52 @@ function Passo2({ onNext }: { onNext: () => void }) {
     onNext();
   }
 
-  const ticketNum = parseFloat(ticket) || 0;
-  const convNum   = parseFloat(conv) / 100 || 0.04;
-  const cplIdeal  = ticketNum > 0 ? (ticketNum * convNum * 0.3).toFixed(0) : "—";
-
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div>
-        <p className="text-[11px] text-white/30 mb-1.5">Ticket médio do cliente (R$)</p>
-        <input
-          type="number"
-          placeholder="450"
-          value={ticket}
-          onChange={e => setTicket(e.target.value)}
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-[13px] text-white placeholder-white/20 focus:outline-none focus:border-white/20 transition-colors"
-        />
-        <p className="text-[10px] text-white/20 mt-1.5">
-          Valor médio que um lead converte em receita
-        </p>
-      </div>
-      <div>
-        <p className="text-[11px] text-white/30 mb-1.5">Taxa de conversão de leads (%)</p>
-        <input
-          type="number"
-          placeholder="4"
-          value={conv}
-          onChange={e => setConv(e.target.value)}
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-[13px] text-white placeholder-white/20 focus:outline-none focus:border-white/20 transition-colors"
-        />
-        <p className="text-[10px] text-white/20 mt-1.5">
-          % dos leads que viram clientes pagantes
+        <h2 className="text-[22px] font-bold text-white mb-1">Financeiro do negócio</h2>
+        <p className="text-[14px] text-white/40 leading-relaxed">
+          Com esses dois números o Erizon calcula o CPL ideal e sinaliza campanhas em risco automaticamente.
         </p>
       </div>
 
-      {ticketNum > 0 && (
-        <div className="p-4 bg-emerald-500/[0.04] border border-emerald-500/10 rounded-xl">
-          <p className="text-[11px] text-white/30 mb-1">Com esses valores, seu CPL ideal é:</p>
-          <p className="text-[20px] font-black font-mono text-emerald-400">R$ {cplIdeal}</p>
-          <p className="text-[10px] text-white/20 mt-0.5">
-            Campanhas acima desse CPL serão sinalizadas como risco
+      <div className="space-y-4">
+        <div>
+          <label className="text-[11px] text-white/35 block mb-1.5">Ticket médio (R$)</label>
+          <input
+            autoFocus
+            type="number"
+            placeholder="450"
+            value={ticket}
+            onChange={e => { setTicket(e.target.value); setErro(""); }}
+            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-[14px] text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 focus:bg-white/[0.06] transition-all"
+          />
+          <p className="text-[10px] text-white/20 mt-1">Valor médio que um lead converte em receita</p>
+        </div>
+
+        <div>
+          <label className="text-[11px] text-white/35 block mb-1.5">Taxa de conversão de leads (%)</label>
+          <input
+            type="number"
+            placeholder="4"
+            value={conv}
+            onChange={e => { setConv(e.target.value); setErro(""); }}
+            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-[14px] text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 focus:bg-white/[0.06] transition-all"
+          />
+          <p className="text-[10px] text-white/20 mt-1">% dos leads que viram clientes pagantes</p>
+        </div>
+      </div>
+
+      {/* CPL ideal — momento WOW */}
+      {cplIdeal !== null && (
+        <div className="p-4 bg-emerald-500/[0.05] border border-emerald-500/15 rounded-2xl">
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingUp size={13} className="text-emerald-400" />
+            <p className="text-[11px] text-emerald-400/70 font-medium uppercase tracking-wider">CPL ideal calculado</p>
+          </div>
+          <p className="text-[32px] font-black font-mono text-emerald-400">R$ {cplIdeal}</p>
+          <p className="text-[11px] text-white/25 mt-1">
+            Campanhas acima de R$ {cplIdeal} serão sinalizadas como risco pelo Erizon
           </p>
         </div>
       )}
@@ -246,108 +217,113 @@ function Passo2({ onNext }: { onNext: () => void }) {
       <button
         onClick={salvarEAvancar}
         disabled={loading}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.07] border border-white/[0.12] text-[13px] font-semibold text-white hover:bg-white/[0.10] transition-all disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-[14px] font-semibold text-white transition-all disabled:opacity-40"
       >
         {loading
-          ? <><Loader2 size={14} className="animate-spin" /> Salvando...</>
-          : <><DollarSign size={14} /> Salvar e continuar</>}
+          ? <><Loader2 size={15} className="animate-spin" /> Salvando...</>
+          : <><ArrowRight size={15} /> Continuar</>}
       </button>
     </div>
   );
 }
 
-// ── Passo 3: Telegram ─────────────────────────────────────────
-function Passo3({ onConcluir }: { onConcluir: () => void }) {
-  const [chatId, setChatId]       = useState("");
-  const [limiteCpl, setLimiteCpl] = useState("40");
-  const [loading, setLoading]     = useState(false);
-  const [testando, setTestando]   = useState(false);
-  const [testOk, setTestOk]       = useState(false);
-  const [erro, setErro]           = useState("");
+// ── Passo 3: Meta Ads (pode pular) ────────────────────────────────────────────
+function Passo3({ onNext, onPular }: { onNext: () => void; onPular: () => void }) {
+  const [token, setToken]       = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [validado, setValidado] = useState(false);
+  const [erro, setErro]         = useState("");
 
-  async function testarTelegram() {
-    if (!chatId.trim()) return;
-    setTestando(true);
-    setErro("");
-    try {
-      const res = await fetch("/api/telegram", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          campanha: "Teste Erizon",
-          sinal:    "Configuração inicial",
-          msg:      "✅ Telegram conectado com sucesso! Você receberá alertas aqui.",
-          chatId:   chatId.trim(),
-        }),
-      });
-      if (res.ok) {
-        setTestOk(true);
-      } else {
-        setErro("Não foi possível enviar mensagem. Verifique o Chat ID.");
-      }
-    } catch {
-      setErro("Erro de conexão ao testar Telegram.");
-    }
-    setTestando(false);
-  }
-
-  async function concluirOnboarding() {
+  async function conectar() {
+    if (!token.trim()) { setErro("Cole o token de acesso."); return; }
     setLoading(true);
     setErro("");
+    try {
+      const res = await fetch("/api/meta-validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: token.trim(), accountId: accountId.trim() || "act_0" }),
+      });
+      const result = await res.json();
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setErro("Sessão expirada. Faça login novamente."); setLoading(false); return; }
+      if (!res.ok || result.error) {
+        const code = result.error?.code;
+        if (code === 190)      setErro("Token inválido ou expirado. Gere um novo no Meta Business.");
+        else if (code === 100) setErro("Account ID inválido. Confira o ID da conta de anúncios.");
+        else                   setErro(`Erro: ${result.error?.message ?? "Resposta inválida"}`);
+        setLoading(false);
+        return;
+      }
 
-    const { error } = await supabase.from("user_configs").upsert({
-      user_id:             user.id,
-      limite_cpl:          parseFloat(limiteCpl) || 40,
-      telegram_chat_id:    chatId.trim() || null,
-      onboarding_completo: true,
-    }, { onConflict: "user_id" });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setErro("Sessão expirada."); setLoading(false); return; }
 
-    if (error) { setErro("Erro ao finalizar: " + error.message); setLoading(false); return; }
+      await supabase.from("user_settings").upsert({
+        user_id:            user.id,
+        meta_access_token:  token.trim(),
+        meta_ad_account_id: accountId.trim() || null,
+      }, { onConflict: "user_id" });
+
+      setValidado(true);
+      setTimeout(onNext, 900);
+    } catch {
+      setErro("Erro de conexão.");
+    }
     setLoading(false);
-    onConcluir();
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div>
-        <p className="text-[11px] text-white/30 mb-1.5">CPL limite para alertas (R$)</p>
-        <input
-          type="number"
-          placeholder="40"
-          value={limiteCpl}
-          onChange={e => setLimiteCpl(e.target.value)}
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-[13px] text-white placeholder-white/20 focus:outline-none focus:border-white/20 transition-colors"
-        />
-        <p className="text-[10px] text-white/20 mt-1.5">
-          Você será alertado quando o CPL ultrapassar esse valor
+        <h2 className="text-[22px] font-bold text-white mb-1">Conectar Meta Ads</h2>
+        <p className="text-[14px] text-white/40 leading-relaxed">
+          Isso permite o Erizon ler suas campanhas e calcular os scores em tempo real.
         </p>
       </div>
-      <div>
-        <p className="text-[11px] text-white/30 mb-1.5">
-          Chat ID do Telegram <span className="text-white/15">(opcional)</span>
-        </p>
-        <div className="flex gap-2">
+
+      {/* Guia rápido */}
+      <div className="p-4 bg-white/[0.03] border border-white/[0.06] rounded-2xl space-y-3">
+        <p className="text-[11px] text-white/40 font-semibold uppercase tracking-wider">Como gerar o token</p>
+        {[
+          "Acesse business.facebook.com → Configurações",
+          "Usuários do sistema → Adicionar usuário administrador",
+          "Gerar token → selecionar a conta de anúncios",
+          "Copie o token e cole abaixo",
+        ].map((s, i) => (
+          <div key={i} className="flex items-start gap-3">
+            <div className="w-5 h-5 rounded-full bg-purple-500/15 border border-purple-500/25 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-[10px] font-bold text-purple-400">{i + 1}</span>
+            </div>
+            <p className="text-[12px] text-white/40">{s}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <label className="text-[11px] text-white/35 block mb-1.5">Token de acesso *</label>
+          <input
+            type="password"
+            placeholder="EAAxxxxxxxxxx..."
+            value={token}
+            onChange={e => { setToken(e.target.value); setErro(""); }}
+            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-[13px] text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 focus:bg-white/[0.06] transition-all font-mono"
+          />
+        </div>
+        <div>
+          <label className="text-[11px] text-white/35 block mb-1.5">
+            Account ID <span className="text-white/15">(opcional)</span>
+          </label>
           <input
             type="text"
-            placeholder="-100xxxxxxxxx"
-            value={chatId}
-            onChange={e => { setChatId(e.target.value); setTestOk(false); setErro(""); }}
-            className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-[13px] text-white placeholder-white/20 focus:outline-none focus:border-white/20 transition-colors font-mono"
+            placeholder="act_xxxxxxxxxx"
+            value={accountId}
+            onChange={e => setAccountId(e.target.value)}
+            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-[13px] text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 focus:bg-white/[0.06] transition-all font-mono"
           />
-          <button
-            onClick={testarTelegram}
-            disabled={!chatId.trim() || testando}
-            className="px-4 py-3 rounded-xl border border-white/[0.08] text-[12px] font-medium text-white/50 hover:text-white hover:border-white/20 transition-all disabled:opacity-30"
-          >
-            {testando ? <Loader2 size={13} className="animate-spin" /> : testOk ? "✓ OK" : "Testar"}
-          </button>
+          <p className="text-[10px] text-white/20 mt-1">Ads Manager → URL da página (act_123456)</p>
         </div>
-        <p className="text-[10px] text-white/20 mt-1.5">
-          Use @userinfobot no Telegram para descobrir seu Chat ID
-        </p>
       </div>
 
       {erro && (
@@ -357,153 +333,137 @@ function Passo3({ onConcluir }: { onConcluir: () => void }) {
         </div>
       )}
 
-      {testOk && (
+      {validado && (
         <div className="flex items-center gap-2 p-3 bg-emerald-500/[0.06] border border-emerald-500/15 rounded-xl">
           <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
-          <p className="text-[12px] text-emerald-400">Mensagem de teste enviada com sucesso!</p>
+          <p className="text-[12px] text-emerald-400">Meta Ads conectado! Carregando seu cockpit...</p>
         </div>
       )}
 
       <button
-        onClick={concluirOnboarding}
-        disabled={loading}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-[13px] font-semibold text-emerald-400 hover:bg-emerald-500/15 transition-all disabled:opacity-50"
+        onClick={conectar}
+        disabled={loading || validado}
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-[14px] font-semibold text-white transition-all disabled:opacity-40"
       >
-        {loading
-          ? <><Loader2 size={14} className="animate-spin" /> Finalizando...</>
-          : <><CheckCircle2 size={14} /> Concluir configuração</>}
+        {loading   ? <><Loader2 size={15} className="animate-spin" /> Validando...</> :
+         validado  ? <><CheckCircle2 size={15} /> Conectado!</> :
+                     <><Zap size={15} /> Conectar Meta Ads</>}
       </button>
 
       <button
-        onClick={concluirOnboarding}
-        disabled={loading}
-        className="w-full text-[12px] text-white/20 hover:text-white/40 transition-colors py-1"
+        onClick={onPular}
+        className="w-full text-[12px] text-white/25 hover:text-white/50 transition-colors py-1 text-center"
       >
-        Pular por agora
+        Fazer isso depois → entrar no cockpit agora
       </button>
     </div>
   );
 }
 
-// ── Passo 4: Clientes ─────────────────────────────────────────
-function Passo4({ onConcluir }: { onConcluir: () => void }) {
-  const [clientes, setClientes] = useState<{ nome: string; cor: string }[]>([]);
-  const [nome, setNome]         = useState("");
-  const [cor, setCor]           = useState(CORES_CLIENTE[0]);
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErro]         = useState("");
-
-  async function adicionarCliente() {
-    if (!nome.trim()) { setErro("Nome obrigatório."); return; }
-    setSalvando(true); setErro("");
-    const res = await fetch("/api/clientes", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome: nome.trim(), cor }),
-    });
-    const json = await res.json();
-    if (!res.ok) { setErro(json.error ?? "Erro ao criar."); setSalvando(false); return; }
-    setClientes(prev => [...prev, { nome: nome.trim(), cor }]);
-    setNome(""); setCor(CORES_CLIENTE[(clientes.length + 1) % CORES_CLIENTE.length]);
-    setSalvando(false);
-  }
-
+// ── Passo 4: Ativando ─────────────────────────────────────────────────────────
+function Passo4({ nomeCliente }: { nomeCliente: string }) {
   return (
-    <div className="space-y-5">
-      <div className="p-4 bg-blue-500/[0.05] border border-blue-500/15 rounded-xl">
-        <p className="text-[12px] text-blue-300/70 leading-relaxed">
-          Crie um cliente para cada conta que você gerencia. Você poderá vincular as campanhas em <strong className="text-blue-300">/clientes</strong> depois do onboarding.
+    <div className="text-center space-y-6 py-4">
+      <div className="relative mx-auto w-16 h-16">
+        <div className="absolute inset-0 rounded-2xl bg-purple-500/10 border border-purple-500/20 animate-pulse" />
+        <div className="relative w-full h-full rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center">
+          <Sparkles size={24} className="text-purple-400" />
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-[22px] font-bold text-white mb-2">Tudo pronto!</h2>
+        <p className="text-[14px] text-white/40 leading-relaxed">
+          {nomeCliente ? `${nomeCliente} já está no seu cockpit.` : "Seu cockpit está pronto."}<br />
+          Abrindo o Erizon...
         </p>
       </div>
 
-      {clientes.length > 0 && (
-        <div className="space-y-1.5">
-          {clientes.map((c, i) => (
-            <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-white/[0.05] bg-white/[0.02]">
-              <div className="w-4 h-4 rounded-lg shrink-0" style={{ backgroundColor: c.cor }} />
-              <span className="text-[13px] text-white/80">{c.nome}</span>
-              <Check size={12} className="text-emerald-400 ml-auto" />
+      <div className="flex flex-col gap-2 text-left p-4 bg-white/[0.03] border border-white/[0.05] rounded-2xl">
+        {[
+          { icon: Zap, texto: "Score de campanha em tempo real", ok: true },
+          { icon: TrendingUp, texto: "CPL ideal calculado", ok: true },
+          { icon: Users, texto: `Primeiro cliente criado`, ok: true },
+        ].map(({ icon: Icon, texto, ok }) => (
+          <div key={texto} className="flex items-center gap-3">
+            <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${ok ? "bg-emerald-500/15" : "bg-white/[0.04]"}`}>
+              <Icon size={12} className={ok ? "text-emerald-400" : "text-white/20"} />
             </div>
-          ))}
-        </div>
-      )}
-
-      <div className="space-y-3">
-        <input
-          value={nome}
-          onChange={e => { setNome(e.target.value); setErro(""); }}
-          placeholder="Nome do cliente (ex: Clínica São Paulo)"
-          onKeyDown={e => e.key === "Enter" && adicionarCliente()}
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-[13px] text-white placeholder-white/20 focus:outline-none focus:border-white/20 transition-colors"
-        />
-        <div className="flex items-center gap-2">
-          {CORES_CLIENTE.map(c => (
-            <button key={c} onClick={() => setCor(c)} className="w-6 h-6 rounded-lg transition-all"
-              style={{ backgroundColor: c, outline: cor === c ? `2px solid ${c}` : "none", outlineOffset: "2px", opacity: cor === c ? 1 : 0.5 }} />
-          ))}
-        </div>
-        {erro && <p className="text-[12px] text-red-400">{erro}</p>}
-        <button onClick={adicionarCliente} disabled={salvando || !nome.trim()}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/[0.10] bg-white/[0.04] text-[13px] text-white/60 hover:text-white hover:bg-white/[0.07] transition-all disabled:opacity-30">
-          {salvando ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-          Adicionar cliente
-        </button>
+            <p className={`text-[12px] ${ok ? "text-white/60" : "text-white/20"}`}>{texto}</p>
+            {ok && <CheckCircle2 size={12} className="text-emerald-400 ml-auto" />}
+          </div>
+        ))}
       </div>
-
-      <button onClick={onConcluir}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-[13px] font-semibold text-emerald-400 hover:bg-emerald-500/15 transition-all">
-        <CheckCircle2 size={14} />
-        {clientes.length > 0 ? `Concluir com ${clientes.length} cliente${clientes.length > 1 ? "s" : ""}` : "Pular por agora"}
-      </button>
     </div>
   );
 }
 
-// ── Page principal ────────────────────────────────────────────
+// ── Page principal ─────────────────────────────────────────────────────────────
 export default function OnboardingPage() {
-  const [passoAtual, setPassoAtual] = useState(1);
+  const [passo, setPasso]           = useState(1);
+  const [nomeCliente, setNomeCliente] = useState("");
   const router = useRouter();
 
-  function avancar()  { setPassoAtual(p => Math.min(p + 1, 4)); }
-  function concluir() { router.push("/pulse"); }
+  const TOTAL = 3; // 3 barras de progresso (passo 4 é tela de conclusão)
+
+  function irPara(n: number) { setPasso(n); }
+
+  async function concluir() {
+    // Marca onboarding como completo
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from("user_configs").upsert({
+        user_id:             user.id,
+        onboarding_completo: true,
+      }, { onConflict: "user_id" });
+    }
+    setPasso(4);
+    setTimeout(() => router.push("/pulse"), 2200);
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0a0a0a] via-[#0b0b0d] to-[#0a0a0a] text-white flex items-center justify-center p-5">
-      <div className="w-full max-w-[480px]">
+    <div className="min-h-screen bg-gradient-to-b from-[#09090b] via-[#0b0b0e] to-[#09090b] text-white flex items-center justify-center p-5">
+      <div className="w-full max-w-[460px]">
 
-        <div className="text-center mb-10">
-          <div className="w-12 h-12 rounded-2xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center mx-auto mb-4">
-            <Zap size={20} className="text-white/60" />
-          </div>
-          <h1 className="text-[22px] font-bold text-white mb-1">Configurar Erizon</h1>
-          <p className="text-[13px] text-white/30">3 passos para ativar o copiloto de decisão</p>
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-10">
+          <ErizonLogo size={32} />
+          <span className="text-[15px] font-semibold text-white/60">Erizon</span>
+          {passo <= TOTAL && (
+            <span className="ml-auto text-[11px] text-white/20">
+              {passo}/{TOTAL}
+            </span>
+          )}
         </div>
 
-        <div className="flex flex-col gap-4 mb-8 p-5 bg-white/[0.02] border border-white/[0.05] rounded-2xl">
-          {PASSOS.map((p, i) => (
-            <div key={p.id}>
-              <StepIndicator passo={p} atual={passoAtual} />
-              {i < PASSOS.length - 1 && (
-                <div className="w-px h-4 bg-white/[0.06] ml-5 mt-2" />
-              )}
-            </div>
-          ))}
+        {/* Progress */}
+        {passo <= TOTAL && <ProgressBar passo={passo - 1} total={TOTAL} />}
+
+        {/* Conteúdo */}
+        <div className="bg-[#111114] border border-white/[0.07] rounded-[24px] p-7">
+          {passo === 1 && (
+            <Passo1
+              onNext={(nome, cor) => {
+                setNomeCliente(nome);
+                void cor; // cor já foi usada internamente
+                irPara(2);
+              }}
+            />
+          )}
+          {passo === 2 && <Passo2 onNext={() => irPara(3)} />}
+          {passo === 3 && <Passo3 onNext={concluir} onPular={concluir} />}
+          {passo === 4 && <Passo4 nomeCliente={nomeCliente} />}
         </div>
 
-        <div className="bg-[#111113] border border-white/[0.07] rounded-[24px] p-6">
-          <div className="mb-6">
-            <p className="text-[10px] text-white/25 uppercase tracking-widest mb-1">
-              Passo {passoAtual} de 4
-            </p>
-            <h2 className="text-[17px] font-bold text-white">
-              {PASSOS[passoAtual - 1].titulo}
-            </h2>
-          </div>
-
-          {passoAtual === 1 && <Passo1 onNext={avancar} />}
-          {passoAtual === 2 && <Passo2 onNext={avancar} />}
-          {passoAtual === 3 && <Passo3 onConcluir={avancar} />}
-          {passoAtual === 4 && <Passo4 onConcluir={concluir} />}
-        </div>
+        {/* Voltar */}
+        {passo > 1 && passo <= TOTAL && (
+          <button
+            onClick={() => setPasso(p => p - 1)}
+            className="mt-4 w-full text-[11px] text-white/15 hover:text-white/35 transition-colors py-1 text-center"
+          >
+            ← Voltar
+          </button>
+        )}
 
       </div>
     </div>

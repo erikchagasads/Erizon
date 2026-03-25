@@ -46,7 +46,7 @@ function gerarInsights(analise: AnaliseCompleta, cplMedio: number, totalInvest: 
   return insights.slice(0, 4);
 }
 
-function InsightCard({ insight }: { insight: Insight }) {
+function InsightCard({ insight }: { insight: Insight; key?: string | number }) {
   const s = {
     risco:        { border: "border-red-500/[0.12]",     bg: "bg-red-500/[0.03]",     text: "text-red-400/80"     },
     oportunidade: { border: "border-emerald-500/[0.12]", bg: "bg-emerald-500/[0.03]", text: "text-emerald-400/80" },

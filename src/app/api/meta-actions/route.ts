@@ -32,10 +32,15 @@ export async function POST(req: Request) {
     // ── Busca token do usuário autenticado ────────────────────────────────────
     const cookieStore = await cookies();
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get: (n) => cookieStore.get(n)?.value } }
-    );
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(values) { values.forEach(({ name, value, options }) => { try { cookieStore.set(name, value, options); } catch {} }); },
+      },
+    }
+  );
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {

@@ -1,19 +1,37 @@
+import { AutopilotService } from "@/services/autopilot-service";
+import { IREService } from "@/services/ire-service";
+import { createServerSupabase } from "@/lib/supabase/server";
+import { logEvent, logError } from "@/lib/observability/logger";
 
-import { OperatingSystemService } from "@/services/operating-system-service";
+export async function runAutopilotJob(): Promise<void> {
+  const db = createServerSupabase();
+  const { data: workspaces, error } = await db.from("workspaces").select("id");
 
-export async function runAutopilotWorker(workspaceId = "ws-erizon") {
-  const service = new OperatingSystemService();
-  const evaluations = await service.getAutopilotGovernanceSummary(workspaceId);
+  if (error) {
+    logError("autopilot_job_fetch_workspaces_failed", error);
+    return;
+  }
 
-  const valid = evaluations.filter((item): item is NonNullable<typeof item> => item !== null);
+  logEvent("autopilot_job_started", { workspaceCount: workspaces?.length ?? 0 });
+  const autopilotService = new AutopilotService();
+  const ireService       = new IREService();
 
-  return {
-    worker: "autopilot-runner",
-    status: "ok",
-    total: valid.length,
-    executed: valid.filter((item) => item.mode === "executed").length,
-    approvalRequired: valid.filter((item) => item.mode === "approval_required").length,
-    simulated: valid.filter((item) => item.mode === "simulation").length,
-    blocked: valid.filter((item) => item.mode === "blocked").length,
-  };
+  for (const ws of workspaces ?? []) {
+    try {
+      await autopilotService.run(ws.id);
+    } catch (err) {
+      logError("autopilot_job_workspace_failed", err, { workspaceId: ws.id });
+    }
+
+    // Computa o I.R.E. logo após o autopilot — usa os snapshots recém-processados
+    try {
+      await ireService.compute(ws.id);
+    } catch (err) {
+      logError("ire_compute_after_autopilot_failed", err, { workspaceId: ws.id });
+    }
+  }
+
+  logEvent("autopilot_job_finished", {});
 }
+
+export const runAutopilotWorker = runAutopilotJob;

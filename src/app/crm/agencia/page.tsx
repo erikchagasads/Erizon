@@ -80,6 +80,7 @@ export default function SalaDeControle() {
     setLoading(false);
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(() => { carregar(); }, []);
 
   async function salvarCorretor() {

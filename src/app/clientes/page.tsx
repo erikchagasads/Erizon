@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
+import { SkeletonPage } from "@/components/ops/AppShell";
+import { useSessionGuard } from "@/app/hooks/useSessionGuard";
 import {
   Plus, X, Loader2, Check, AlertTriangle, Users,
-  Link, Unlink, RefreshCw, Pencil, Trash2, Zap,
+  Link, Unlink, RefreshCw, Pencil, Trash2,
   BarChart3, Target, DollarSign, CheckSquare, Square,
   Search, Upload, Download, FileSpreadsheet, CheckCircle2, XCircle,
+  ChevronDown, ChevronUp, Copy, ExternalLink,
 } from "lucide-react";
 
 interface Cliente {
@@ -14,7 +17,10 @@ interface Cliente {
   nome: string;
   nome_cliente?: string;
   cor: string;
+  crm_token?: string | null;
   meta_account_id?: string;
+  ig_user_id?: string | null;
+  campanha_keywords?: string | null;
   ticket_medio?: number;
   total_campanhas?: number;
   campanhas_ativas?: number;
@@ -22,6 +28,19 @@ interface Cliente {
   gasto_total?: number;
   total_leads?: number;
   cpl_medio?: number;
+  total_alcance?: number;
+  total_impressoes?: number;
+  whatsapp?: string | null;
+  whatsapp_mensagem?: string | null;
+}
+
+interface CampanhaAtiva {
+  id: string;
+  nome_campanha: string;
+  status: string;
+  gasto_total: number;
+  contatos: number;
+  cpl: number;
 }
 
 interface CampanhaItem {
@@ -42,10 +61,16 @@ const CORES = ["#6366f1","#8b5cf6","#ec4899","#f59e0b","#10b981","#3b82f6","#ef4
 function ModalCliente({ cliente, onClose, onSave }: {
   cliente?: Cliente | null; onClose: () => void; onSave: () => void;
 }) {
+  useSessionGuard();
+
   const [nome, setNome]         = useState(cliente?.nome ?? "");
   const [metaId, setMetaId]     = useState(cliente?.meta_account_id ?? "");
+  const [igUserId, setIgUserId] = useState(cliente?.ig_user_id ?? "");
+  const [keywords, setKeywords] = useState(cliente?.campanha_keywords ?? "");
   const [ticket, setTicket]     = useState(cliente?.ticket_medio ? String(cliente.ticket_medio) : "");
   const [cor, setCor]           = useState(cliente?.cor ?? CORES[0]);
+  const [whatsapp, setWhatsapp] = useState(cliente?.whatsapp ?? "");
+  const [waMensagem, setWaMensagem] = useState(cliente?.whatsapp_mensagem ?? "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro]         = useState<string | null>(null);
 
@@ -53,16 +78,18 @@ function ModalCliente({ cliente, onClose, onSave }: {
     if (!nome.trim()) { setErro("Nome é obrigatório."); return; }
     setSalvando(true); setErro(null);
     try {
-      const body = { nome: nome.trim(), meta_account_id: metaId.trim() || null, ticket_medio: ticket ? parseFloat(ticket) : null, cor };
+      const body = { nome: nome.trim(), meta_account_id: metaId.trim() || null, ig_user_id: igUserId.trim() || null, campanha_keywords: keywords.trim() || null, ticket_medio: ticket ? parseFloat(ticket) : null, cor, whatsapp: whatsapp.trim() || null, whatsapp_mensagem: waMensagem.trim() || null };
       const res = cliente
         ? await fetch(`/api/clientes?id=${cliente.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         : await fetch("/api/clientes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Erro ao salvar");
       onSave(); onClose();
-    } catch (e: any) { setErro(e.message); }
+    } catch (e: unknown) { setErro(e instanceof Error ? e.message : "Erro ao salvar"); }
     finally { setSalvando(false); }
   }
+
+  if (salvando) return <SkeletonPage cols={3} />;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -87,11 +114,45 @@ function ModalCliente({ cliente, onClose, onSave }: {
           </div>
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
+              Instagram Business ID <span className="text-white/20 normal-case">(Insights orgânicos)</span>
+            </label>
+            <input value={igUserId} onChange={e => setIgUserId(e.target.value)} placeholder="Ex: 17841400000000000"
+              className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-pink-500/40 transition-all font-mono" />
+            <p className="text-[10px] text-white/25 mt-1">Meta Business Suite → Configurações → Contas do Instagram → ID da conta</p>
+          </div>
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
+              Keywords de campanha <span className="text-white/20 normal-case">(vínculo automático)</span>
+            </label>
+            <input value={keywords} onChange={e => setKeywords(e.target.value)} placeholder="Ex: clinica, saopaulo, estetica"
+              className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40 transition-all" />
+            <p className="text-[10px] text-white/25 mt-1">Palavras separadas por vírgula. Campanhas com esses termos no nome serão vinculadas automaticamente no próximo sync.</p>
+          </div>
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
               Ticket médio (R$) <span className="text-white/20 normal-case">(cálculo de ROAS)</span>
             </label>
             <input value={ticket} onChange={e => setTicket(e.target.value)} placeholder="Ex: 297" type="number"
               className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 transition-all" />
           </div>
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
+              WhatsApp do cliente <span className="text-white/20 normal-case">(redirect automático do lead)</span>
+            </label>
+            <input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="Ex: 11999990000"
+              className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40 transition-all font-mono" />
+            <p className="text-[10px] text-white/25 mt-1">Só números, com DDD. Ex: 11999990000. O lead será redirecionado para este número após preencher o formulário.</p>
+          </div>
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
+              Mensagem WhatsApp <span className="text-white/20 normal-case">(opcional)</span>
+            </label>
+            <input value={waMensagem} onChange={e => setWaMensagem(e.target.value)}
+              placeholder="Ex: Olá {nome}! Vi seu interesse em {campanha}."
+              className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40 transition-all" />
+            <p className="text-[10px] text-white/25 mt-1">Variáveis disponíveis: {"{nome}"}, {"{campanha}"}, {"{telefone}"}. Deixe vazio para usar a mensagem padrão.</p>
+          </div>
+
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-2">Cor</label>
             <div className="flex items-center gap-2">
@@ -146,6 +207,7 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
     setLoadingV(true);
     const res = await fetch(`/api/relatorio-pdf?cliente_id=${cliente.id}`);
     const json = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const camps: CampanhaItem[] = (json.relatorio?.campanhas ?? []).map((c: any) => ({
       id: String(c.id ?? ""), nome: String(c.nome ?? "—"),
       status: String(c.status ?? ""), gasto: Number(c.gasto ?? 0),
@@ -162,6 +224,7 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
       : `/api/relatorio-pdf`;
     const res  = await fetch(url);
     const json = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const camps: CampanhaItem[] = (json.relatorio?.campanhas ?? []).map((c: any) => ({
       id: String(c.id ?? ""), nome: String(c.nome ?? "—"),
       status: String(c.status ?? ""), gasto: Number(c.gasto ?? 0),
@@ -171,6 +234,7 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
     setLoadingT(false);
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(() => { carregarVinculadas(); carregarTodas(); }, []);
 
   // debounce busca
@@ -183,7 +247,7 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
   }, [buscaInput]);
 
   function toggleSel(id: string) {
-    setSel(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSel(prev => { const n = new Set(prev); if (n.has(id)) { n.delete(id); } else { n.add(id); } return n; });
   }
 
   function toggleTodas() {
@@ -524,7 +588,7 @@ function ModalImportCSV({ onClose, onSave }: { onClose: () => void; onSave: () =
               <p className="text-[11px] text-white/35 leading-relaxed">
                 Preencha o arquivo com seus clientes. Colunas: <span className="font-mono text-white/50">nome, meta_account_id, ticket_medio, cor</span>
               </p>
-              <p className="text-[10px] text-white/25 mt-1">Apenas "nome" é obrigatório. meta_account_id e ticket_medio são opcionais.</p>
+              <p className="text-[10px] text-white/25 mt-1">Apenas &quot;nome&quot; é obrigatório. meta_account_id e ticket_medio são opcionais.</p>
             </div>
             <button onClick={downloadTemplate}
               className="flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 text-[12px] font-semibold hover:bg-emerald-500/15 transition-all shrink-0">
@@ -625,12 +689,40 @@ function ModalImportCSV({ onClose, onSave }: { onClose: () => void; onSave: () =
 
 // ─── Card do Cliente ──────────────────────────────────────────────────────────
 function ClienteCard({ c, onEdit, onDelete, onVincular }: {
-  c: Cliente; onEdit: () => void; onDelete: () => void; onVincular: () => void;
+  c: Cliente; onEdit: () => unknown; onDelete: () => unknown; onVincular: () => unknown;
 }) {
+  const [campanhas, setCampanhas] = useState<CampanhaAtiva[]>([]);
+  const [loadingCamps, setLoadingCamps] = useState(true);
+  const [expandido, setExpandido] = useState(false);
+  const [copiado, setCopiado] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/clientes/campanhas?cliente_id=${c.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (json?.campanhas) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          setCampanhas(json.campanhas.map((camp: any) => ({
+            id: camp.id,
+            nome_campanha: camp.nome_campanha,
+            status: camp.status ?? "ATIVO",
+            gasto_total: camp.gasto_total ?? 0,
+            contatos: camp.total_leads ?? 0,
+            cpl: camp.cpl ?? 0,
+          })));
+        }
+      })
+      .finally(() => setLoadingCamps(false));
+  }, [c.id]);
+
+  const campanhasVisiveis = expandido ? campanhas : campanhas.slice(0, 3);
+
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden group">
       <div className="h-0.5" style={{ backgroundColor: c.cor }} />
       <div className="p-5">
+
+        {/* Header do cliente */}
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0"
@@ -650,12 +742,12 @@ function ClienteCard({ c, onEdit, onDelete, onVincular }: {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 mb-4">
+        {/* Métricas resumo */}
+        <div className="grid grid-cols-3 gap-2 mb-4">
           {[
-            { icon: BarChart3, label: "Campanhas", value: `${c.campanhas_ativas ?? 0} ativas` },
-            { icon: DollarSign, label: "Investimento", value: fmtBRL0(c.gasto_total ?? 0) },
+            { icon: BarChart3, label: "Ativas", value: String(c.campanhas_ativas ?? 0) },
+            { icon: DollarSign, label: "Investido", value: fmtBRL0(c.gasto_total ?? 0) },
             { icon: Target, label: "Leads", value: String(c.total_leads ?? 0) },
-            { icon: Zap, label: "CPL médio", value: c.cpl_medio && c.cpl_medio > 0 ? fmtBRL0(c.cpl_medio) : "—" },
           ].map(m => (
             <div key={m.label} className="rounded-xl border border-white/[0.04] bg-white/[0.01] px-3 py-2">
               <div className="flex items-center gap-1.5 mb-0.5">
@@ -667,10 +759,105 @@ function ClienteCard({ c, onEdit, onDelete, onVincular }: {
           ))}
         </div>
 
+        {/* Lista de campanhas ativas */}
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">Campanhas ativas</p>
+            {loadingCamps && <Loader2 size={10} className="animate-spin text-white/20" />}
+          </div>
+
+          {!loadingCamps && campanhas.length === 0 && (
+            <div className="rounded-xl border border-white/[0.04] bg-white/[0.01] px-3 py-3 text-center space-y-1.5">
+              <p className="text-[11px] text-white/20">Nenhuma campanha ativa vinculada</p>
+              <p className="text-[10px] text-white/15">Use &quot;Gerenciar&quot; para vincular manualmente</p>
+              <a
+                href={`/api/clientes/campanhas?cliente_id=${c.id}&debug=1`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block text-[9px] text-purple-400/50 hover:text-purple-400 underline mt-1"
+              >
+                ver diagnóstico
+              </a>
+            </div>
+          )}
+
+          {campanhasVisiveis.map((camp, i) => {
+            const cpl = camp.cpl ?? (camp.contatos > 0 ? camp.gasto_total / camp.contatos : 0);
+            const cplBom = cpl < 30;
+            return (
+              <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-white/[0.04] bg-white/[0.01] mb-1.5 last:mb-0">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] text-white/80 truncate font-medium">{camp.nome_campanha}</p>
+                  <p className="text-[10px] text-white/30 mt-0.5">
+                    {fmtBRL0(camp.gasto_total)} · {camp.contatos} leads
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className={`text-[11px] font-semibold ${cplBom ? "text-emerald-400" : "text-amber-400"}`}>
+                    {camp.contatos > 0 ? `CPL ${fmtBRL0(cpl)}` : "—"}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+
+          {campanhas.length > 3 && (
+            <button onClick={() => setExpandido(e => !e)}
+              className="w-full flex items-center justify-center gap-1.5 mt-1.5 py-1.5 text-[11px] text-white/30 hover:text-white/60 transition-colors">
+              {expandido
+                ? <><ChevronUp size={11} /> Mostrar menos</>
+                : <><ChevronDown size={11} /> Ver mais {campanhas.length - 3} campanha{campanhas.length - 3 > 1 ? "s" : ""}</>}
+            </button>
+          )}
+        </div>
+
         {(c.campanhas_criticas ?? 0) > 0 && (
           <div className="flex items-center gap-2 mb-3 rounded-lg border border-amber-500/15 bg-amber-500/5 px-3 py-1.5">
             <AlertTriangle size={10} className="text-amber-400 shrink-0" />
             <p className="text-[11px] text-amber-400">{c.campanhas_criticas} crítica{(c.campanhas_criticas ?? 0) > 1 ? "s" : ""}</p>
+          </div>
+        )}
+
+        {/* Links rápidos CRM */}
+        {c.crm_token && (
+          <div className="mb-2 space-y-1.5">
+            {[
+              {
+                label: "CRM do cliente",
+                url: `${typeof window !== "undefined" ? window.location.origin : ""}/crm/cliente/${c.crm_token}`,
+                key: "crm",
+                color: "text-indigo-400",
+                borderColor: "border-indigo-500/20",
+                bgColor: "bg-indigo-500/[0.04]",
+              },
+              {
+                label: "Portal + CRM",
+                url: `${typeof window !== "undefined" ? window.location.origin : ""}/share/portal/${c.id}?crm=${c.crm_token}`,
+                key: "portal",
+                color: "text-purple-400",
+                borderColor: "border-purple-500/20",
+                bgColor: "bg-purple-500/[0.04]",
+              },
+            ].map(item => (
+              <div key={item.key} className={`flex items-center gap-2 rounded-xl border ${item.borderColor} ${item.bgColor} px-3 py-1.5`}>
+                <span className={`text-[10px] ${item.color} flex-1 truncate`}>{item.label}</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(item.url);
+                    setCopiado(item.key);
+                    setTimeout(() => setCopiado(null), 2000);
+                  }}
+                  className="text-white/25 hover:text-white transition-colors"
+                  title="Copiar link"
+                >
+                  {copiado === item.key ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                </button>
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-white/25 hover:text-white transition-colors">
+                  <ExternalLink size={11} />
+                </a>
+              </div>
+            ))}
           </div>
         )}
 
@@ -701,6 +888,7 @@ export default function ClientesPage() {
     setLoading(false);
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { carregar(); }, []);
 
   async function excluir(id: string) {

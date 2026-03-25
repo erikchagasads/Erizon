@@ -4,17 +4,16 @@
 // Novidade: Modal "Conectar Meta Ads" busca accounts reais do BM via /api/meta-accounts
 // Clientes sem meta_account_id mostram estado "Sem integração" com botão para conectar
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Plus, AlertCircle, CheckCircle2, RefreshCw,
-  Users, DollarSign, Loader2, ChevronRight,
+  Users, DollarSign, Loader2,
   Clock, Zap, ShieldAlert, Search, Link2,
-  BarChart3, Copy, Check, ExternalLink, Trash2,
-  Plug, X, Building2, CircleDot, ChevronDown,
+  BarChart3, Check, Trash2,
+  Plug, X, Building2, CircleDot,
   WifiOff, Wifi
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
-import { getSupabase } from "@/lib/supabase";
 import { fetchSafe } from "@/lib/fetchSafe";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -143,6 +142,7 @@ function ModalConectarMeta({
   const [selecionado, setSelecionado] = useState<MetaAccount | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetch("/api/meta-accounts")
       .then(r => r.json())
@@ -399,12 +399,12 @@ function ClienteCard({
   cliente, onSync, syncing, onAnalisar, onPulse, onExcluir, onConectar
 }: {
   cliente: Cliente;
-  onSync: (id: string) => void;
+  onSync: (id: string) => unknown;
   syncing: boolean;
-  onAnalisar: (id: string) => void;
-  onPulse: (id: string) => void;
-  onExcluir: (id: string) => void;
-  onConectar: (cliente: Cliente) => void;
+  onAnalisar: (id: string) => unknown;
+  onPulse: (id: string) => unknown;
+  onExcluir: (id: string) => unknown;
+  onConectar: (cliente: Cliente) => unknown;
 }) {
   const horas = horasDesdeSync(cliente.ultima_atualizacao);
   const desatualizado = horas > 24;
@@ -540,7 +540,6 @@ function ClienteCard({
 
 // ─── Page ─────────────────────────────────────────────────────
 export default function ClientesPage() {
-  const supabase = getSupabase();
   const [clientes, setClientes]         = useState<Cliente[]>([]);
   const [loading, setLoading]           = useState(true);
   const [syncingId, setSyncingId]       = useState<string | null>(null);
@@ -559,6 +558,7 @@ export default function ClientesPage() {
     setLoading(false);
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { carregar(); }, []);
 
   async function sincronizar(clienteId: string) {
@@ -715,7 +715,7 @@ export default function ClientesPage() {
                     {totais.sem_integracao} cliente{totais.sem_integracao !== 1 ? "s" : ""} sem conta Meta Ads vinculada
                   </p>
                   <p className="text-[11px] text-amber-400/40 mt-0.5">
-                    Clique em "Conectar Meta Ads" em cada card para vincular automaticamente a conta correta do BM.
+                    Clique em &quot;Conectar Meta Ads&quot; em cada card para vincular automaticamente a conta correta do BM.
                   </p>
                 </div>
                 <button onClick={() => setFiltroStatus("sem_integracao")}

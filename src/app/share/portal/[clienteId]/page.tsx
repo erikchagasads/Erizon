@@ -5,11 +5,11 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   Target, DollarSign, TrendingUp, BarChart3,
-  Loader2, AlertTriangle, Shield,
+  Loader2, AlertTriangle, Shield, Users, CheckCircle, ChevronRight,
 } from "lucide-react";
 
 interface Campanha {
@@ -23,6 +23,22 @@ interface Campanha {
   recomendacao: string;
 }
 
+interface LeadRecente {
+  nome: string;
+  estagio: string;
+  campanha_nome: string | null;
+  plataforma: string | null;
+  created_at: string;
+}
+
+interface LeadsData {
+  total: number;
+  por_estagio: { novo: number; contato: number; proposta: number; fechado: number; perdido: number };
+  total_fechado: number;
+  taxa_fechamento: number;
+  recentes: LeadRecente[];
+}
+
 interface PortalData {
   nome: string;
   cor: string;
@@ -32,6 +48,7 @@ interface PortalData {
   cpl_medio: number;
   campanhas_ativas: number;
   ultima_atualizacao: string | null;
+  crm_token?: string | null;
 }
 
 const fmtBRL = (v: number) =>
@@ -39,37 +56,38 @@ const fmtBRL = (v: number) =>
 const fmtNum = (v: number) => v.toLocaleString("pt-BR");
 const fmtPct = (v: number) => `${v.toFixed(2)}%`;
 
-function scoreColor(s: number) {
-  if (s >= 75) return "text-emerald-400";
-  if (s >= 50) return "text-yellow-400";
-  return "text-red-400";
-}
-
-function recBadge(r: string) {
-  const m: Record<string, string> = {
-    Escalar:   "bg-emerald-500/15 text-emerald-400 border-emerald-500/20",
-    Manter:    "bg-blue-500/15 text-blue-400 border-blue-500/20",
-    Otimizar:  "bg-yellow-500/15 text-yellow-400 border-yellow-500/20",
-    Pausar:    "bg-red-500/15 text-red-400 border-red-500/20",
-    Maturando: "bg-purple-500/15 text-purple-400 border-purple-500/20",
-  };
-  return m[r] ?? "bg-white/5 text-white/40 border-white/10";
-}
-
-export default function PortalPublico() {
+function PortalPublicoInner() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const clienteId = params?.clienteId as string;
+  const crmTokenParam = searchParams?.get('crm');
 
   const [data, setData]       = useState<PortalData | null>(null);
+  const [leads, setLeads]     = useState<LeadsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro]       = useState<string | null>(null);
 
+  // crm_token vem da API ou do query param
+  const crmToken = crmTokenParam ?? data?.crm_token ?? null;
+
   useEffect(() => {
     if (!clienteId) return;
-    fetch(`/api/cliente-publico/${clienteId}`)
-      .then(r => r.ok ? r.json() : r.json().then((j: any) => Promise.reject(j.error ?? "Não encontrado")))
-      .then(setData)
-      .catch((e: string) => setErro(e))
+    Promise.all([
+      fetch(`/api/cliente-publico/${clienteId}`),
+      fetch(`/api/cliente-publico/${clienteId}/leads`),
+    ])
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then(async ([r1, r2]) => {
+        if (!r1.ok) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const j = await r1.json() as any;
+          throw new Error(j.error ?? "Não encontrado");
+        }
+        const [d, l] = await Promise.all([r1.json(), r2.ok ? r2.json() : null]);
+        setData(d as PortalData);
+        if (l) setLeads(l as LeadsData);
+      })
+      .catch((e: Error) => setErro(e.message))
       .finally(() => setLoading(false));
   }, [clienteId]);
 
@@ -123,6 +141,28 @@ export default function PortalPublico() {
                 <p className="text-[12px] text-white/30 mt-1">Dados atualizados em {atualizado}</p>
               )}
             </div>
+
+
+            {/* Botão CRM do cliente */}
+            {crmToken && (
+              <a
+                href={`/crm/cliente/${crmToken}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between w-full bg-indigo-500/10 border border-indigo-500/25 rounded-2xl px-5 py-4 hover:bg-indigo-500/15 transition-colors group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-500/20 flex items-center justify-center">
+                    <Users size={16} className="text-indigo-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Acessar meu CRM</p>
+                    <p className="text-[11px] text-white/40">Veja seus leads, mova pelo pipeline e registre fechamentos</p>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-white/30 group-hover:text-white/60 transition-colors" />
+              </a>
+            )}
 
             {/* Cards de métricas */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -186,6 +226,89 @@ export default function PortalPublico() {
               )}
             </div>
 
+            {/* Pipeline de leads */}
+            {leads && leads.total > 0 && (
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+                <div className="px-5 py-4 border-b border-white/[0.05] flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-white">Pipeline de Leads</h2>
+                    <p className="text-[11px] text-white/30 mt-0.5">{leads.total} leads · {leads.taxa_fechamento}% taxa de fechamento</p>
+                  </div>
+                  {leads.total_fechado > 0 && (
+                    <div className="flex items-center gap-1.5 text-emerald-400 text-sm font-medium">
+                      <CheckCircle size={14} />
+                      {fmtBRL(leads.total_fechado)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Barra de estágios */}
+                <div className="px-5 py-4 grid grid-cols-5 gap-2">
+                  {[
+                    { key: "novo",     label: "Novos",    cor: "#6366f1" },
+                    { key: "contato",  label: "Contato",  cor: "#f59e0b" },
+                    { key: "proposta", label: "Proposta", cor: "#3b82f6" },
+                    { key: "fechado",  label: "Fechados", cor: "#10b981" },
+                    { key: "perdido",  label: "Perdidos", cor: "#ef4444" },
+                  ].map(e => {
+                    const count = leads.por_estagio[e.key as keyof typeof leads.por_estagio];
+                    return (
+                      <div key={e.key} className="text-center">
+                        <div
+                          className="text-lg font-bold"
+                          style={{ color: e.cor }}
+                        >{count}</div>
+                        <div className="text-[10px] text-white/30 mt-0.5">{e.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Leads recentes */}
+                {leads.recentes.length > 0 && (
+                  <div className="border-t border-white/[0.05] divide-y divide-white/[0.04]">
+                    {leads.recentes.map((l, i) => {
+                      const ESTAGIO_COR: Record<string, string> = {
+                        novo: "#6366f1", contato: "#f59e0b", proposta: "#3b82f6",
+                        fechado: "#10b981", perdido: "#ef4444",
+                      };
+                      const ESTAGIO_LABEL: Record<string, string> = {
+                        novo: "Novo", contato: "Contato", proposta: "Proposta",
+                        fechado: "Fechado", perdido: "Perdido",
+                      };
+                      return (
+                        <div key={i} className="px-5 py-3 flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                              style={{ background: ESTAGIO_COR[l.estagio] + "33", color: ESTAGIO_COR[l.estagio] }}
+                            >
+                              {l.nome.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm text-white/80 truncate">{l.nome}</p>
+                              {l.campanha_nome && (
+                                <p className="text-[10px] text-white/30 truncate">via {l.campanha_nome}</p>
+                              )}
+                            </div>
+                          </div>
+                          <span
+                            className="text-[10px] px-2 py-0.5 rounded-full shrink-0"
+                            style={{
+                              background: ESTAGIO_COR[l.estagio] + "22",
+                              color: ESTAGIO_COR[l.estagio],
+                            }}
+                          >
+                            {ESTAGIO_LABEL[l.estagio]}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Rodapé de transparência */}
             <div className="flex items-start gap-3 rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
               <Shield size={13} className="text-white/20 mt-0.5 shrink-0" />
@@ -197,5 +320,17 @@ export default function PortalPublico() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+export default function PortalPublico() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#040406] flex items-center justify-center">
+        <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <PortalPublicoInner />
+    </Suspense>
   );
 }

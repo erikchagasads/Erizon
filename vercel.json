@@ -1,12 +1,44 @@
 {
   "crons": [
     {
-      "path": "/api/check-alerts",
+      "path": "/api/cron/blog",
       "schedule": "0 8 * * *"
     },
     {
-      "path": "/api/snapshot-diario",
-      "schedule": "0 5 * * *"
+      "path": "/api/cron/ena-compute",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/ena-predict",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/daily-snapshot",
+      "schedule": "50 23 * * *"
+    },
+    {
+      "path": "/api/cron/predict-anomalies",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/profit-dna",
+      "schedule": "0 2 * * 1"
+    },
+    {
+      "path": "/api/cron/network-compute",
+      "schedule": "0 3 * * 1"
+    },
+    {
+      "path": "/api/cron/telegram-briefing",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/process-feedback-loop",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/crm-automations",
+      "schedule": "0 1 * * *"
     }
   ]
 }

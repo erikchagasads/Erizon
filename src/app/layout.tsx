@@ -2,6 +2,7 @@ import './globals.css'
 import { Plus_Jakarta_Sans } from 'next/font/google'
 import type { Metadata } from 'next'
 import CookieBanner from '@/components/CookieBanner'
+import { Toaster } from '@/components/Toast'
 import AgenteProvider from '@/components/AgenteProvider'
 
 const jakarta = Plus_Jakarta_Sans({
@@ -13,6 +14,10 @@ export const metadata: Metadata = {
   title: 'Erizon | AI Marketing Operating System',
   description: 'Erizon é o sistema operacional do gestor de tráfego: lucro real, copiloto de decisão, autopilot, inteligência criativa e network intelligence.',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/logo-erizon.png',
+    apple: '/logo-erizon.png',
+  },
 }
 
 export const viewport = {
@@ -110,8 +115,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrg) }}
         />
+        <link rel="icon" href="/logo-erizon.png" type="image/png" />
+        <link rel="shortcut icon" href="/logo-erizon.png" type="image/png" />
+
+        {/* iOS */}
+        <link rel="apple-touch-icon" href="/logo-erizon.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Erizon" />
+
+        {/* Android / PWA */}
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="application-name" content="Erizon" />
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.svg" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="ERIZON | Growth OS" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -125,6 +142,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${jakarta.className} bg-[#0a0a0b] antialiased`}>
         {children}
         <CookieBanner />
+        <Toaster />
         <AgenteProvider />  {/* ← Agente IA flutuante em todas as pages */}
       </body>
     </html>

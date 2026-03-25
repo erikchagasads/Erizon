@@ -396,20 +396,25 @@ export class MockOperatingRepository {
     ];
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async upsertCampaignSnapshots(_rows: CampaignSnapshot[]): Promise<void> {
     return;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async upsertProfitSnapshots(_rows: ProfitSnapshot[]): Promise<void> {
     return;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async saveAutopilotLog(_entry: AutopilotExecutionLog): Promise<void> {
     return;
   }
 
   async getPreviousSnapshots(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _campaignIds: string[],
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _beforeDate: string
   ): Promise<Array<{ id: string; roas: number; ctr: number; cpa: number }>> {
     // Mock retorna valores anteriores fixos para os snapshots padrão

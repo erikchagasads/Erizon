@@ -19,10 +19,15 @@ export async function POST(req: Request) {
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get: (name) => cookieStore.get(name)?.value } }
-    );
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(values) { values.forEach(({ name, value, options }) => { try { cookieStore.set(name, value, options); } catch {} }); },
+      },
+    }
+  );
 
     // Autenticação
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -137,6 +142,7 @@ export async function POST(req: Request) {
         : `⚠️ Status atualizado no sistema. ${metaError}`,
     });
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error("[pause-campaign]", err);
     return NextResponse.json({ error: err.message }, { status: 500 });

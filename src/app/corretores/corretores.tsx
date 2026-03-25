@@ -29,6 +29,7 @@ export default function CorretoresPage() {
     setLoading(false);
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { carregar(); }, []);
 
   async function salvar() {

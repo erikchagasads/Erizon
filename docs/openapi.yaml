@@ -1,0 +1,175 @@
+openapi: "3.1.0"
+info:
+  title: Erizon V7 API
+  version: "7.0.0"
+  description: API de gestão e inteligência de campanhas de anúncios pagos.
+
+servers:
+  - url: https://your-app.vercel.app
+    description: Production
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    WorkspaceParam:
+      type: object
+      required: [workspaceId]
+      properties:
+        workspaceId:
+          type: string
+          format: uuid
+
+    SyncResult:
+      type: object
+      properties:
+        syncedAccounts:
+          type: integer
+        importedCampaigns:
+          type: integer
+
+    ProcessedResult:
+      type: object
+      properties:
+        processedSnapshots:
+          type: integer
+
+    PulseOverview:
+      type: object
+      properties:
+        totals:
+          type: object
+          properties:
+            spend: { type: number }
+            revenue: { type: number }
+            profit: { type: number }
+            activeCampaigns: { type: integer }
+        anomalies:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              severity: { type: string }
+        risks:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              severity: { type: string }
+        opportunities:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+        autopilotSuggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              priority: { type: string, enum: [low, medium, high] }
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+
+paths:
+  /api/campaigns/sync:
+    post:
+      summary: Sincronizar campanhas do Meta Ads
+      description: |
+        Dispara sincronização de todas as contas de anúncio ativas no workspace.
+        Os access tokens são lidos do banco — não devem ser enviados na requisição.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceParam"
+      responses:
+        "200":
+          description: Sync concluído
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResult"
+        "400": { description: Body inválido }
+        "401": { description: Não autenticado }
+        "403": { description: Sem permissão (requer owner ou admin) }
+        "422": { description: Erro de validação }
+        "500": { description: Erro interno }
+
+  /api/intelligence/run:
+    post:
+      summary: Executar análise de inteligência
+      description: Detecta anomalias, riscos e oportunidades com base nos snapshots mais recentes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceParam"
+      responses:
+        "200":
+          description: Análise concluída
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessedResult"
+        "401": { description: Não autenticado }
+        "403": { description: Sem permissão }
+        "422": { description: Erro de validação }
+
+  /api/autopilot/run:
+    post:
+      summary: Executar autopilot
+      description: Gera sugestões de otimização para campanhas ativas do workspace.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceParam"
+      responses:
+        "200":
+          description: Sugestões geradas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessedResult"
+        "401": { description: Não autenticado }
+        "403": { description: Sem permissão }
+
+  /api/pulse:
+    get:
+      summary: Visão geral do workspace (Pulse)
+      description: Retorna totais financeiros e alertas de inteligência do dia atual.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Overview do workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PulseOverview"
+        "400": { description: workspaceId ausente }
+        "401": { description: Não autenticado }
+        "403": { description: Sem acesso ao workspace }

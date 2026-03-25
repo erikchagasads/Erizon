@@ -7,8 +7,8 @@
 import { useMemo, useState } from "react";
 import {
   Brain, TrendingUp, TrendingDown, Minus, Target, BarChart3,
-  CheckCircle2, XCircle, AlertTriangle, Zap, ArrowRight,
-  Award, Flame, Layers, Activity, ChevronDown, ChevronUp,
+  AlertTriangle, Zap, ArrowRight,
+  Flame, Layers, Activity, ChevronDown, ChevronUp,
   ShieldCheck, Info,
 } from "lucide-react";
 
@@ -60,14 +60,6 @@ function corPosicao(p: Posicao) {
   }[p];
 }
 
-function corUrgencia(u: string) {
-  return {
-    critica: "text-red-400 bg-red-500/10 border-red-500/20",
-    alta:    "text-amber-400 bg-amber-500/10 border-amber-500/20",
-    media:   "text-sky-400 bg-sky-500/10 border-sky-500/20",
-    baixa:   "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  }[u] ?? "text-white/40 bg-white/[0.04] border-white/[0.07]";
-}
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
 
@@ -112,7 +104,7 @@ function PainelMemoria({
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-6 mb-5">
+          <div className="flex flex-col gap-4 mb-5">
             <div>
               <p className="text-[9px] font-semibold uppercase tracking-[0.25em] text-white/15 mb-1">Taxa de assertividade</p>
               <p className={`text-[38px] font-black font-mono leading-none ${corTaxa}`}>
@@ -120,9 +112,9 @@ function PainelMemoria({
               </p>
               <p className="text-[10px] text-white/20 mt-1">{assertividade.insightPrincipal}</p>
             </div>
-            <div className="flex-1">
+            <div>
               {/* Barra visual */}
-              <div className="h-2 rounded-full bg-white/[0.05] mb-2 overflow-hidden">
+              <div className="h-2 rounded-full bg-white/[0.05] mb-3 overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-700 ${
                     taxaGeral >= 75 ? "bg-emerald-500" : taxaGeral >= 55 ? "bg-amber-500" : "bg-red-500"
@@ -130,15 +122,15 @@ function PainelMemoria({
                   style={{ width: `${taxaGeral}%` }}
                 />
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-3">
                 {[
                   { label: "✓ Acertos", val: acertos, cor: "text-emerald-400" },
                   { label: "✗ Erros",   val: erros,   cor: "text-red-400"     },
                   { label: "⏳ Aguardando", val: semDados, cor: "text-white/30" },
                 ].map((item, i) => (
-                  <div key={i} className="text-center px-2 py-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                  <div key={i} className="text-center px-2 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
                     <p className={`text-[15px] font-black font-mono ${item.cor}`}>{item.val}</p>
-                    <p className="text-[9px] text-white/20">{item.label}</p>
+                    <p className="text-[9px] text-white/20 mt-0.5">{item.label}</p>
                   </div>
                 ))}
               </div>

@@ -6,7 +6,8 @@ export interface CommerceConnector {
 }
 
 export class CommerceMockConnector implements CommerceConnector {
-  async pullOrders(credential: IntegrationCredential): Promise<ExternalOrderRecord[]> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async pullOrders(_credential: IntegrationCredential): Promise<ExternalOrderRecord[]> {
     const now = new Date().toISOString();
     return [
       {

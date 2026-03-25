@@ -1,10 +1,26 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Groq } from "groq-sdk";
+import { requireAuth } from "@/lib/auth-guard";
+import { checkRateLimit, rateLimitHeaders, RATE_LIMIT_PRESETS } from "@/lib/rate-limiter";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    // Autenticação obrigatória
+    const auth = await requireAuth(req);
+    if (!auth.user) return auth.response;
+
+    // Rate limit por usuário
+    const preset = RATE_LIMIT_PRESETS.ai;
+    const rl = checkRateLimit(`ai-report:${auth.user.id}`, preset);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Limite de requisições atingido. Tente novamente em breve." },
+        { status: 429, headers: rateLimitHeaders(rl, preset.limit) }
+      );
+    }
+
     const body = await req.json();
 
     const data = body.data || {};
@@ -19,14 +35,13 @@ export async function POST(req: Request) {
     const leads = data.leads ? Number(data.leads) : null;
     const cpl = data.cpl ? Number(data.cpl).toFixed(2) : null;
 
-    // Monta contexto de métricas apenas se houver dados reais
     const contextoDados = spend && Number(spend) > 0
       ? `\nCONTEXTO DE PERFORMANCE (use somente se relevante para a copy):
 - Cliente/Projeto: ${clienteNome}
 - Investimento: R$ ${spend}
 - Leads: ${leads}
 - CPL: R$ ${cpl}`
-      : `\nCliente/Projeto: ${clienteNome}`
+      : `\nCliente/Projeto: ${clienteNome}`;
 
     const prompt = `Você é o SCRIPT ENGINE da Erizon — Roteirista e Copywriter de Resposta Direta de elite.
 ${contextoDados}
@@ -40,7 +55,7 @@ REGRAS:
 3. Estrutura recomendada: [GANCHO] → [CORPO] → [CTA]
 4. Fale como roteirista que quer vender muito, não como analista de planilhas
 5. Nunca diga "não posso fazer"
-6. Responda sempre em português BR`
+6. Responda sempre em português BR`;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
@@ -50,10 +65,10 @@ REGRAS:
     });
 
     const report = chatCompletion.choices[0]?.message?.content || "";
-    return NextResponse.json({ analysis: report });
+    return NextResponse.json({ analysis: report }, { headers: rateLimitHeaders(rl, preset.limit) });
 
-  } catch (err: any) {
-    console.error("Erro na API de Roteiros:", err.message);
+  } catch (err: unknown) {
+    console.error("Erro na API de Roteiros:", err instanceof Error ? err.message : err);
     return NextResponse.json({ error: "Erro ao gerar roteiro. Verifique os dados." }, { status: 500 });
   }
 }

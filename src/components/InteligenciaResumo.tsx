@@ -101,7 +101,7 @@ const REC_ICON: Record<RecomendacaoAcao["tipo"], React.ElementType> = {
   pausar: AlertTriangle, escalar: TrendingUp, criativo: Zap, budget: DollarSign, segmentacao: Target,
 };
 
-function RecCard({ rec }: { rec: RecomendacaoAcao }) {
+function RecCard({ rec }: { rec: RecomendacaoAcao; key?: string | number }) {
   const s = REC_S[rec.tipo], Icon = REC_ICON[rec.tipo];
   return (
     <div className={`flex items-start gap-4 p-4 rounded-2xl border ${s.border} ${s.bg}`}>

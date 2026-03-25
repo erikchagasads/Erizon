@@ -10,7 +10,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Next.js 15: params é uma Promise e precisa ser aguardada
     const { id: clienteId } = await params;
 
     if (!clienteId) {
@@ -26,7 +25,7 @@ export async function GET(
     // Busca cliente — só retorna se ativo
     const { data: cliente, error: clienteErr } = await supabase
       .from("clientes")
-      .select("id, nome, nome_cliente, cor, ativo, ultima_atualizacao")
+      .select("id, nome, nome_cliente, cor, ativo, ultima_atualizacao, crm_token")
       .eq("id", clienteId)
       .eq("ativo", true)
       .maybeSingle();
@@ -35,7 +34,7 @@ export async function GET(
       return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
     }
 
-    // Busca campanhas ativas do cliente (sem dados financeiros sensíveis)
+    // Igual à page analytics: só campanhas ATIVAS vinculadas ao cliente
     const { data: ads } = await supabase
       .from("metricas_ads")
       .select("nome_campanha, status, gasto_total, contatos, impressoes, cliques, ctr")
@@ -51,18 +50,17 @@ export async function GET(
         ? (c.cliques / c.impressoes) * 100
         : 0);
 
-      // Score simplificado público (sem dados financeiros internos)
       let score = 70;
-      if (leads === 0 && gasto > 50)       score = 20;
-      else if (cpl > 80)                   score = 35;
-      else if (cpl > 50)                   score = 55;
-      else if (cpl < 20 && leads > 5)      score = 90;
+      if (leads === 0 && gasto > 50)   score = 20;
+      else if (cpl > 80)               score = 35;
+      else if (cpl > 50)               score = 55;
+      else if (cpl < 20 && leads > 5)  score = 90;
 
       let recomendacao = "Manter";
-      if (score >= 80)        recomendacao = "Escalar";
-      else if (score < 40)    recomendacao = "Pausar";
-      else if (score < 60)    recomendacao = "Otimizar";
-      else if (gasto < 30)    recomendacao = "Maturando";
+      if (score >= 80)      recomendacao = "Escalar";
+      else if (score < 40)  recomendacao = "Pausar";
+      else if (score < 60)  recomendacao = "Otimizar";
+      else if (gasto < 30)  recomendacao = "Maturando";
 
       return {
         nome_campanha: c.nome_campanha,
@@ -91,6 +89,7 @@ export async function GET(
       cpl_medio:          Math.round(cplMedio * 100) / 100,
       campanhas_ativas:   campanhas.length,
       ultima_atualizacao: cliente.ultima_atualizacao,
+      crm_token:          (cliente as Record<string, unknown>).crm_token as string ?? null,
     });
 
   } catch (err: unknown) {

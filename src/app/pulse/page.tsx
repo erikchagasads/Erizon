@@ -1,46 +1,39 @@
 "use client";
 
 /**
- * pulse/page.tsx — v11 "Jornal Executivo"
+ * pulse/page.tsx — Cockpit v12 "Human-in-the-Loop"
  *
- * ESTRUTURA DE LEITURA (30 segundos):
- *   HEADLINE      — manchete dinâmica gerada pelo engine (o título do jornal)
- *   ALERTAS 24h   — o que mudou desde ontem (notícia quente)
- *   BRIEFING      — estado geral da conta + score global
- *   DECISÃO       — 1 ação prioritária com impacto R$
- *   VITÓRIAS      — o que está funcionando esta semana
- *   FINANCEIROS   — investimento / lucro / ROAS global
- *   TENDÊNCIA     — 4 chips vs 7d anterior
- *   MEMÓRIA       — últimas 3 decisões + impacto acumulado
- *   PROJEÇÃO      — oportunidade 30 dias
- *   INTELLIGENCE  — PainelGrowthEngine (análise estratégica)
- *   HISTÓRICO     — gráfico compacto
- *   MATURIDADE    — nível + critérios próximo nível
- *   RISCO         — índice com fatores ativos
+ * ZONAS:
+ *   ZONA 1 — Status Bar: modo (ALERTA/DECISÃO/PAZ) + toggle de autopilot
+ *   ZONA 2 — Command Center: fila de decisões (engine propõe, gestor aprova)
+ *   ZONA 3 — Situacional: financeiros compactos + histórico de ações
  *
- * SEM listas de campanhas individuais (→ vai para Dados)
- * SEM métricas técnicas (CTR, CPM, frequência) (→ vai para Dados)
- * SEM filtro de cliente — Pulse é visão global do negócio
+ * FILOSOFIA:
+ *   - Nada é executado automaticamente sem aprovação do gestor
+ *   - O gestor pode habilitar autopiloto por tipo de ação (ex: pausar, escalar)
+ *   - Todas as decisões ficam registradas com auditoria
  */
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import {
-  TrendingUp, TrendingDown, ChevronRight, CheckCircle2,
-  Sparkles, BarChart2, Brain, Minus, Activity,
-  ArrowUpRight, DollarSign, Calendar, AlertTriangle,
-  Zap, Trophy, Newspaper, Bell,
+  Zap, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
+  TrendingUp, TrendingDown, Bot, ShieldCheck,
+  Clock, BarChart2, RefreshCw, Settings,
+  Activity, Sparkles, PieChart, Target,
+  Star, Eye, TriangleAlert, Link2, Database,
 } from "lucide-react";
+import type { CampanhaProcessada } from "@/app/lib/engine/pulseEngine";
 import Sidebar from "@/components/Sidebar";
+import { SkeletonPage } from "@/components/ops/AppShell";
+import { BudgetOptimizer } from "@/components/BudgetOptimizer";
 import {
-  processarCampanhas, calcularCPL, resolverConfig,
+  processarCampanhas, resolverConfig,
   type CampanhaRaw, type EngineResult, type UserEngineConfig,
 } from "@/app/lib/engine/pulseEngine";
-import PainelHistoricoMetricas from "@/components/dados/PainelHistorico";
-import PainelGrowthEngine from "@/components/dados/PainelGrowthEngine";
-import { useHistorico } from "@/app/hooks/useHistorico";
-import type { DecisaoHistorico, CampanhaEnriquecida } from "@/app/analytics/types";
-import { calcMetricas } from "@/app/analytics/engine";
+import { useSessionGuard } from "@/app/hooks/useSessionGuard";
+import type { PendingDecision, AutopilotConfig, CockpitMode } from "@/types/erizon-cockpit";
+import type { ActionType } from "@/types/erizon-cockpit";
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 const fmtBRL = (v: number) =>
@@ -59,1035 +52,964 @@ function getDataFormatada() {
   });
 }
 
-function getDiaSemana() {
-  return new Date().toLocaleDateString("pt-BR", { weekday: "long" });
-}
+// ─── Modos do Cockpit ─────────────────────────────────────────────────────────
+const MODOS: Record<CockpitMode, {
+  label: string; cor: string; bg: string; border: string; glow: string; icon: string;
+}> = {
+  ALERTA: {
+    label: "ALERTA",
+    cor:    "text-red-400",
+    bg:     "bg-red-500/10",
+    border: "border-red-500/30",
+    glow:   "shadow-[0_0_40px_rgba(239,68,68,0.15)]",
+    icon:   "🚨",
+  },
+  DECISÃO: {
+    label: "DECISÃO",
+    cor:    "text-amber-400",
+    bg:     "bg-amber-500/10",
+    border: "border-amber-500/30",
+    glow:   "",
+    icon:   "⚡",
+  },
+  PAZ: {
+    label: "PAZ",
+    cor:    "text-emerald-400",
+    bg:     "bg-emerald-500/10",
+    border: "border-emerald-500/20",
+    glow:   "shadow-[0_0_40px_rgba(16,185,129,0.08)]",
+    icon:   "✅",
+  },
+};
 
-function formatarNome(s: string) {
-  if (!s) return "";
-  return s.replace(/([a-z])([A-Z])/g, "$1 $2")
-    .split(/[\s_-]+/)
-    .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
-    .join(" ");
-}
+const ACTION_LABELS: Record<ActionType, { label: string; icon: string; color: string }> = {
+  pause:         { label: "Pausar",         icon: "⏸",  color: "text-red-400"     },
+  resume:        { label: "Reativar",       icon: "▶️",  color: "text-emerald-400" },
+  scale_budget:  { label: "Escalar",        icon: "📈",  color: "text-emerald-400" },
+  reduce_budget: { label: "Reduzir budget", icon: "📉",  color: "text-amber-400"   },
+  alert:         { label: "Alerta",         icon: "⚠️",  color: "text-amber-400"   },
+};
 
-// ─── Score ponderado por gasto ────────────────────────────────────────────────
-function calcScorePonderado(engine: EngineResult): number {
-  if (!engine || engine.totalGasto <= 0) return 0;
-  return Math.round(
-    engine.campanhas.reduce((s, c) => s + c.scoreCampanha * c.gastoSimulado, 0) /
-    engine.totalGasto
-  );
-}
-
-// ─── Estado da Conta ──────────────────────────────────────────────────────────
-interface EstadoConta {
-  manchete:  string;
-  subtitulo: string;
-  cor:       "emerald" | "amber" | "red";
-  icone:     string;
-  urgencia:  "critica" | "atencao" | "positiva";
-}
-
-function calcularEstado(engine: EngineResult, risco: number): EstadoConta {
-  const { roasGlobal, margemGlobal, capitalEmRisco, pausadasCount } = engine;
-  if (roasGlobal < 1.0)
-    return { manchete: "Conta perdendo dinheiro agora.", subtitulo: `Cada R$1 investido retorna R$${roasGlobal.toFixed(2)}. Ação urgente.`, cor: "red", icone: "🚨", urgencia: "critica" };
-  if (risco >= 70)
-    return { manchete: `${pausadasCount} campanha${pausadasCount !== 1 ? "s" : ""} crítica${pausadasCount !== 1 ? "s" : ""} consumindo budget.`, subtitulo: `R$${fmtBRL(capitalEmRisco)} em risco. Pausa obrigatória.`, cor: "red", icone: "⚠️", urgencia: "critica" };
-  if (risco >= 45)
-    return { manchete: "Risco concentrado. Resultados aceitáveis.", subtitulo: "Campanhas críticas corroem o ROAS. Ajuste necessário esta semana.", cor: "amber", icone: "⚡", urgencia: "atencao" };
-  if (margemGlobal >= 0.30 && roasGlobal >= 2.5)
-    return { manchete: "Operação pronta para escala.", subtitulo: `Margem ${(margemGlobal * 100).toFixed(0)}% · ROAS ${roasGlobal.toFixed(2)}× · momento ideal para crescer.`, cor: "emerald", icone: "🚀", urgencia: "positiva" };
-  return { manchete: "Operação estável. Espaço para crescer.", subtitulo: "Fundamentos no lugar. Pequenos ajustes podem destravar o próximo nível.", cor: "amber", icone: "✅", urgencia: "atencao" };
-}
-
-// ─── Headline dinâmica ────────────────────────────────────────────────────────
-interface Headline {
-  titulo: string;
-  subtitulo: string;
-  tipo: "alerta" | "positivo" | "neutro";
-}
-
-function gerarHeadline(engine: EngineResult, score: number, risco: number): Headline {
-  const { roasGlobal, margemGlobal, totalGasto, totalReceita, totalLeads, capitalEmRisco, pausadasCount, saudaveisCount, melhorAtivo } = engine;
-  const lucro = totalReceita - totalGasto;
-
-  // Situações críticas — manchete de alerta
-  if (roasGlobal < 1.0)
-    return { titulo: `🚨 Conta no vermelho: cada R$1 investido retorna R$${roasGlobal.toFixed(2)}.`, subtitulo: "Pausa imediata nas campanhas críticas pode evitar prejuízo crescente.", tipo: "alerta" };
-
-  if (capitalEmRisco > totalGasto * 0.4)
-    return { titulo: `⚠️ R$${fmtBRL(capitalEmRisco)} em campanhas sem retorno adequado.`, subtitulo: `${pausadasCount} campanha${pausadasCount !== 1 ? "s" : ""} crítica${pausadasCount !== 1 ? "s" : ""} consumindo ${Math.round((capitalEmRisco / totalGasto) * 100)}% do budget.`, tipo: "alerta" };
-
-  // Situações positivas — manchete de crescimento
-  if (margemGlobal >= 0.30 && roasGlobal >= 2.5 && saudaveisCount >= 2)
-    return { titulo: `🚀 Operação no ponto ideal: ROAS ${roasGlobal.toFixed(2)}× com margem ${(margemGlobal * 100).toFixed(0)}%.`, subtitulo: `${saudaveisCount} campanha${saudaveisCount !== 1 ? "s" : ""} saudável${saudaveisCount !== 1 ? "is" : ""} pronta${saudaveisCount !== 1 ? "s" : ""} para escala. Janela de crescimento aberta.`, tipo: "positivo" };
-
-  if (lucro > 0 && roasGlobal >= 2.0)
-    return { titulo: `✅ Conta gerando lucro: +R$${fmtBRL(lucro)} com ${totalLeads} leads no período.`, subtitulo: `ROAS ${roasGlobal.toFixed(2)}× · Margem ${(margemGlobal * 100).toFixed(0)}% · Base sólida para crescer.`, tipo: "positivo" };
-
-  if (melhorAtivo && melhorAtivo.roas >= 3.0)
-    return { titulo: `⚡ "${melhorAtivo.nome_campanha}" com ROAS ${melhorAtivo.roas.toFixed(2)}× — campanha vencedora detectada.`, subtitulo: "Hora de escalar o que está funcionando antes que a janela feche.", tipo: "positivo" };
-
-  // Situações neutras — manchete de contexto
-  const dia = getDiaSemana();
-  if (dia === "segunda-feira")
-    return { titulo: `📋 Segunda-feira: hora de revisar o desempenho da semana passada.`, subtitulo: `Score atual: ${score}/100. Verifique o que precisa de ajuste antes de investir mais.`, tipo: "neutro" };
-
-  if (dia === "sexta-feira")
-    return { titulo: `📊 Sexta-feira: valide as campanhas antes do final de semana.`, subtitulo: "Finais de semana têm CPL mais alto em média. Ajuste budgets se necessário.", tipo: "neutro" };
-
-  return { titulo: `📊 Score global: ${score}/100. ROAS ${roasGlobal.toFixed(2)}× com ${totalLeads} leads gerados.`, subtitulo: `R$${fmtBRL(totalGasto)} investidos · R$${fmtBRL(totalReceita)} em receita · Margem ${(margemGlobal * 100).toFixed(0)}%.`, tipo: "neutro" };
-}
-
-// ─── Alertas 24h ─────────────────────────────────────────────────────────────
-interface Alerta24h {
-  emoji: string;
-  texto: string;
-  tipo: "critico" | "atencao" | "positivo";
-  campanha?: string;
-}
-
-function gerarAlertas24h(engine: EngineResult, dados: CampanhaRaw[]): Alerta24h[] {
-  const alertas: Alerta24h[] = [];
-
-  // Campanhas sem leads gastando muito
-  const semLeads = engine.campanhas.filter(c => c.leadsSimulados === 0 && c.gastoSimulado > 50);
-  if (semLeads.length > 0) {
-    const pior = semLeads.sort((a, b) => b.gastoSimulado - a.gastoSimulado)[0];
-    alertas.push({
-      emoji: "🔴",
-      texto: `"${pior.nome_campanha}" gastou R$${fmtBRL(pior.gastoSimulado)} sem gerar nenhum lead.`,
-      tipo: "critico",
-      campanha: pior.nome_campanha,
-    });
-  }
-
-  // ROAS caindo
-  const criticas = engine.campanhas.filter(c => c.scoreCampanha < 40 && c.gastoSimulado > 0);
-  if (criticas.length > 0 && semLeads.length === 0) {
-    const pior = criticas[0];
-    alertas.push({
-      emoji: "⚠️",
-      texto: `${criticas.length} campanha${criticas.length !== 1 ? "s" : ""} com score crítico. "${pior.nome_campanha}" em ${pior.scoreCampanha}/100.`,
-      tipo: "atencao",
-    });
-  }
-
-  // Capital em risco
-  if (engine.capitalEmRisco > engine.totalGasto * 0.3) {
-    alertas.push({
-      emoji: "💸",
-      texto: `R$${fmtBRL(engine.capitalEmRisco)} do seu budget está em campanhas com retorno abaixo do mínimo.`,
-      tipo: "atencao",
-    });
-  }
-
-  // Campanhas escaláveis
-  const escaláveis = engine.campanhas.filter(c => c.scoreCampanha >= 80 && c.roas >= 2.5);
-  if (escaláveis.length > 0) {
-    const melhor = escaláveis.sort((a, b) => b.roas - a.roas)[0];
-    alertas.push({
-      emoji: "🚀",
-      texto: `"${melhor.nome_campanha}" com ROAS ${melhor.roas.toFixed(2)}× está pronta para escala.`,
-      tipo: "positivo",
-      campanha: melhor.nome_campanha,
-    });
-  }
-
-  // ROAS global saudável
-  if (engine.roasGlobal >= 2.5 && criticas.length === 0) {
-    alertas.push({
-      emoji: "✅",
-      texto: `ROAS global ${engine.roasGlobal.toFixed(2)}× acima do benchmark. Conta operando bem.`,
-      tipo: "positivo",
-    });
-  }
-
-  return alertas.slice(0, 4);
-}
-
-// ─── Vitórias da semana ───────────────────────────────────────────────────────
-interface Vitoria {
-  emoji: string;
-  titulo: string;
-  detalhe: string;
-  valor?: string;
-  corValor?: string;
-}
-
-function gerarVitorias(engine: EngineResult, decisoes: DecisaoHistorico[]): Vitoria[] {
-  const vitorias: Vitoria[] = [];
-
-  // Melhor campanha
-  const melhor = engine.campanhas.filter(c => c.roas >= 2.0 && c.leadsSimulados > 0)
-    .sort((a, b) => b.roas * b.leadsSimulados - a.roas * a.leadsSimulados)[0];
-  if (melhor) {
-    vitorias.push({
-      emoji: "🏆",
-      titulo: `"${melhor.nome_campanha}" liderando`,
-      detalhe: `ROAS ${melhor.roas.toFixed(2)}× com ${melhor.leadsSimulados} leads`,
-      valor: `R$${fmtBRL(melhor.lucroLiquido)}`,
-      corValor: "text-emerald-400",
-    });
-  }
-
-  // Lucro gerado
-  if (engine.totalLucro > 0) {
-    vitorias.push({
-      emoji: "💰",
-      titulo: "Lucro no período",
-      detalhe: `${engine.saudaveisCount} campanha${engine.saudaveisCount !== 1 ? "s" : ""} saudável${engine.saudaveisCount !== 1 ? "is" : ""} gerando retorno`,
-      valor: `+R$${fmtBRL(engine.totalLucro)}`,
-      corValor: "text-emerald-400",
-    });
-  }
-
-  // Leads gerados
-  if (engine.totalLeads > 0) {
-    const cplMedio = engine.totalGasto > 0 ? engine.totalGasto / engine.totalLeads : 0;
-    vitorias.push({
-      emoji: "👥",
-      titulo: `${engine.totalLeads} leads gerados`,
-      detalhe: cplMedio > 0 ? `CPL médio R$${fmtBRL(cplMedio)}` : "no período",
-      valor: cplMedio < 30 ? "CPL excelente" : cplMedio < 60 ? "CPL razoável" : undefined,
-      corValor: cplMedio < 30 ? "text-emerald-400" : "text-amber-400",
-    });
-  }
-
-  // Decisões tomadas esta semana
-  const decisoesRecentes = decisoes.filter(d => {
-    const data = (d as any).created_at ?? (d as any).data;
-    if (!data) return false;
-    const diff = (Date.now() - new Date(data).getTime()) / 86400000;
-    return diff <= 7;
-  });
-  if (decisoesRecentes.length > 0) {
-    vitorias.push({
-      emoji: "🧠",
-      titulo: `${decisoesRecentes.length} decisão${decisoesRecentes.length !== 1 ? "ões" : ""} esta semana`,
-      detalhe: "Decisões registradas no Centro de Inteligência",
-    });
-  }
-
-  return vitorias.slice(0, 3);
-}
-
-// ─── Risco ────────────────────────────────────────────────────────────────────
-interface IndiceRisco {
-  valor: number; nivel: string;
-  cor: string; bg: string; border: string;
-  fatores: { nome: string; peso: number; ativo: boolean; detalhe: string }[];
-}
-
-function calcularRisco(engine: EngineResult, cplMedio: number, totalInvest: number): IndiceRisco {
-  const gastoCritico = engine.campanhas.filter(c => c.scoreCampanha < 50).reduce((s, c) => s + c.gastoSimulado, 0);
-  const pctCritico   = totalInvest > 0 ? gastoCritico / totalInvest : 0;
-  const fatores = [
-    { nome: "ROAS abaixo de 1.5×",         peso: 30, ativo: engine.roasGlobal < 1.5,                                                               detalhe: `ROAS: ${engine.roasGlobal.toFixed(2)}×` },
-    { nome: "Margem abaixo de 15%",         peso: 20, ativo: engine.margemGlobal < 0.15,                                                            detalhe: `Margem: ${(engine.margemGlobal * 100).toFixed(1)}%` },
-    { nome: "Budget em campanhas críticas", peso: 20, ativo: pctCritico >= 0.30,                                                                    detalhe: `${(pctCritico * 100).toFixed(0)}% em risco` },
-    { nome: "Campanhas com score < 40",     peso: 15, ativo: engine.campanhas.filter(c => c.scoreCampanha < 40).length > 0,                         detalhe: `${engine.campanhas.filter(c => c.scoreCampanha < 40).length} crítica(s)` },
-    { nome: "CPL acima de R$60",            peso: 10, ativo: cplMedio > 60,                                                                         detalhe: `CPL: R$${fmtBRL(cplMedio)}` },
-    { nome: "Concentração em 1 campanha",   peso:  5, ativo: engine.totalAtivos === 1,                                                              detalhe: "Diversificação baixa" },
-  ];
-  const valor = fatores.reduce((s, f) => s + (f.ativo ? f.peso : 0), 0);
-  if (valor <= 10) return { valor, nivel: "Baixo",    cor: "text-emerald-400", bg: "bg-emerald-500/[0.04]", border: "border-emerald-500/15", fatores };
-  if (valor <= 30) return { valor, nivel: "Moderado", cor: "text-amber-400",   bg: "bg-amber-500/[0.04]",   border: "border-amber-500/15",   fatores };
-  if (valor <= 55) return { valor, nivel: "Alto",     cor: "text-orange-400",  bg: "bg-orange-500/[0.04]",  border: "border-orange-500/15",  fatores };
-  return               { valor, nivel: "Crítico",  cor: "text-red-400",    bg: "bg-red-500/[0.04]",     border: "border-red-500/15",     fatores };
-}
-
-// ─── Maturidade ───────────────────────────────────────────────────────────────
-interface Maturidade {
-  nivel: string; proximo: string;
-  cor: string; bg: string; border: string; indice: number;
-  criterios: { texto: string; ok: boolean }[];
-}
-
-function calcularMaturidade(engine: EngineResult, cplMedio: number): Maturidade {
-  const ok_cpl     = cplMedio > 0 && cplMedio < 30;
-  const ok_roas    = engine.roasGlobal >= 2.5;
-  const ok_margem  = engine.margemGlobal >= 0.25;
-  const ok_div     = engine.campanhas.length >= 3;
-  const ok_critico = engine.pausadasCount === 0;
-  const ok_escala  = engine.saudaveisCount >= 2;
-  const pts = [ok_cpl, ok_roas, ok_margem, ok_div, ok_critico, ok_escala].filter(Boolean).length;
-
-  if (pts <= 1) return { nivel: "Iniciante",   proximo: "Estruturada", cor: "text-red-400",     bg: "bg-red-500/[0.04]",     border: "border-red-500/15",     indice: 1, criterios: [{ texto: `CPL abaixo de R$30 (atual: ${cplMedio > 0 ? `R$${fmtBRL(cplMedio)}` : "—"})`, ok: ok_cpl }, { texto: "ROAS mínimo de 2.5×", ok: ok_roas }, { texto: "Ao menos 3 campanhas ativas", ok: ok_div }] };
-  if (pts <= 3) return { nivel: "Estruturada", proximo: "Avançada",   cor: "text-amber-400",   bg: "bg-amber-500/[0.04]",   border: "border-amber-500/15",   indice: 2, criterios: [{ texto: "Margem média acima de 25%", ok: ok_margem }, { texto: "Eliminar campanhas críticas", ok: ok_critico }, { texto: "ROAS global acima de 2.5×", ok: ok_roas }] };
-  if (pts <= 5) return { nivel: "Avançada",    proximo: "Elite",      cor: "text-sky-400",     bg: "bg-sky-500/[0.04]",     border: "border-sky-500/15",     indice: 3, criterios: [{ texto: "2+ campanhas prontas para escala", ok: ok_escala }, { texto: "Margem global acima de 30%", ok: engine.margemGlobal >= 0.30 }, { texto: "ROAS acima de 3× consistente", ok: engine.roasGlobal >= 3 }] };
-  return             { nivel: "Elite",       proximo: "—",           cor: "text-emerald-400", bg: "bg-emerald-500/[0.04]", border: "border-emerald-500/15", indice: 4, criterios: [{ texto: "Operação no nível mais alto", ok: true }, { texto: "Todos os critérios atingidos", ok: true }, { texto: "Foco em expansão e diversificação", ok: true }] };
-}
-
-// ─── Projeção 30d ─────────────────────────────────────────────────────────────
-function calcProjecao(engine: EngineResult) {
-  const f = 30 / 7;
-  const receitaAtual = engine.totalReceita * f;
-  const lucroAtual   = engine.totalLucro * f;
-  const perdaAtual   = engine.capitalEmRisco;
-  const ganhoEscala  = engine.melhorAtivo ? engine.melhorAtivo.lucroLiquido * 0.2 * f : 0;
-  const receitaExtra = engine.melhorAtivo ? engine.melhorAtivo.gastoSimulado * 0.2 * engine.melhorAtivo.roas * f : 0;
-  return {
-    semMudanca:       { receita: Math.max(0, receitaAtual), perda: Math.max(0, perdaAtual), lucro: lucroAtual },
-    comRecomendacoes: { receita: Math.max(0, receitaAtual + receitaExtra), lucroExtra: Math.max(0, ganhoEscala + perdaAtual * 0.8) },
-    valorHero:        Math.max(0, ganhoEscala + perdaAtual * 0.8),
-  };
-}
-
-// ─── Comparação semanal ───────────────────────────────────────────────────────
-interface ComparSemanal {
-  roas: { atual: number; pct: number };
-  cpl:  { atual: number; pct: number };
-  margem: { atual: number; pct: number };
-  lucro: { atual: number; pct: number };
-  confianca: number;
-}
-
-function normHist(raw: unknown): Array<{ data: string; roas?: number | null; cpl?: number | null; margem?: number | null; lucro?: number | null }> {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
-  const obj = raw as Record<string, unknown>;
-  for (const k of ["dados", "metricas", "itens", "historico", "items", "rows"]) {
-    if (Array.isArray(obj[k])) return obj[k] as ReturnType<typeof normHist>;
-  }
-  return [];
-}
-
-function calcCompar(raw: unknown): ComparSemanal | null {
-  const hist = normHist(raw);
-  if (hist.length < 2) return null;
-  const sorted = [...hist].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-  const hoje = new Date();
-  const d7   = new Date(hoje.getTime() - 7  * 86400000);
-  const d14  = new Date(hoje.getTime() - 14 * 86400000);
-  const rec  = sorted.filter(h => new Date(h.data) >= d7);
-  const ant  = sorted.filter(h => new Date(h.data) >= d14 && new Date(h.data) < d7);
-  if (!rec.length || !ant.length) return null;
-  function med(arr: typeof rec, k: keyof typeof arr[0]) {
-    const v = arr.map(h => Number(h[k])).filter(n => isFinite(n) && n > 0);
-    return v.length > 0 ? v.reduce((a, b) => a + b, 0) / v.length : 0;
-  }
-  function d(a: number, b: number) { return { atual: a, pct: b > 0 ? ((a - b) / b) * 100 : 0 }; }
-  return {
-    roas:   d(med(rec, "roas"),   med(ant, "roas")),
-    cpl:    d(med(rec, "cpl"),    med(ant, "cpl")),
-    margem: d(med(rec, "margem"), med(ant, "margem")),
-    lucro:  d(med(rec, "lucro"),  med(ant, "lucro")),
-    confianca: Math.min(Math.round((Math.min(rec.length, ant.length) / 7) * 100), 90),
-  };
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// COMPONENTES
-// ═════════════════════════════════════════════════════════════════════════════
-
-// ── HeadlineDoDia ─────────────────────────────────────────────────────────────
-function HeadlineDoDia({ headline, data }: { headline: Headline; data: string }) {
-  const p = {
-    alerta:   { border: "border-red-500/20",     bg: "bg-red-500/[0.04]",     txt: "text-red-300",    barra: "bg-red-500",     glow: "shadow-[0_0_60px_rgba(239,68,68,0.07)]"    },
-    positivo: { border: "border-emerald-500/20", bg: "bg-emerald-500/[0.04]", txt: "text-emerald-300",barra: "bg-emerald-500", glow: "shadow-[0_0_60px_rgba(16,185,129,0.07)]"   },
-    neutro:   { border: "border-white/[0.08]",   bg: "bg-white/[0.02]",       txt: "text-white/70",   barra: "bg-white/30",    glow: ""                                          },
-  }[headline.tipo];
+// ─── Toggle Autopilot ─────────────────────────────────────────────────────────
+function AutopilotToggle({
+  config,
+  onToggle,
+  onTypeToggle,
+}: {
+  config: AutopilotConfig | null;
+  onToggle: (enabled: boolean) => void;
+  onTypeToggle: (key: keyof AutopilotConfig, val: boolean) => void;
+}) {
+  const isOn = config?.autopilot_enabled ?? false;
 
   return (
-    <div className={`relative mb-4 rounded-[24px] border ${p.border} ${p.bg} ${p.glow} overflow-hidden`}>
-      <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${p.barra} opacity-40 rounded-l-full`} />
-      <div className="px-7 py-5 pl-9">
-        <div className="flex items-center gap-2 mb-2">
-          <Newspaper size={11} className="text-white/20" />
-          <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/20">
-            Manchete · {data}
-          </span>
-        </div>
-        <p className={`text-[18px] font-black leading-snug mb-1.5 ${p.txt}`}>
-          {headline.titulo}
-        </p>
-        <p className="text-[12px] text-white/30 leading-relaxed">{headline.subtitulo}</p>
-      </div>
-    </div>
-  );
-}
-
-// ── Alertas24h ────────────────────────────────────────────────────────────────
-function Alertas24h({ alertas }: { alertas: Alerta24h[] }) {
-  if (alertas.length === 0) return null;
-
-  return (
-    <div className="mb-5">
-      <div className="flex items-center gap-2 mb-3">
-        <Bell size={11} className="text-white/20" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/20">
-          Alertas · últimas 24h
-        </p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {alertas.map((a, i) => {
-          const s = {
-            critico:  "border-red-500/15 bg-red-500/[0.03]",
-            atencao:  "border-amber-500/15 bg-amber-500/[0.02]",
-            positivo: "border-emerald-500/15 bg-emerald-500/[0.03]",
-          }[a.tipo];
-          return (
-            <div key={i} className={`flex items-start gap-3 px-4 py-3 rounded-[16px] border ${s}`}>
-              <span className="text-[14px] shrink-0 mt-0.5">{a.emoji}</span>
-              <p className="text-[12px] text-white/50 leading-snug">{a.texto}</p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── BriefingCard ──────────────────────────────────────────────────────────────
-function BriefingCard({ estado, score }: { estado: EstadoConta; score: number }) {
-  const p = {
-    emerald: { border: "border-emerald-500/20", bg: "bg-emerald-500/[0.04]", glow: "shadow-[0_0_60px_rgba(16,185,129,0.07)]", txt: "text-emerald-400", barra: "bg-emerald-500" },
-    amber:   { border: "border-amber-500/20",   bg: "bg-amber-500/[0.03]",   glow: "",                                          txt: "text-amber-300",  barra: "bg-amber-500"   },
-    red:     { border: "border-red-500/20",     bg: "bg-red-500/[0.04]",     glow: "shadow-[0_0_60px_rgba(239,68,68,0.07)]",    txt: "text-red-300",    barra: "bg-red-500"     },
-  }[estado.cor];
-
-  const scoreLabel = score >= 80 ? "Excelente" : score >= 65 ? "Bom" : score >= 50 ? "Atenção" : "Crítico";
-
-  return (
-    <div className={`relative mb-5 rounded-[24px] border ${p.border} ${p.bg} ${p.glow} overflow-hidden`}>
-      <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${p.barra} opacity-50 rounded-l-full`} />
-      <div className="px-7 py-6 pl-9">
-        <div className="flex items-start justify-between gap-6">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-3">
-              <div className={`w-1.5 h-1.5 rounded-full ${p.barra} ${estado.urgencia === "critica" ? "animate-pulse" : ""}`} />
-              <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/20">
-                Briefing executivo
-              </span>
-            </div>
-            <p className={`text-[20px] font-black leading-tight mb-2 ${p.txt}`}>
-              {estado.icone} {estado.manchete}
+    <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.02] p-5">
+      {/* Global toggle */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Bot size={16} className={isOn ? "text-fuchsia-400" : "text-white/30"} />
+          <div>
+            <p className="text-[13px] font-bold text-white">Autopiloto</p>
+            <p className="text-[10px] text-white/30">
+              {isOn ? "Ativo — executa ações autorizadas automaticamente" : "Desativado — todas as ações requerem sua aprovação"}
             </p>
-            <p className="text-[13px] text-white/35 leading-relaxed">{estado.subtitulo}</p>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="text-[9px] text-white/20 uppercase tracking-widest mb-1">Score global</p>
-            <p className={`text-[44px] font-black font-mono leading-none ${p.txt}`}>{score}</p>
-            <p className="text-[10px] text-white/20 mt-1">{scoreLabel}</p>
           </div>
         </div>
+        <button
+          onClick={() => onToggle(!isOn)}
+          className={`relative w-11 h-6 rounded-full transition-all duration-300 ${
+            isOn ? "bg-fuchsia-600 shadow-[0_0_12px_rgba(168,85,247,0.4)]" : "bg-white/10"
+          }`}
+        >
+          <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-300 ${
+            isOn ? "translate-x-5" : ""
+          }`} />
+        </button>
       </div>
-    </div>
-  );
-}
 
-// ── DecisaoDoDia ──────────────────────────────────────────────────────────────
-function DecisaoDoDia({ engine }: { engine: EngineResult }) {
-  const critica = engine.campanhas.filter(c => c.scoreCampanha < 40).sort((a, b) => b.gastoSimulado - a.gastoSimulado)[0];
-  const escala  = !critica && engine.campanhas.filter(c => c.scoreCampanha >= 80).sort((a, b) => b.lucroLiquido * b.roas - a.lucroLiquido * a.roas)[0];
-  const campanha = critica ?? escala ?? null;
-
-  if (!campanha) return (
-    <div className="mb-5 px-6 py-5 rounded-[20px] border border-emerald-500/15 bg-emerald-500/[0.03] flex items-center gap-3">
-      <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
-      <div>
-        <p className="text-[14px] font-bold text-emerald-400">Nenhuma ação crítica hoje.</p>
-        <p className="text-[12px] text-white/30 mt-0.5">Conta estável. Monitore e mantenha o que está funcionando.</p>
-      </div>
-    </div>
-  );
-
-  const isPausar = !!critica;
-  const impacto  = isPausar
-    ? (campanha.perdaMensalProjetada ?? campanha.gastoSimulado * 0.3)
-    : campanha.lucroLiquido * 0.2 * 4;
-  const p = isPausar
-    ? { border: "border-red-500/20",     bg: "bg-red-500/[0.04]",     glow: "shadow-[0_0_50px_rgba(239,68,68,0.07)]",    badge: "bg-red-500",     btn: "bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/15",     cor: "text-red-400",     label: "🎯 AÇÃO PRIORITÁRIA"    }
-    : { border: "border-emerald-500/20", bg: "bg-emerald-500/[0.04]", glow: "shadow-[0_0_50px_rgba(16,185,129,0.07)]",   badge: "bg-emerald-500", btn: "bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/15", cor: "text-emerald-400", label: "🚀 OPORTUNIDADE DO DIA" };
-
-  return (
-    <div className={`mb-5 rounded-[24px] border ${p.border} ${p.bg} ${p.glow} overflow-hidden`}>
-      <div className="px-7 pt-5 pb-0 flex items-center justify-between">
-        <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg text-white ${p.badge}`}>{p.label}</span>
-        <p className="text-[11px] text-white/15 italic">Uma ação. Hoje.</p>
-      </div>
-      <div className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-white/[0.05] mt-5">
-        <div className="flex-1 px-7 py-5">
-          <p className="text-[17px] font-bold text-white mb-1.5">
-            {isPausar ? "Pausar" : "Escalar"}{" "}
-            <span className="text-white/50">"{campanha.nome_campanha}"</span>
-          </p>
-          <p className="text-[13px] text-white/30 leading-relaxed">
-            {isPausar
-              ? `Score ${campanha.scoreCampanha}/100 · ROAS ${campanha.roas.toFixed(2)}× · budget queimando sem retorno suficiente`
-              : `Score ${campanha.scoreCampanha}/100 · ROAS ${campanha.roas.toFixed(2)}× · janela de escala aberta`}
-          </p>
-        </div>
-        <div className="flex flex-col justify-center px-7 py-5 lg:min-w-[200px] shrink-0">
-          <p className="text-[10px] text-white/25 uppercase tracking-widest mb-1">
-            {isPausar ? "Economia estimada" : "Lucro extra estimado"}
-          </p>
-          <p className={`text-[24px] font-black font-mono ${p.cor}`}>
-            {isPausar ? "−" : "+"}R${fmtBRL(impacto)}
-          </p>
-          <p className="text-[11px] text-white/20 mt-0.5">/mês</p>
-        </div>
-        <div className="flex flex-col justify-center px-7 py-5 lg:min-w-[170px] shrink-0">
-          <a href="/analytics"
-            className={`flex items-center justify-center gap-2 py-3 px-5 rounded-xl border text-[13px] font-bold transition-all ${p.btn}`}>
-            <ChevronRight size={14} /> Agir em Dados
-          </a>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── VitoriasDaSemana ──────────────────────────────────────────────────────────
-function VitoriasDaSemana({ vitorias }: { vitorias: Vitoria[] }) {
-  if (vitorias.length === 0) return null;
-  return (
-    <section className="mb-5">
-      <div className="flex items-center gap-2 mb-3">
-        <Trophy size={11} className="text-amber-400/50" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/20">Vitórias da semana</p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-        {vitorias.map((v, i) => (
-          <div key={i} className="px-4 py-3.5 rounded-[18px] border border-white/[0.06] bg-white/[0.01] flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-              <span className="text-[16px]">{v.emoji}</span>
-              <p className="text-[12px] font-semibold text-white/70 leading-snug">{v.titulo}</p>
-            </div>
-            <p className="text-[11px] text-white/25 leading-snug">{v.detalhe}</p>
-            {v.valor && <p className={`text-[13px] font-black font-mono mt-0.5 ${v.corValor ?? "text-white/40"}`}>{v.valor}</p>}
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// ── Números Financeiros ───────────────────────────────────────────────────────
-function NumCard({ label, valor, sub, cor = "text-white", Ico }: {
-  label: string; valor: string; sub: string; cor?: string;
-  Ico: React.ComponentType<{ size?: number; className?: string }>;
-}) {
-  return (
-    <div className="p-5 rounded-[20px] border border-white/[0.06] bg-white/[0.01]">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-6 h-6 rounded-lg bg-white/[0.05] border border-white/[0.07] flex items-center justify-center">
-          <Ico size={11} className="text-white/30" />
-        </div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/20">{label}</p>
-      </div>
-      <p className={`text-[28px] font-black font-mono leading-none mb-1 ${cor}`}>{valor}</p>
-      <p className="text-[11px] text-white/20">{sub}</p>
-    </div>
-  );
-}
-
-// ── Tendência Semanal ─────────────────────────────────────────────────────────
-function ChipTend({ label, atual, pct, fmt, inv = false }: {
-  label: string; atual: number; pct: number; fmt: "brl" | "x" | "pct"; inv?: boolean;
-}) {
-  const mel = inv ? pct < -1 : pct > 1;
-  const pio = inv ? pct > 1  : pct < -1;
-  const neu = !mel && !pio;
-  const cor = neu ? "text-white/40" : mel ? "text-emerald-400" : "text-red-400";
-  const bg  = neu ? "bg-white/[0.02]" : mel ? "bg-emerald-500/[0.04]" : "bg-red-500/[0.03]";
-  const brd = neu ? "border-white/[0.05]" : mel ? "border-emerald-500/15" : "border-red-500/15";
-  const Ico = neu ? Minus : mel ? TrendingUp : TrendingDown;
-  const v   = fmt === "brl" ? `R$${fmtBRL(atual)}`
-            : fmt === "x"   ? `${atual.toFixed(2)}×`
-            : `${(atual * 100).toFixed(1)}%`;
-  return (
-    <div className={`px-4 py-3.5 rounded-[18px] border ${brd} ${bg} flex flex-col gap-1.5`}>
-      <div className="flex items-center justify-between">
-        <span className="text-[9px] font-semibold uppercase tracking-widest text-white/20">{label}</span>
-        <Ico size={11} className={cor} />
-      </div>
-      <p className={`text-[20px] font-black font-mono leading-none ${cor}`}>{v}</p>
-      <p className={`text-[10px] font-medium opacity-70 ${cor}`}>
-        {pct > 0 ? "+" : ""}{pct.toFixed(1)}% vs semana anterior
-      </p>
-    </div>
-  );
-}
-
-function TendSemanal({ comp }: { comp: ComparSemanal }) {
-  const mel = [comp.roas.pct > 2, comp.cpl.pct < -2, comp.margem.pct > 2, comp.lucro.pct > 2].filter(Boolean).length;
-  const tag = mel >= 3 ? { txt: "↑ Melhorando", cor: "text-emerald-400", dot: "bg-emerald-400" }
-            : mel <= 1 ? { txt: "↓ Piorando",   cor: "text-red-400",     dot: "bg-red-400"     }
-            :             { txt: "→ Estável",    cor: "text-white/40",    dot: "bg-white/30"    };
-  return (
-    <section className="mb-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className={`w-1.5 h-1.5 rounded-full ${tag.dot} ${mel <= 1 ? "animate-pulse" : ""}`} />
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/20">Tendência semanal</p>
-          <span className={`text-[12px] font-black ${tag.cor}`}>{tag.txt}</span>
-        </div>
-        <span className="text-[9px] text-white/15 flex items-center gap-1">
-          <Activity size={9} /> {comp.confianca}% confiança
-        </span>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-        <ChipTend label="ROAS"   atual={comp.roas.atual}            pct={comp.roas.pct}   fmt="x"   />
-        <ChipTend label="CPL"    atual={comp.cpl.atual}             pct={comp.cpl.pct}    fmt="brl" inv />
-        <ChipTend label="Margem" atual={comp.margem.atual}          pct={comp.margem.pct} fmt="pct" />
-        <ChipTend label="Lucro"  atual={Math.abs(comp.lucro.atual)} pct={comp.lucro.pct}  fmt="brl" />
-      </div>
-      {comp.confianca < 40 && (
-        <p className="mt-2.5 text-[10px] text-white/15 flex items-center gap-1.5">
-          <AlertTriangle size={9} className="text-amber-400/50" />
-          Histórico curto — acumule mais dados para comparação precisa.
-        </p>
-      )}
-    </section>
-  );
-}
-
-// ── Memória Estratégica ───────────────────────────────────────────────────────
-function MemoriaEstrategica({ decisoes }: { decisoes: DecisaoHistorico[] }) {
-  if (!decisoes.length) return null;
-  const ults = decisoes.slice(0, 3).map(d => {
-    const acao = (d as any).acao ?? "";
-    const a    = acao.toLowerCase();
-    return {
-      nome:    (d as any).campanha_nome ?? (d as any).campanha ?? "Campanha",
-      acao,
-      data:    (d as any).data ?? new Date((d as any).created_at ?? Date.now()).toLocaleDateString("pt-BR"),
-      impacto: (() => { const m = ((d as any).impacto ?? "").replace(/\./g, "").replace(",", ".").match(/[\d]+(?:\.\d+)?/); return m ? parseFloat(m[0]) : 0; })(),
-      score:   (d as any).score_snapshot ?? null,
-      tipo:    a.includes("paus") || a.includes("parar") ? "pausar" as const : a.includes("escal") || a.includes("aumentar") ? "escalar" as const : "outro" as const,
-    };
-  });
-  const total = ults.reduce((s, d) => s + d.impacto, 0);
-  return (
-    <section className="mb-5">
-      <div className="rounded-[20px] border border-purple-500/15 bg-purple-500/[0.03] overflow-hidden">
-        <div className="px-6 py-4 border-b border-white/[0.04] flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
-              <Brain size={13} className="text-purple-400" />
-            </div>
-            <div>
-              <p className="text-[12px] font-bold text-white">Memória Estratégica</p>
-              <p className="text-[10px] text-white/25">Impacto das últimas decisões</p>
-            </div>
-          </div>
-          {total > 0 && (
-            <div className="text-right">
-              <p className="text-[9px] text-white/20 uppercase tracking-widest mb-0.5">Lucro recuperado</p>
-              <p className="text-[16px] font-black font-mono text-purple-400">+R${fmtBRL(total)}</p>
-            </div>
-          )}
-        </div>
-        <div className="divide-y divide-white/[0.03]">
-          {ults.map((d, i) => {
-            const ts = {
-              pausar:  { dot: "bg-red-400",    lbl: "text-red-400/60",     label: "Pausou"  },
-              escalar: { dot: "bg-emerald-400", lbl: "text-emerald-400/60", label: "Escalou" },
-              outro:   { dot: "bg-white/30",    lbl: "text-white/30",       label: "Ajustou" },
-            }[d.tipo];
+      {/* Per-type toggles — só mostra se autopiloto global está ON */}
+      {isOn && (
+        <div className="border-t border-white/[0.05] pt-4 grid grid-cols-2 gap-2">
+          {([
+            ["auto_pause",         "Pausar campanhas"],
+            ["auto_scale_budget",  "Escalar budget"],
+            ["auto_reduce_budget", "Reduzir budget"],
+            ["auto_resume",        "Reativar campanhas"],
+          ] as [keyof AutopilotConfig, string][]).map(([key, label]) => {
+            const val = config?.[key] as boolean ?? false;
             return (
-              <div key={i} className="px-6 py-3.5 flex items-center gap-4">
-                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${ts.dot}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className={`text-[10px] font-bold ${ts.lbl}`}>{ts.label}</span>
-                    <span className="text-[12px] font-semibold text-white/60 truncate">"{d.nome}"</span>
-                  </div>
-                  <p className="text-[10px] text-white/20 mt-0.5 truncate">{d.acao}</p>
-                </div>
-                <div className="flex items-center gap-4 shrink-0">
-                  {d.score !== null && <div className="text-right"><p className="text-[8px] text-white/15 uppercase tracking-widest">Score</p><p className="text-[12px] font-black font-mono text-white/35">{d.score}</p></div>}
-                  {d.impacto > 0 && <div className="text-right"><p className="text-[8px] text-white/15 uppercase tracking-widest">Impacto</p><p className="text-[12px] font-black font-mono text-purple-400">+R${fmtBRL(d.impacto)}</p></div>}
-                  <p className="text-[10px] text-white/15 font-mono">{d.data}</p>
-                </div>
-              </div>
+              <button
+                key={key}
+                onClick={() => onTypeToggle(key, !val)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-medium transition-all ${
+                  val
+                    ? "bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30"
+                    : "bg-white/[0.03] text-white/30 border border-white/[0.06] hover:border-white/10 hover:text-white/50"
+                }`}
+              >
+                <div className={`w-1.5 h-1.5 rounded-full ${val ? "bg-fuchsia-400" : "bg-white/20"}`} />
+                {label}
+              </button>
             );
           })}
         </div>
-        {decisoes.length > 3 && (
-          <div className="px-6 py-3 border-t border-white/[0.04]">
-            <a href="/analytics" className="text-[11px] text-white/20 hover:text-white/40 transition-colors flex items-center gap-1">
-              Ver todas as {decisoes.length} decisões em Dados <ChevronRight size={11} />
-            </a>
+      )}
+
+      {isOn && (
+        <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/[0.05] border border-amber-500/10">
+          <ShieldCheck size={11} className="text-amber-400/60 shrink-0" />
+          <p className="text-[10px] text-amber-400/60">
+            Proteção ativa: máx R$${fmtBRL(config?.shield_max_spend_brl ?? 500)} por execução automática
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Decision Card ────────────────────────────────────────────────────────────
+function DecisionCard({
+  decision,
+  onApprove,
+  onReject,
+  loading,
+}: {
+  decision: PendingDecision;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  loading: boolean;
+}) {
+  const action = ACTION_LABELS[decision.action_type];
+  const impact = decision.estimated_impact_brl ?? 0;
+  const isAlert = decision.action_type === "alert";
+
+  const borderColor = {
+    pause:         "border-red-500/20",
+    resume:        "border-emerald-500/20",
+    scale_budget:  "border-emerald-500/20",
+    reduce_budget: "border-amber-500/20",
+    alert:         "border-amber-500/20",
+  }[decision.action_type];
+
+  const barColor = {
+    pause:         "bg-red-500",
+    resume:        "bg-emerald-500",
+    scale_budget:  "bg-emerald-500",
+    reduce_budget: "bg-amber-500",
+    alert:         "bg-amber-400",
+  }[decision.action_type];
+
+  const confidence = {
+    high:   { label: "Alta confiança",   color: "text-emerald-400/70" },
+    medium: { label: "Média confiança",  color: "text-amber-400/70"   },
+    low:    { label: "Baixa confiança",  color: "text-white/30"        },
+  }[decision.confidence];
+
+  return (
+    <div className={`relative rounded-[20px] border ${borderColor} bg-white/[0.02] overflow-hidden`}>
+      <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${barColor} opacity-50 rounded-l-full`} />
+
+      <div className="pl-5 pr-5 pt-4 pb-4">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[15px]">{action.icon}</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[9px] font-bold uppercase tracking-[0.2em] ${action.color}`}>
+                  {action.label}
+                </span>
+                <span className={`text-[9px] ${confidence.color}`}>· {confidence.label}</span>
+              </div>
+              <p className="text-[13px] font-bold text-white/90 mt-0.5">{decision.title}</p>
+            </div>
+          </div>
+          {impact > 0 && (
+            <div className="text-right shrink-0">
+              <p className="text-[10px] text-white/25">impacto est.</p>
+              <p className={`text-[14px] font-black ${
+                ["scale_budget", "resume"].includes(decision.action_type)
+                  ? "text-emerald-400"
+                  : "text-amber-400"
+              }`}>
+                {["scale_budget", "resume"].includes(decision.action_type) ? "+" : "-"}R${fmtBRL(impact)}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Rationale */}
+        <p className="text-[11px] text-white/40 leading-relaxed mb-4">{decision.rationale}</p>
+
+        {/* Actions */}
+        {isAlert ? (
+          <button
+            onClick={() => onReject(decision.id)}
+            disabled={loading}
+            className="w-full py-2 rounded-xl text-[12px] font-semibold text-white/40 hover:text-white/60 hover:bg-white/[0.04] border border-white/[0.06] transition-all"
+          >
+            Ciente — Ignorar
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={() => onApprove(decision.id)}
+              disabled={loading}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[12px] font-bold
+                bg-gradient-to-r from-fuchsia-600 to-violet-700 text-white
+                shadow-[0_4px_16px_rgba(168,85,247,0.25)]
+                hover:shadow-[0_4px_20px_rgba(168,85,247,0.4)]
+                active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              <CheckCircle2 size={13} />
+              Aprovar &amp; Executar
+            </button>
+            <button
+              onClick={() => onReject(decision.id)}
+              disabled={loading}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[12px] font-semibold
+                text-white/40 border border-white/[0.08] hover:border-white/20 hover:text-white/60
+                active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              <XCircle size={13} />
+              Ignorar
+            </button>
           </div>
         )}
       </div>
-    </section>
-  );
-}
-
-// ── Projeção 30d ──────────────────────────────────────────────────────────────
-function Projecao30d({ valorHero }: { valorHero: number }) {
-  if (valorHero <= 0) return null;
-  return (
-    <section className="mb-5">
-      <div className="px-7 py-5 rounded-[20px] bg-emerald-500/[0.04] border border-emerald-500/15 flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-400/40 mb-1">
-            Oportunidade destravável — próximos 30 dias
-          </p>
-          <p className="text-[36px] font-black font-mono text-emerald-400 tracking-tight">
-            +R${fmtBRL(valorHero)}
-          </p>
-          <p className="text-[12px] text-emerald-400/40 mt-1">aplicando as recomendações agora</p>
-        </div>
-        <div className="flex flex-col items-end gap-2 shrink-0 mt-1">
-          <div className="flex items-center gap-1 text-[10px] text-emerald-400/25">
-            <Sparkles size={11} /> Projeção em tempo real
-          </div>
-          <a href="/analytics" className="flex items-center gap-1.5 text-[11px] text-emerald-400/50 hover:text-emerald-400 transition-colors">
-            Simular <ChevronRight size={11} />
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── Maturidade ────────────────────────────────────────────────────────────────
-function PainelMaturidade({ mat, engine, cplMedio }: {
-  mat: Maturidade; engine: EngineResult; cplMedio: number;
-}) {
-  return (
-    <div className={`p-6 rounded-[20px] border ${mat.border} ${mat.bg}`}>
-      <div className="flex items-start justify-between gap-4 mb-3">
-        <div>
-          <p className="text-[10px] text-white/25 uppercase tracking-widest mb-1">Nível da operação</p>
-          <div className="flex items-baseline gap-2">
-            <p className={`text-[22px] font-black ${mat.cor}`}>{mat.nivel}</p>
-            {mat.proximo !== "—" && <><ChevronRight size={14} className="text-white/20" /><p className="text-[14px] font-semibold text-white/30">{mat.proximo}</p></>}
-          </div>
-        </div>
-        <div className="flex flex-col gap-0.5 text-right">
-          {[
-            { l: "ROAS",   v: `${engine.roasGlobal.toFixed(2)}×`,          c: engine.roasGlobal >= 2.5    ? "text-emerald-400" : "text-amber-400" },
-            { l: "Margem", v: `${(engine.margemGlobal * 100).toFixed(1)}%`, c: engine.margemGlobal >= 0.25 ? "text-emerald-400" : "text-red-400"   },
-            { l: "CPL",    v: cplMedio > 0 ? `R$${fmtBRL(cplMedio)}` : "—", c: cplMedio < 30             ? "text-emerald-400" : "text-amber-400" },
-          ].map((s, i) => (
-            <div key={i} className="flex items-center gap-2 justify-end">
-              <span className="text-[9px] text-white/20 uppercase tracking-widest">{s.l}</span>
-              <span className={`text-[12px] font-black font-mono ${s.c}`}>{s.v}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="flex items-center gap-1.5 mb-4">
-        {["bg-red-500", "bg-amber-500", "bg-sky-500", "bg-emerald-500"].map((cor, i) => (
-          <div key={i} className={`h-1 flex-1 rounded-full ${i < mat.indice ? cor : "bg-white/[0.06]"}`} />
-        ))}
-      </div>
-      {mat.proximo !== "—" && (
-        <div className="space-y-1.5">
-          <p className="text-[10px] text-white/20 uppercase tracking-widest mb-2">Para subir para {mat.proximo}:</p>
-          {mat.criterios.map((c, i) => (
-            <div key={i} className="flex items-start gap-2">
-              {c.ok ? <CheckCircle2 size={12} className="text-emerald-400 shrink-0 mt-0.5" /> : <div className="w-3 h-3 rounded-full border border-white/20 shrink-0 mt-0.5" />}
-              <p className={`text-[12px] leading-snug ${c.ok ? "text-emerald-400/60 line-through" : "text-white/40"}`}>{c.texto}</p>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
 
-// ── Risco ─────────────────────────────────────────────────────────────────────
-function PainelRisco({ risco }: { risco: IndiceRisco }) {
-  const ativos = risco.fatores.filter(f => f.ativo);
-  const stroke = risco.valor <= 10 ? "#10b981" : risco.valor <= 30 ? "#f59e0b" : risco.valor <= 55 ? "#f97316" : "#ef4444";
-  const circ   = 2 * Math.PI * 40;
-  const dash   = (risco.valor / 100) * (circ * 0.75);
+// ─── History Row ──────────────────────────────────────────────────────────────
+function HistoryRow({ d }: { d: PendingDecision }) {
+  const action = ACTION_LABELS[d.action_type];
+  const statusIcons: Record<string, string> = {
+    approved: "✓", rejected: "✗", executed: "⚡", expired: "○",
+  };
+  const statusColors: Record<string, string> = {
+    approved: "text-emerald-400/70", rejected: "text-red-400/50",
+    executed: "text-fuchsia-400/70", expired: "text-white/20",
+  };
+
   return (
-    <div className={`p-6 rounded-[20px] border ${risco.border} ${risco.bg}`}>
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/20 mb-1">Índice de Risco</p>
-          <div className="flex items-baseline gap-2">
-            <p className={`text-[28px] font-black font-mono ${risco.cor}`}>{risco.valor}</p>
-            <p className="text-[13px] text-white/20">/100</p>
-            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg ${risco.bg} border ${risco.border} ${risco.cor}`}>{risco.nivel}</span>
-          </div>
-        </div>
-        <div className="relative w-[72px] h-[56px] flex items-center justify-center shrink-0">
-          <svg viewBox="0 0 100 75" className="w-full">
-            <path d="M 10 65 A 40 40 0 1 1 90 65" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" strokeLinecap="round" />
-            <path d="M 10 65 A 40 40 0 1 1 90 65" fill="none" stroke={stroke} strokeWidth="8" strokeLinecap="round" strokeOpacity="0.7"
-              strokeDasharray={`${dash} ${circ}`} style={{ transition: "stroke-dasharray 1s ease" }} />
-          </svg>
-          <p className="absolute bottom-1 text-[11px] font-black font-mono" style={{ color: stroke }}>{risco.valor}</p>
-        </div>
-      </div>
-      {ativos.length > 0 ? (
-        <div className="space-y-2">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-white/15 mb-2">Fatores ativos</p>
-          {ativos.map((f, i) => (
-            <div key={i} className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-1 min-w-0"><div className="w-1 h-1 rounded-full bg-red-500/60 shrink-0" /><p className="text-[11px] text-white/40 truncate">{f.nome}</p></div>
-              <p className="text-[10px] text-white/20 shrink-0">{f.detalhe}</p>
-              <span className="text-[9px] font-bold text-red-400/60 w-8 text-right shrink-0">+{f.peso}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="flex items-center gap-2"><CheckCircle2 size={13} className="text-emerald-400" /><p className="text-[12px] text-emerald-400/60">Nenhum fator de risco ativo</p></div>
-      )}
+    <div className="flex items-center gap-3 py-2 border-b border-white/[0.04] last:border-0">
+      <span className="text-[12px] shrink-0">{action.icon}</span>
+      <p className="text-[11px] text-white/40 flex-1 truncate">{d.title}</p>
+      <span className={`text-[11px] font-bold shrink-0 ${statusColors[d.status] ?? "text-white/30"}`}>
+        {statusIcons[d.status] ?? "?"}
+      </span>
     </div>
   );
 }
 
-// ── Modo CEO ──────────────────────────────────────────────────────────────────
-function ModoCEO({ estado, valorHero, risco, score, onSair }: {
-  estado: EstadoConta; valorHero: number; risco: IndiceRisco; score: number; onSair: () => void;
-}) {
+// ─── Financeiro Chip ──────────────────────────────────────────────────────────
+function FinCard({ label, value, sub, up }: { label: string; value: string; sub?: string; up?: boolean | null }) {
   return (
-    <div className="mb-8">
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-[16px] border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+      <p className="text-[10px] text-white/25 font-semibold uppercase tracking-[0.18em] mb-1">{label}</p>
+      <div className="flex items-end gap-2">
+        <p className="text-[18px] font-black text-white">{value}</p>
+        {up !== undefined && up !== null && (
+          up
+            ? <TrendingUp size={12} className="text-emerald-400 mb-1" />
+            : <TrendingDown size={12} className="text-red-400 mb-1" />
+        )}
+      </div>
+      {sub && <p className="text-[10px] text-white/25 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+// ─── Campaign Row ─────────────────────────────────────────────────────────────
+function CampaignRow({ c }: { c: CampanhaProcessada }) {
+  const isAtivo = ["ATIVO","ACTIVE","ATIVA"].includes((c.status ?? "").toUpperCase());
+  const score = c.scoreCampanha ?? 0;
+  const scoreColor = score >= 70 ? "text-emerald-400" : score >= 40 ? "text-amber-400" : "text-red-400";
+  const scoreBg   = score >= 70 ? "bg-emerald-500/10 border-emerald-500/20" : score >= 40 ? "bg-amber-500/10 border-amber-500/20" : "bg-red-500/10 border-red-500/20";
+  const budgetPct = c.orcamentoBase > 0 ? Math.min(100, (c.gastoBase / (c.orcamentoBase * 30)) * 100) : 0;
+  const cpl = c.leadsBase > 0 ? c.gastoBase / c.leadsBase : null;
+
+  return (
+    <div className={`flex items-center gap-4 px-4 py-3 rounded-[16px] border transition-all ${
+      isAtivo ? "border-white/[0.07] bg-white/[0.02] hover:border-white/[0.12]" : "border-white/[0.04] bg-white/[0.01] opacity-60"
+    }`}>
+      {/* Score */}
+      <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${scoreBg}`}>
+        <span className={`text-[11px] font-black ${scoreColor}`}>{score}</span>
+      </div>
+
+      {/* Nome + status */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-[12px] font-semibold text-white/80 truncate">{c.nome_campanha}</p>
+          {!isAtivo && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-white/30 shrink-0">Pausada</span>
+          )}
+        </div>
+        {/* Budget bar */}
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
-          <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/20">Modo CEO · Visão executiva</span>
-        </div>
-        <button onClick={onSair} className="text-[10px] text-white/20 hover:text-white/50 px-2.5 py-1 rounded-lg border border-white/[0.07] hover:border-white/15 transition-colors">Sair</button>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-        <div className={`p-5 rounded-[20px] border ${{ emerald: "border-emerald-500/20 bg-emerald-500/[0.04]", amber: "border-amber-500/20 bg-amber-500/[0.03]", red: "border-red-500/20 bg-red-500/[0.04]" }[estado.cor]}`}>
-          <p className="text-[9px] text-white/20 uppercase tracking-widest mb-2">Estado da Conta</p>
-          <p className="text-[24px] mb-2">{estado.icone}</p>
-          <p className={`text-[14px] font-bold leading-snug ${{ emerald: "text-emerald-400", amber: "text-amber-300", red: "text-red-300" }[estado.cor]}`}>{estado.manchete}</p>
-        </div>
-        <div className="p-5 rounded-[20px] border border-white/[0.07] bg-white/[0.02]">
-          <p className="text-[9px] text-white/20 uppercase tracking-widest mb-2">Score Global</p>
-          <p className="text-[44px] font-black font-mono text-white leading-none mb-1">{score}</p>
-          <p className="text-[11px] text-white/20">/100 · ponderado por investimento</p>
-        </div>
-        <div className="p-5 rounded-[20px] border border-emerald-500/15 bg-emerald-500/[0.03]">
-          <p className="text-[9px] text-white/20 uppercase tracking-widest mb-2">Oportunidade 30 dias</p>
-          <p className="text-[32px] font-black font-mono text-emerald-400 mb-1">+R${fmtBRL(valorHero)}</p>
-          <p className="text-[11px] text-emerald-400/40">aplicando recomendações</p>
+          <div className="flex-1 h-1 rounded-full bg-white/[0.05] overflow-hidden max-w-[80px]">
+            <div className={`h-full rounded-full transition-all ${budgetPct > 90 ? "bg-red-500" : budgetPct > 70 ? "bg-amber-500" : "bg-emerald-500"}`}
+              style={{ width: `${budgetPct}%` }} />
+          </div>
+          <span className="text-[9px] text-white/20">{budgetPct.toFixed(0)}% budget</span>
         </div>
       </div>
-      <div className={`px-5 py-4 rounded-[20px] border ${risco.border} ${risco.bg} flex items-center justify-between`}>
-        <div className="flex items-baseline gap-3">
-          <p className="text-[10px] text-white/20 uppercase tracking-widest">Risco Global</p>
-          <p className={`text-[20px] font-black font-mono ${risco.cor}`}>{risco.valor}</p>
-          <span className={`text-[11px] font-bold ${risco.cor}`}>{risco.nivel}</span>
+
+      {/* Métricas */}
+      <div className="flex items-center gap-5 shrink-0">
+        <div className="text-right">
+          <p className="text-[10px] text-white/20">Gasto</p>
+          <p className="text-[12px] font-bold text-white/60">R${fmtBRL(c.gastoBase)}</p>
         </div>
-        <a href="/analytics" className="flex items-center gap-1.5 text-[12px] text-white/30 hover:text-white/60 transition-colors">
-          Análise completa <ChevronRight size={12} />
-        </a>
+        <div className="text-right">
+          <p className="text-[10px] text-white/20">ROAS</p>
+          <p className={`text-[12px] font-bold ${c.roas >= 2 ? "text-emerald-400" : c.roas >= 1 ? "text-amber-400" : "text-red-400"}`}>
+            {c.roas.toFixed(2)}×
+          </p>
+        </div>
+        {cpl !== null && (
+          <div className="text-right">
+            <p className="text-[10px] text-white/20">CPL</p>
+            <p className="text-[12px] font-bold text-white/60">R${fmtBRL(cpl)}</p>
+          </div>
+        )}
+        <div className="text-right hidden md:block">
+          <p className="text-[10px] text-white/20">Leads</p>
+          <p className="text-[12px] font-bold text-white/60">{c.leadsBase}</p>
+        </div>
       </div>
+
+      {/* Recomendação */}
+      {c.recomendacao && (
+        <div className={`text-[9px] px-2 py-1 rounded-lg border max-w-[90px] text-center hidden lg:block ${
+          c.recomendacao.toLowerCase().includes("pausar") ? "bg-red-500/10 border-red-500/20 text-red-400" :
+          c.recomendacao.toLowerCase().includes("escalar") ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
+          "bg-white/[0.04] border-white/[0.08] text-white/30"
+        }`}>
+          {c.recomendacao.slice(0, 30)}
+        </div>
+      )}
     </div>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// PAGE PRINCIPAL
-// ═════════════════════════════════════════════════════════════════════════════
-export default function PulsePage() {
-  const [dados, setDados]       = useState<CampanhaRaw[]>([]);
-  const [decisoes, setDecisoes] = useState<DecisaoHistorico[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [config, setConfig]     = useState<UserEngineConfig | null>(null);
-  const [userName, setUserName] = useState("");
-  const [userId, setUserId]     = useState<string | undefined>();
-  const [modoCEO, setModoCEO]   = useState(false);
+// ═══════════════════════════════════════════════════════════════════════════════
+// PAGE
+// ═══════════════════════════════════════════════════════════════════════════════
+export default function PulseCockpit() {
+  useSessionGuard();
 
-  const supabase = useMemo(() => createBrowserClient(
+  const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  ), []);
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
-  const { historico, diasDisponiveis, ultimoSnapshot, loading: histLoading } = useHistorico(userId);
+  // ── State ──────────────────────────────────────────────────────────────────
+  const [loading,       setLoading]       = useState(true);
+  const [syncing,       setSyncing]       = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [toast,         setToast]         = useState<{ msg: string; ok: boolean } | null>(null);
+  const [refreshing,    setRefreshing]    = useState(false);
+  const [hasData,       setHasData]       = useState<boolean | null>(null);
 
-  useEffect(() => {
-    async function load() {
+  const [engine,      setEngine]      = useState<EngineResult | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [decisions,   setDecisions]   = useState<PendingDecision[]>([]);
+  const [history,     setHistory]     = useState<PendingDecision[]>([]);
+  const [config,      setConfig]      = useState<AutopilotConfig | null>(null);
+  const [mode,        setMode]        = useState<CockpitMode>("PAZ");
+  const [showBudget,  setShowBudget]  = useState(false);
+  const [predAlerts,  setPredAlerts]  = useState<{alert_type:string;campaign_name:string;confidence:number;preventive_action:string}[]>([]);
+  const [showAllCamp, setShowAllCamp] = useState(false);
+
+  // ── Toast helper ───────────────────────────────────────────────────────────
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  }
+
+  // ── Load engine + decisions ────────────────────────────────────────────────
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-      setUserName(formatarNome(user.email?.split("@")[0] ?? ""));
-      setUserId(user.id);
-      const [{ data: ads }, { data: cfg }, { data: dec }] = await Promise.all([
-        supabase.from("metricas_ads").select("*").eq("user_id", user.id).in("status", ["ATIVO", "ACTIVE", "ATIVA"]),
-        supabase.from("user_configs").select("ticket_medio_cliente,ticket_medio_global,taxa_conversao").eq("user_id", user.id).maybeSingle(),
-        supabase.from("decisoes_historico").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(100),
+      if (!user) return;
+
+      // Workspace — fallback para user.id se não tiver workspace_members
+      const { data: wm } = await supabase
+        .from("workspace_members")
+        .select("workspace_id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      const wsId = wm?.workspace_id ?? user.id;
+      setWorkspaceId(wsId);
+
+      // Engine data — sem filtro de data_inicio (inclui campanhas com null)
+      const [metricasRes, settingsRaw] = await Promise.all([
+        supabase.from("metricas_ads").select("*").eq("user_id", user.id).limit(200),
+        supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle(),
       ]);
-      if (ads) setDados(ads);
-      if (cfg) setConfig(cfg);
-      if (dec) setDecisoes(dec as DecisaoHistorico[]);
+
+      if (metricasRes.error) console.error("[pulse] metricas_ads error:", metricasRes.error);
+
+      const rawCampanhas = metricasRes.data;
+      const userSettings = settingsRaw.data;
+
+      if (rawCampanhas?.length) {
+        const cfg = resolverConfig(userSettings as UserEngineConfig | null);
+        const eng = processarCampanhas(rawCampanhas as CampanhaRaw[], cfg);
+        setEngine(eng);
+      }
+      setHasData(!!rawCampanhas?.length);
+
+      // Cockpit decisions + alertas preditivos
+      const [cockpitRes, settingsRes, alertsRes] = await Promise.all([
+        fetch(`/api/cockpit/decisions?workspaceId=${wsId}`),
+        fetch(`/api/cockpit/settings?workspaceId=${wsId}`),
+        fetch(`/api/intelligence/predict-anomalies`),
+      ]);
+
+      if (cockpitRes.ok) {
+        const data = await cockpitRes.json();
+        setDecisions(data.pending ?? []);
+        setHistory(data.history ?? []);
+        setMode(data.mode ?? "PAZ");
+      }
+      if (settingsRes.ok) {
+        const cfg = await settingsRes.json();
+        setConfig(cfg);
+      }
+      if (alertsRes.ok) {
+        const data = await alertsRes.json();
+        setPredAlerts(data.alerts ?? []);
+      }
+    } finally {
       setLoading(false);
-      fetch("/api/snapshot", { method: "POST" }).catch(() => {});
     }
-    load();
-    fetch("/api/check-alerts", { method: "POST" }).catch(() => {});
   }, [supabase]);
 
-  const engineConfig  = useMemo(() => resolverConfig(config), [config]);
-  const engine        = useMemo(() => dados.length === 0 ? null : processarCampanhas(dados, engineConfig, 1.0, {}, {}), [dados, engineConfig]);
-  const cplMedio      = engine ? calcularCPL(engine.totalGasto, engine.totalLeads) : 0;
-  const totalInvest   = engine?.totalGasto ?? 0;
-  const scoreGlobal   = useMemo(() => engine ? calcScorePonderado(engine) : 0, [engine]);
-  const risco         = useMemo(() => engine ? calcularRisco(engine, cplMedio, totalInvest) : null, [engine, cplMedio, totalInvest]);
-  const estado        = useMemo(() => engine && risco ? calcularEstado(engine, risco.valor) : null, [engine, risco]);
-  const maturidade    = useMemo(() => engine ? calcularMaturidade(engine, cplMedio) : null, [engine, cplMedio]);
-  const projecao      = useMemo(() => engine ? calcProjecao(engine) : null, [engine]);
-  const comparSemanal = useMemo(() => calcCompar(historico), [historico]);
-  const headline      = useMemo(() => engine ? gerarHeadline(engine, scoreGlobal, risco?.valor ?? 0) : null, [engine, scoreGlobal, risco]);
-  const alertas24h    = useMemo(() => engine ? gerarAlertas24h(engine, dados) : [], [engine, dados]);
-  const vitorias      = useMemo(() => engine ? gerarVitorias(engine, decisoes) : [], [engine, decisoes]);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  const campanhasEnriquecidas = useMemo<CampanhaEnriquecida[]>(() =>
-    dados.map(c => ({ ...(c as any), m: calcMetricas(c as any) } as CampanhaEnriquecida)), [dados]);
+  // ── Sync Meta Ads data ────────────────────────────────────────────────────
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/ads-sync");
+      if (!res.ok) throw new Error("Falha no sync");
+      showToast("Campanhas sincronizadas com sucesso");
+      await loadData();
+    } catch {
+      showToast("Erro ao sincronizar campanhas", false);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
-  const ctrMedio = useMemo(() => {
-    const com = dados.filter((c: any) => (c.cliques ?? 0) > 0 && (c.impressoes ?? 0) > 0);
-    return com.length ? com.reduce((s: number, c: any) => s + (c.cliques / c.impressoes) * 100, 0) / com.length : 0;
-  }, [dados]);
+  // ── Refresh decisions ──────────────────────────────────────────────────────
+  const handleRefresh = async () => {
+    if (!workspaceId) return;
+    setRefreshing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await fetch("/api/cockpit/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, userId: user?.id }),
+      });
+      await loadData();
+      showToast("Fila atualizada com análise mais recente");
+    } catch {
+      showToast("Erro ao atualizar fila", false);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
-  const cpmMedio = useMemo(() => {
-    const com = dados.filter((c: any) => (c.impressoes ?? 0) > 0 && (c.gasto_total ?? 0) > 0);
-    return com.length ? com.reduce((s: number, c: any) => s + (c.gasto_total / c.impressoes) * 1000, 0) / com.length : 35;
-  }, [dados]);
+  // ── Approve ────────────────────────────────────────────────────────────────
+  const handleApprove = async (id: string) => {
+    setActionLoading(id);
+    try {
+      const res = await fetch(`/api/cockpit/decisions/${id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
 
+      setDecisions(prev => prev.filter(d => d.id !== id));
+      setHistory(prev => [data.decision, ...prev].slice(0, 10));
+
+      if (data.executed) {
+        showToast("Ação executada no Meta Ads com sucesso ✓");
+      } else if (data.error) {
+        showToast(`Aprovada, mas falha na execução: ${data.error}`, false);
+      } else {
+        showToast("Decisão aprovada");
+      }
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Erro ao aprovar", false);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // ── Reject ─────────────────────────────────────────────────────────────────
+  const handleReject = async (id: string) => {
+    setActionLoading(id);
+    try {
+      const res = await fetch(`/api/cockpit/decisions/${id}/reject`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Erro ao ignorar");
+      setDecisions(prev => prev.filter(d => d.id !== id));
+      showToast("Decisão ignorada");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Erro", false);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // ── Config updates ─────────────────────────────────────────────────────────
+  const handleToggleAutopilot = async (enabled: boolean) => {
+    if (!workspaceId) return;
+    const newConfig = { ...(config ?? {}), workspace_id: workspaceId, autopilot_enabled: enabled };
+    setConfig(prev => ({ ...prev!, autopilot_enabled: enabled }));
+    try {
+      await fetch("/api/cockpit/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newConfig),
+      });
+      showToast(enabled ? "Autopiloto ativado" : "Autopiloto desativado");
+    } catch { showToast("Erro ao salvar configuração", false); }
+  };
+
+  const handleTypeToggle = async (key: keyof AutopilotConfig, val: boolean) => {
+    if (!workspaceId || !config) return;
+    const newConfig = { ...config, workspace_id: workspaceId, [key]: val };
+    setConfig(newConfig);
+    try {
+      await fetch("/api/cockpit/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newConfig),
+      });
+    } catch { /* silently fail, UI already updated */ }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="flex min-h-screen bg-[#0a0a0a] items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-5 h-5 border-[1.5px] border-white/20 border-t-white/60 rounded-full animate-spin" />
-        <p className="text-[11px] text-white/20 uppercase tracking-[0.24em]">Carregando jornal</p>
-      </div>
+    <div className="flex h-screen bg-[#040406]">
+      <Sidebar />
+      <main className="ml-[60px] flex-1 p-6">
+        <SkeletonPage cols={3} />
+      </main>
     </div>
   );
 
-  return (
-    <div className="flex min-h-screen bg-gradient-to-b from-[#0a0a0a] via-[#0b0b0d] to-[#0a0a0a] text-white">
+  // ── Empty state: sem dados de campanhas ──────────────────────────────────
+  if (hasData === false) return (
+    <div className="flex h-screen bg-[#040406]">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-24 px-5 md:px-10 xl:px-14 py-10 max-w-[1400px] mx-auto w-full">
+      <main className="ml-[60px] flex-1 flex items-center justify-center p-6">
+        <div className="max-w-[420px] w-full text-center space-y-6">
+          {/* Ícone */}
+          <div className="w-16 h-16 rounded-2xl bg-fuchsia-500/10 border border-fuchsia-500/20
+            flex items-center justify-center mx-auto">
+            <Database size={28} className="text-fuchsia-400" />
+          </div>
 
-        {/* HEADER */}
-        <header className="flex flex-col sm:flex-row sm:items-start justify-between gap-5 mb-6 pb-6 border-b border-white/[0.04]">
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Calendar size={12} className="text-white/20" />
-              <p className="text-[11px] text-white/20 tracking-wide capitalize">{getDataFormatada()}</p>
+            <h2 className="text-[20px] font-black text-white mb-2">
+              Nenhuma campanha encontrada
+            </h2>
+            <p className="text-[13px] text-white/40 leading-relaxed">
+              Para usar o Cockpit, conecte sua conta do Meta Ads e sincronize suas campanhas.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <a
+              href="/settings/integracoes"
+              className="flex flex-col items-center gap-2 p-4 rounded-[16px] border border-fuchsia-500/30
+                bg-fuchsia-500/[0.06] hover:border-fuchsia-500/50 hover:bg-fuchsia-500/10
+                transition-all group"
+            >
+              <Link2 size={18} className="text-fuchsia-400" />
+              <span className="text-[12px] font-semibold text-fuchsia-300">Conectar Meta Ads</span>
+              <span className="text-[10px] text-white/30">Configurar integração</span>
+            </a>
+
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex flex-col items-center gap-2 p-4 rounded-[16px] border border-white/[0.08]
+                bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04]
+                transition-all disabled:opacity-50"
+            >
+              <RefreshCw size={18} className={`text-white/40 ${syncing ? "animate-spin" : ""}`} />
+              <span className="text-[12px] font-semibold text-white/50">
+                {syncing ? "Sincronizando..." : "Sincronizar Agora"}
+              </span>
+              <span className="text-[10px] text-white/25">Buscar campanhas do Meta</span>
+            </button>
+          </div>
+
+          <p className="text-[11px] text-white/20">
+            Depois de conectar, clique em <span className="text-white/40">Sincronizar Agora</span> para importar suas campanhas.
+          </p>
+        </div>
+      </main>
+    </div>
+  );
+
+  const m = MODOS[mode];
+  const totalImpact = decisions.reduce((s, d) => s + (d.estimated_impact_brl ?? 0), 0);
+
+  return (
+    <div className="flex h-screen bg-[#040406] overflow-hidden">
+      <Sidebar />
+
+      <main className="ml-[60px] flex-1 overflow-y-auto">
+        <div className="max-w-[960px] mx-auto px-6 py-6 space-y-5">
+
+          {/* ─── ZONA 1: Status Bar ─────────────────────────────────────────── */}
+          <div className={`rounded-[24px] border ${m.border} ${m.bg} ${m.glow} px-6 py-4`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                {/* Saudação */}
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[18px]">{m.icon}</span>
+                    <p className={`text-[11px] font-bold uppercase tracking-[0.25em] ${m.cor}`}>
+                      Modo {m.label}
+                    </p>
+                    {decisions.length > 0 && (
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${m.bg} ${m.cor} border ${m.border}`}>
+                        {decisions.length} pendente{decisions.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[16px] font-black text-white">
+                    {getSaudacao()}
+                    {engine ? ` · ROAS ${engine.roasGlobal.toFixed(2)}×` : ""}
+                  </p>
+                  <p className="text-[11px] text-white/30 capitalize">{getDataFormatada()}</p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowBudget(true)}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-semibold text-fuchsia-400/70
+                    border border-fuchsia-500/20 bg-fuchsia-500/[0.05] hover:border-fuchsia-500/40 hover:text-fuchsia-300
+                    transition-all"
+                >
+                  <PieChart size={11} />
+                  Otimizar Budget
+                </button>
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  title="Sincronizar campanhas do Meta"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-semibold text-white/40
+                    border border-white/[0.06] hover:border-white/15 hover:text-white/70
+                    transition-all disabled:opacity-50"
+                >
+                  <Database size={11} className={syncing ? "animate-pulse" : ""} />
+                  <span className="hidden md:inline">{syncing ? "Sincronizando..." : "Sync"}</span>
+                </button>
+                <button
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-semibold text-white/40
+                    border border-white/[0.06] hover:border-white/15 hover:text-white/70
+                    transition-all disabled:opacity-50"
+                >
+                  <RefreshCw size={11} className={refreshing ? "animate-spin" : ""} />
+                  Analisar
+                </button>
+                <a
+                  href="/settings"
+                  className="p-2 rounded-xl text-white/25 hover:text-white/50 hover:bg-white/[0.04]
+                    border border-white/[0.06] transition-all"
+                >
+                  <Settings size={14} />
+                </a>
+              </div>
             </div>
-            <h1 className="text-[1.9rem] font-bold text-white tracking-tight">
-              {getSaudacao()}{userName ? `, ${userName}` : ""}.
-            </h1>
-            <p className="text-[13px] text-white/25 mt-1">Seu jornal de campanhas está pronto.</p>
-            {engine && (
-              <div className="flex items-center gap-4 mt-3 flex-wrap">
-                <span className="text-[12px] text-white/30">💰 <span className="text-white/60 font-semibold">R${fmtBRL(totalInvest)}</span> investidos</span>
-                <span className="text-[12px] text-white/30">👥 <span className="text-white/60 font-semibold">{engine.totalLeads}</span> leads</span>
-                <span className="text-[12px] text-white/30">📊 <span className="text-white/60 font-semibold">{engine.totalAtivos}</span> campanhas ativas</span>
-                {decisoes.length > 0 && <span className="text-[12px] text-white/30">🧠 <span className="text-white/60 font-semibold">{decisoes.length}</span> decisões registradas</span>}
+
+            {/* Impact banner */}
+            {totalImpact > 0 && (
+              <div className="mt-3 pt-3 border-t border-white/[0.05] flex items-center gap-2">
+                <Sparkles size={11} className="text-fuchsia-400/60" />
+                <p className="text-[11px] text-white/40">
+                  Impacto potencial das decisões pendentes:
+                  <span className="text-fuchsia-400 font-bold ml-1">R${fmtBRL(totalImpact)}</span>
+                </p>
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2 shrink-0 mt-1">
-            {engine && (
-              <button onClick={() => setModoCEO(v => !v)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[12px] font-semibold transition-all ${modoCEO ? "bg-purple-500/10 border-purple-500/25 text-purple-400" : "bg-white/[0.04] border-white/[0.07] text-white/40 hover:text-white hover:border-white/15"}`}>
-                <Brain size={13} />{modoCEO ? "Sair do CEO" : "Modo CEO"}
-              </button>
-            )}
-            <a href="/analytics" className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.07] bg-white/[0.04] text-white/40 hover:text-white hover:border-white/15 text-[12px] font-semibold transition-all">
-              <BarChart2 size={13} /> Centro de Inteligência
-            </a>
-          </div>
-        </header>
 
-        {/* SEM DADOS */}
-        {!engine ? (
-          <div className="flex flex-col items-center justify-center py-32 text-center">
-            <BarChart2 size={28} className="text-white/10 mb-4" />
-            <p className="text-white/25 text-[14px] font-medium mb-1">Nenhuma campanha ativa.</p>
-            <p className="text-white/15 text-[12px] mb-6">Sincronize no Centro de Inteligência para começar.</p>
-            <a href="/analytics" className="flex items-center gap-2 px-5 py-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[13px] font-semibold hover:bg-purple-500/15 transition-all">
-              Ir para Dados <ChevronRight size={14} />
-            </a>
-          </div>
+          {/* ─── ZONA 2: Command Center ──────────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        /* MODO CEO */
-        ) : modoCEO && estado && risco && projecao ? (
-          <ModoCEO estado={estado} valorHero={projecao.valorHero} risco={risco} score={scoreGlobal} onSair={() => setModoCEO(false)} />
+            {/* Fila de decisões */}
+            <div className="lg:col-span-2 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity size={13} className="text-white/30" />
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/30">
+                    Fila de Decisões
+                  </p>
+                </div>
+                {decisions.length > 0 && (
+                  <span className="text-[10px] text-white/25">{decisions.length} aguardando</span>
+                )}
+              </div>
 
-        /* JORNAL EXECUTIVO */
-        ) : (
-          <>
-            {/* 1 · MANCHETE DO DIA */}
-            {headline && <HeadlineDoDia headline={headline} data={getDataFormatada()} />}
+              {decisions.length === 0 ? (
+                <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.02] px-6 py-10 text-center">
+                  <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20
+                    flex items-center justify-center mx-auto mb-3">
+                    <CheckCircle2 size={20} className="text-emerald-400" />
+                  </div>
+                  <p className="text-[14px] font-bold text-white/60 mb-1">Fila limpa</p>
+                  <p className="text-[12px] text-white/25">
+                    Nenhuma decisão pendente. O engine está monitorando suas campanhas.
+                  </p>
+                  {engine && engine.totalGasto > 0 && (
+                    <p className="text-[11px] text-white/20 mt-2">
+                      {engine.saudaveisCount} campanha{engine.saudaveisCount !== 1 ? "s" : ""} saudável{engine.saudaveisCount !== 1 ? "is" : ""} · ROAS {engine.roasGlobal.toFixed(2)}×
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {decisions.map(d => (
+                    <DecisionCard
+                      key={d.id}
+                      decision={d}
+                      onApprove={handleApprove}
+                      onReject={handleReject}
+                      loading={actionLoading === d.id}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
-            {/* 2 · ALERTAS 24h */}
-            {alertas24h.length > 0 && <Alertas24h alertas={alertas24h} />}
-
-            {/* 3 · BRIEFING */}
-            {estado && <BriefingCard estado={estado} score={scoreGlobal} />}
-
-            {/* 4 · DECISÃO DO DIA */}
-            <DecisaoDoDia engine={engine} />
-
-            {/* 5 · VITÓRIAS DA SEMANA */}
-            {vitorias.length > 0 && <VitoriasDaSemana vitorias={vitorias} />}
-
-            {/* 6 · NÚMEROS FINANCEIROS */}
-            <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-              <NumCard label="Investimento" valor={`R$${fmtBRL(totalInvest)}`} sub="total no período" Ico={DollarSign} />
-              <NumCard
-                label="Lucro estimado"
-                valor={engine.totalLucro >= 0 ? `+R$${fmtBRL(engine.totalLucro)}` : `-R$${fmtBRL(Math.abs(engine.totalLucro))}`}
-                sub="receita − investimento"
-                cor={engine.totalLucro >= 0 ? "text-emerald-400" : "text-red-400"}
-                Ico={TrendingUp}
+            {/* Coluna direita: autopiloto + financeiros */}
+            <div className="space-y-4">
+              <AutopilotToggle
+                config={config}
+                onToggle={handleToggleAutopilot}
+                onTypeToggle={handleTypeToggle}
               />
-              <NumCard
-                label="ROAS global"
-                valor={`${engine.roasGlobal.toFixed(2)}×`}
-                sub="retorno sobre investimento"
-                cor={engine.roasGlobal >= 2.5 ? "text-emerald-400" : engine.roasGlobal >= 1.5 ? "text-amber-400" : "text-red-400"}
-                Ico={ArrowUpRight}
-              />
-            </section>
 
-            {/* 7 · TENDÊNCIA SEMANAL */}
-            {comparSemanal && <TendSemanal comp={comparSemanal} />}
+              {/* Financeiros compactos */}
+              {engine && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/25 px-1">
+                    Situação Atual
+                  </p>
+                  <FinCard
+                    label="Investido"
+                    value={`R$${fmtBRL(engine.totalGasto)}`}
+                    sub="últimos 30 dias"
+                  />
+                  <FinCard
+                    label="ROAS Global"
+                    value={`${engine.roasGlobal.toFixed(2)}×`}
+                    sub={`Margem ${(engine.margemGlobal * 100).toFixed(0)}%`}
+                    up={engine.roasGlobal >= 2.0 ? true : engine.roasGlobal < 1.0 ? false : null}
+                  />
+                  <FinCard
+                    label="Leads"
+                    value={`${engine.totalLeads}`}
+                    sub={engine.totalLeads > 0 ? `CPL R$${fmtBRL(engine.totalGasto / engine.totalLeads)}` : "Nenhum lead"}
+                    up={engine.totalLeads > 0 ? true : false}
+                  />
+                  {engine.capitalEmRisco > 0 && (
+                    <FinCard
+                      label="Capital em Risco"
+                      value={`R$${fmtBRL(engine.capitalEmRisco)}`}
+                      sub={`${Math.round((engine.capitalEmRisco / engine.totalGasto) * 100)}% do budget`}
+                      up={false}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
 
-            {/* 8 · MEMÓRIA ESTRATÉGICA */}
-            <MemoriaEstrategica decisoes={decisoes} />
+          {/* ─── ZONA 3: Portfolio de Campanhas ──────────────────────────────── */}
+          {engine && engine.campanhas.length > 0 && (
+            <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.05]">
+                <div className="flex items-center gap-2">
+                  <Target size={13} className="text-white/30" />
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/30">
+                    Portfolio de Campanhas
+                  </p>
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-white/30">
+                    {engine.campanhas.length} campanhas
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {engine.melhorAtivo && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-amber-400/70">
+                      <Star size={10} className="text-amber-400" />
+                      <span className="hidden md:inline">Melhor: </span>
+                      <span className="font-semibold truncate max-w-[120px]">{engine.melhorAtivo.nome_campanha}</span>
+                    </div>
+                  )}
+                  {engine.campanhas.length > 5 && (
+                    <button onClick={() => setShowAllCamp(v => !v)}
+                      className="text-[10px] text-white/30 hover:text-white/60 transition-colors">
+                      {showAllCamp ? "Ver menos" : `+${engine.campanhas.length - 5} mais`}
+                    </button>
+                  )}
+                </div>
+              </div>
 
-            {/* 9 · PROJEÇÃO 30D */}
-            {projecao && <Projecao30d valorHero={projecao.valorHero} />}
+              {/* KPI bar */}
+              <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-b border-white/[0.05]">
+                {[
+                  { label: "Investido", value: `R$${fmtBRL(engine.totalGasto)}`, color: "text-white/70" },
+                  { label: "ROAS Global", value: `${engine.roasGlobal.toFixed(2)}×`, color: engine.roasGlobal >= 2 ? "text-emerald-400" : engine.roasGlobal >= 1 ? "text-amber-400" : "text-red-400" },
+                  { label: "Leads", value: String(engine.totalLeads), color: "text-white/70" },
+                  { label: "CPL Médio", value: engine.totalLeads > 0 ? `R$${fmtBRL(engine.totalGasto / engine.totalLeads)}` : "—", color: "text-white/70" },
+                ].map(k => (
+                  <div key={k.label} className="bg-white/[0.02] px-4 py-3 text-center">
+                    <p className="text-[9px] text-white/20 uppercase tracking-wider mb-0.5">{k.label}</p>
+                    <p className={`text-[15px] font-black ${k.color}`}>{k.value}</p>
+                  </div>
+                ))}
+              </div>
 
-            {/* 10 · ERIZON INTELLIGENCE */}
-            <PainelGrowthEngine
-              decisoes={decisoes}
-              campanhas={campanhasEnriquecidas}
-              cplMedio={cplMedio}
-              roasMedio={engine.roasGlobal}
-              ctrMedio={ctrMedio}
-              cpmMedio={cpmMedio}
-            />
+              {/* Lista */}
+              <div className="divide-y divide-white/[0.04]">
+                {(showAllCamp ? engine.campanhas : engine.campanhas.slice(0, 5)).map(c => (
+                  <div key={c.id} className="px-3 py-1">
+                    <CampaignRow c={c} />
+                  </div>
+                ))}
+              </div>
 
-            {/* 11 · HISTÓRICO COMPACTO */}
-            <PainelHistoricoMetricas
-              historico={historico}
-              diasDisponiveis={diasDisponiveis}
-              ultimoSnapshot={ultimoSnapshot}
-              loading={histLoading}
-              titulo="Histórico de Performance"
-              modo="compacto"
-            />
+              {/* Capital em risco */}
+              {engine.capitalEmRisco > 0 && (
+                <div className="px-5 py-3 border-t border-white/[0.05] flex items-center gap-2 bg-red-500/[0.03]">
+                  <TriangleAlert size={11} className="text-red-400 shrink-0" />
+                  <p className="text-[11px] text-red-400/70">
+                    <span className="font-bold">R${fmtBRL(engine.capitalEmRisco)}</span> em capital de risco —
+                    {engine.gastoCritico > 0 && ` R$${fmtBRL(engine.gastoCritico)} em campanhas críticas`}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
-            {/* 12 · MATURIDADE + RISCO */}
-            {(maturidade || risco) && (
-              <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                {maturidade && <PainelMaturidade mat={maturidade} engine={engine} cplMedio={cplMedio} />}
-                {risco && <PainelRisco risco={risco} />}
-              </section>
-            )}
-          </>
-        )}
+          {/* ─── ZONA 3b: Alertas Preditivos ──────────────────────────────────── */}
+          {predAlerts.length > 0 && (
+            <div className="rounded-[20px] border border-amber-500/20 bg-amber-500/[0.03] overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-3 border-b border-amber-500/10">
+                <Eye size={13} className="text-amber-400" />
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-400/70">
+                  Alertas Preditivos
+                </p>
+                <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/20 text-amber-400 font-bold">
+                  {predAlerts.length}
+                </span>
+              </div>
+              <div className="divide-y divide-amber-500/[0.08]">
+                {predAlerts.map((a, i) => (
+                  <div key={i} className="px-5 py-3 flex items-start gap-3">
+                    <AlertTriangle size={13} className="text-amber-400 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-[12px] font-semibold text-white/70 truncate">{a.campaign_name}</p>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
+                          {a.alert_type.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-[9px] text-white/25 shrink-0">
+                          {Math.round(a.confidence * 100)}% conf.
+                        </span>
+                      </div>
+                      {a.preventive_action && (
+                        <p className="text-[11px] text-white/40 leading-relaxed">{a.preventive_action}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ─── ZONA 4: Histórico de ações ──────────────────────────────────── */}
+          {history.length > 0 && (
+            <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.02] px-5 py-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Clock size={11} className="text-white/25" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/25">
+                  Últimas Decisões
+                </p>
+              </div>
+              {history.slice(0, 8).map(d => (
+                <HistoryRow key={d.id} d={d} />
+              ))}
+            </div>
+          )}
+
+          {/* ─── Links para outros módulos ───────────────────────────────────── */}
+          <div className="grid grid-cols-3 gap-3 pb-6">
+            {[
+              { href: "/analytics",      icon: BarChart2,   label: "Analytics",    sub: "Métricas detalhadas" },
+              { href: "/decision-feed",  icon: Zap,         label: "Decision Feed", sub: "Feed de sinais"      },
+              { href: "/inteligencia/ena", icon: Activity,  label: "ENA",           sub: "Atribuição"          },
+            ].map(({ href, icon: Icon, label, sub }) => (
+              <a
+                key={href}
+                href={href}
+                className="flex items-center gap-3 px-4 py-3 rounded-[16px] border border-white/[0.06]
+                  bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.03] transition-all group"
+              >
+                <Icon size={14} className="text-white/25 group-hover:text-white/50 transition-colors shrink-0" />
+                <div>
+                  <p className="text-[12px] font-semibold text-white/50 group-hover:text-white/80">{label}</p>
+                  <p className="text-[10px] text-white/20">{sub}</p>
+                </div>
+                <ChevronRight size={11} className="text-white/15 group-hover:text-white/30 ml-auto" />
+              </a>
+            ))}
+          </div>
+        </div>
       </main>
+
+      {/* Budget Optimizer Modal */}
+      {showBudget && (
+        <BudgetOptimizer onClose={() => setShowBudget(false)} />
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[300] flex items-center gap-3 px-5 py-3 rounded-[16px]
+          border shadow-2xl transition-all duration-300
+          ${toast.ok
+            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+            : "border-red-500/30 bg-red-500/10 text-red-300"
+          }`}>
+          {toast.ok ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+          <p className="text-[12px] font-semibold">{toast.msg}</p>
+        </div>
+      )}
     </div>
   );
 }

@@ -13,6 +13,15 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Project-level rule overrides
+  {
+    rules: {
+      // UI text naturally contains quotes — downgrade to warning
+      "react/no-unescaped-entities": "warn",
+      // setState inside effects is often intentional (e.g. listening to external stores)
+      "react-hooks/set-state-in-effect": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;

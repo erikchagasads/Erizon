@@ -74,8 +74,10 @@ export function diagnosticarConta(
   cplMedio: number,
   roasMedio: number,
   ctrMedio: number,
-  taxaConversaoEstimada?: number,   // leads → vendas
-  ticketMedio?: number
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _taxaConversaoEstimada?: number,   // leads → vendas
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _ticketMedio?: number
 ): RelatorioEstrutura {
   const diagnosticos: DiagnosticoEstrutural[] = [];
 
@@ -289,7 +291,8 @@ function calcularScoreEstrutura(diagnosticos: DiagnosticoEstrutural[]): number {
 function gerarProximoSalto(
   principal: DiagnosticoEstrutural,
   tipo: RelatorioEstrutura["tipoOperacao"],
-  roasMedio: number
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _roasMedio: number
 ): string {
   if (principal.camada === "saudavel")
     return "Implementar CRM de leads para medir o funil completo e otimizar pós-clique.";

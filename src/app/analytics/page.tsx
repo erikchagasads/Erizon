@@ -27,22 +27,29 @@ import CampanhaCard, {
   OverviewCard, ContaHealthBar, EmptyState, PageSkeleton,
 } from "@/components/dados/CampanhaCard";
 import PainelDecisoes from "@/components/dados/PainelDecisoes";
+import FunnelPanel from "@/components/dados/FunnelPanel";
 import PainelHistoricoMetricas from "@/components/dados/PainelHistorico";
+import { PlataformaSelector, GeralView } from "@/components/dados/PlataformaSelector";
+import type { PlataformaId } from "@/app/analytics/types";
 import { useHistorico } from "@/app/hooks/useHistorico";
 import { useCliente } from "@/app/hooks/useCliente";
 import {
-  calcMetricas, dentroDoperiodo, calcularConfianca,
+  calcMetricas, calcularConfianca,
   analisarConta, calcularRiscoProgressivo, calcularProjecaoDinamica,
   construirLogDecisao,
   type AnaliseCompleta, type LogDecisao, type SnapshotCampanha,
-  type CampanhaBase, type AcaoRankeada, type TendenciaConta,
-  type ScorePreditivo7d, type ConcentracaoRisco,
+  type CampanhaBase, type TendenciaConta,
+  type ConcentracaoRisco,
   fmtBRL0,
 } from "@/app/analytics/engine";
 import type {
   Campanha, CampanhaEnriquecida, DecisaoHistorico, DecisaoIA,
   Periodo, OrdemMetrica, AbaAtiva,
 } from "@/app/analytics/types";
+import { useSessionGuard } from "@/app/hooks/useSessionGuard";
+import {
+  resolverTipo, BENCHMARKS_POR_TIPO, type TipoCampanha,
+} from "@/app/analytics/tipoCampanha";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const PERIODOS: { id: Periodo; label: string }[] = [
@@ -54,19 +61,6 @@ const ORDENS: { id: OrdemMetrica; label: string }[] = [
   { id: "leads", label: "Leads" }, { id: "cpl", label: "CPL" }, { id: "ctr", label: "CTR" },
 ];
 
-// ─── ConfidencePill ───────────────────────────────────────────────────────────
-function ConfidencePill({ valor }: { valor: number }) {
-  const cor = valor >= 80
-    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-    : valor >= 60
-    ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
-    : "text-white/30 bg-white/[0.04] border-white/[0.08]";
-  return (
-    <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-lg border ${cor}`}>
-      <Activity size={9} />{valor}% confiança
-    </span>
-  );
-}
 
 function BlocoDecisaoIA({ decisao, onExecutar, onSimular, onIgnorar, executando, executado }: {
   decisao: DecisaoIA; onExecutar: () => void; onSimular: () => void;
@@ -212,33 +206,57 @@ function ConcentracaoRiscoPanel({ concentracao }: { concentracao: ConcentracaoRi
 }
 
 // ─── AlertaInacao ─────────────────────────────────────────────────────────────
+const POR_PAGINA = 6;
 function AlertaInacao({ perdaMensal, roasAtual, roasRisco, campanhasProblema }: {
   perdaMensal: number; roasAtual: number; roasRisco: number;
   campanhasProblema: Array<{ nome: string; score: number; gasto: number }>;
 }) {
+  useSessionGuard();
+
+  const [pagina, setPagina] = useState(0);
   if (perdaMensal <= 0 || campanhasProblema.length === 0) return null;
   const totalGastoEmRisco = campanhasProblema.reduce((s, c) => s + c.gasto, 0);
+  const totalPaginas = Math.ceil(campanhasProblema.length / POR_PAGINA);
+  const paginaAtual = campanhasProblema.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA);
   return (
     <div className="mb-5 rounded-[20px] border border-red-500/20 bg-red-500/[0.03] overflow-hidden">
       <div className="px-5 py-4">
         <div className="flex items-start gap-4 mb-4">
           <div className="w-8 h-8 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0 mt-0.5"><ShieldAlert size={14} className="text-red-400" /></div>
           <div className="flex-1">
-            <p className="text-[13px] font-bold text-red-400">Operação em risco — {campanhasProblema.length} campanha{campanhasProblema.length !== 1 ? "s" : ""} precisam de atenção</p>
-            <p className="text-[11px] text-white/30 mt-0.5">R${totalGastoEmRisco.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} investidos em campanhas com score crítico</p>
+            <p className="text-[13px] font-bold text-red-400">Operação em risco — {campanhasProblema.length} campanha{campanhasProblema.length !== 1 ? "s" : ""} ativas com score crítico</p>
+            <p className="text-[11px] text-white/30 mt-0.5">R${totalGastoEmRisco.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} investidos em campanhas ativas com score crítico</p>
           </div>
         </div>
-        <div className="mb-4 space-y-2">
-          {campanhasProblema.slice(0, 5).map((c, i) => (
-            <div key={i} className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+        <div className="mb-3 space-y-2">
+          {paginaAtual.map((c, i) => (
+            <div key={pagina * POR_PAGINA + i} className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
               <div className="flex items-center justify-center w-10 h-7 rounded-lg bg-red-500/10 border border-red-500/20 shrink-0"><span className="text-[11px] font-black text-red-400">{c.score}</span></div>
               <p className="text-[12px] font-medium text-white/70 flex-1 truncate">{c.nome}</p>
               <span className="text-[11px] text-white/30 shrink-0 font-mono">R${c.gasto.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}</span>
               <span className="text-[9px] font-bold px-2 py-1 rounded-md bg-red-500/10 text-red-400 border border-red-500/15 shrink-0">CRÍTICA</span>
             </div>
           ))}
-          {campanhasProblema.length > 5 && <p className="text-[11px] text-white/20 pl-4">+{campanhasProblema.length - 5} campanha{campanhasProblema.length - 5 !== 1 ? "s" : ""} adicional{campanhasProblema.length - 5 !== 1 ? "is" : ""}</p>}
         </div>
+        {totalPaginas > 1 && (
+          <div className="flex items-center justify-between mb-3 pt-2 border-t border-white/[0.04]">
+            <button
+              onClick={() => setPagina(p => Math.max(0, p - 1))}
+              disabled={pagina === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-white/30 hover:text-white/60 disabled:opacity-20 disabled:cursor-not-allowed transition-colors border border-white/[0.06] hover:border-white/[0.12]"
+            >
+              ← Anterior
+            </button>
+            <span className="text-[10px] text-white/20 font-mono">{pagina + 1} / {totalPaginas}</span>
+            <button
+              onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))}
+              disabled={pagina === totalPaginas - 1}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-white/30 hover:text-white/60 disabled:opacity-20 disabled:cursor-not-allowed transition-colors border border-white/[0.06] hover:border-white/[0.12]"
+            >
+              Próxima →
+            </button>
+          </div>
+        )}
         <div className="flex flex-wrap gap-x-6 gap-y-1.5 pt-3 border-t border-white/[0.04]">
           <span className="text-[12px] text-white/40"><span className="text-red-400 font-semibold">−R${perdaMensal.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}</span>{" "}potencial perdido este mês se nada for feito</span>
           {roasRisco > 0 && roasRisco < roasAtual && <span className="text-[12px] text-white/40">ROAS médio pode cair para <span className="text-red-400 font-semibold">{roasRisco.toFixed(2)}×</span></span>}
@@ -281,7 +299,7 @@ function BotaoOtimizarConta({ scoreAtual, scoreProjetado, onOtimizar, otimizando
 
 // ─── ModoCEODados ─────────────────────────────────────────────────────────────
 function ModoCEODados({
-  scoreGlobal, scoreProjetado, emRisco, totalCampanhas,
+  scoreGlobal, scoreProjetado, emRisco,
   gastoEmRisco, totalInvest, decisaoIA, analise, onSair,
 }: {
   scoreGlobal: number; scoreProjetado: number; emRisco: number;
@@ -379,7 +397,7 @@ function BannerContextoSimulacao({ campanhaNome, contaEmRisco }: { campanhaNome:
       <Info size={13} className="text-blue-400 shrink-0 mt-0.5" />
       <div>
         <p className="text-[12px] font-semibold text-white/60 mb-0.5">Por que a simulação aparece positiva?</p>
-        <p className="text-[11px] text-white/35 leading-relaxed">A conta tem campanhas críticas, mas a simulação mostra o potencial de <span className="text-white/55 font-medium">"{campanhaNome}"</span> — sua melhor campanha ativa.</p>
+        <p className="text-[11px] text-white/35 leading-relaxed">A conta tem campanhas críticas, mas a simulação mostra o potencial de <span className="text-white/55 font-medium">&quot;{campanhaNome}&quot;</span> — sua melhor campanha ativa.</p>
       </div>
     </div>
   );
@@ -394,7 +412,7 @@ function SliderProjecaoInline({ campanha, scoreGlobal, temCriticas }: {
   const corDelta = proj.deltaLucro > 0 ? "text-emerald-400" : "text-red-400";
   return (
     <div className="mt-4 p-5 rounded-2xl bg-[#0f0f11] border border-white/[0.06]">
-      <div className="flex items-center gap-2 mb-4"><Gauge size={13} className="text-purple-400" /><p className="text-[12px] font-bold text-white">Simular escala</p><span className="text-[11px] text-white/30 truncate">"{campanha.nome_campanha}"</span></div>
+      <div className="flex items-center gap-2 mb-4"><Gauge size={13} className="text-purple-400" /><p className="text-[12px] font-bold text-white">Simular escala</p><span className="text-[11px] text-white/30 truncate">&quot;{campanha.nome_campanha}&quot;</span></div>
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2"><span className="text-[11px] text-white/30">Aumentar orçamento</span><span className="text-[15px] font-black font-mono text-purple-400">+{escala}%</span></div>
         <input type="range" min={0} max={50} step={5} value={escala} onChange={e => setEscala(Number(e.target.value))} className="w-full h-1 rounded-full appearance-none bg-white/10 accent-purple-500 cursor-pointer" />
@@ -430,6 +448,149 @@ function SliderProjecaoInline({ campanha, scoreGlobal, temCriticas }: {
 }
 
 // ─── PAGE PRINCIPAL ───────────────────────────────────────────────────────────
+// ─── PainelPorObjetivo ────────────────────────────────────────────────────────
+function PainelPorObjetivo({
+  campanhas, health, onDecisao,
+}: {
+  campanhas: CampanhaEnriquecida[];
+  health: ReturnType<typeof calcularHealth>;
+  onDecisao: (id: string, acao: string, impacto: string, extra?: { lucro?: number; margem?: number }) => Promise<void>;
+}) {
+  const [colapsados, setColapsados] = useState<Set<string>>(new Set());
+  const toggleGrupo = (tipo: string) =>
+    setColapsados(prev => {
+      const next = new Set(prev);
+      if (next.has(tipo)) { next.delete(tipo); } else { next.add(tipo); }
+      return next;
+    });
+
+  // Agrupa campanhas por tipo/objetivo detectado
+  const grupos = useMemo(() => {
+    const map: Record<TipoCampanha, CampanhaEnriquecida[]> = {} as Record<TipoCampanha, CampanhaEnriquecida[]>;
+    for (const c of campanhas) {
+      const tipo = resolverTipo(
+        c.nome_campanha,
+        c.objective ?? c.tipo_campanha ?? null,
+        {
+          cliques:    c.cliques    ?? 0,
+          contatos:   c.contatos   ?? 0,
+          impressoes: c.impressoes ?? 0,
+          ctr:        c.ctr        ?? 0,
+          cpm:        c.m.cpm      ?? 0,
+          gasto_total: c.gasto_total ?? 0,
+        }
+      );
+      if (!map[tipo]) map[tipo] = [];
+      map[tipo].push(c);
+    }
+    // Ordena grupos por gasto total decrescente
+    return Object.entries(map).sort(([, a], [, b]) => {
+      const gastoA = a.reduce((s, c) => s + (c.gasto_total ?? 0), 0);
+      const gastoB = b.reduce((s, c) => s + (c.gasto_total ?? 0), 0);
+      return gastoB - gastoA;
+    }) as [TipoCampanha, CampanhaEnriquecida[]][];
+  }, [campanhas]);
+
+  if (grupos.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-white/20">
+        <Target size={32} className="mb-3 opacity-40" />
+        <p className="text-sm font-semibold">Nenhuma campanha no período</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {grupos.map(([tipo, camps]) => {
+        const bench    = BENCHMARKS_POR_TIPO[tipo];
+        const totalGasto = camps.reduce((s, c) => s + (c.gasto_total ?? 0), 0);
+        const totalLeads = camps.reduce((s, c) => s + (c.contatos ?? 0), 0);
+        const cplMedio  = totalLeads > 0 ? totalGasto / totalLeads : 0;
+        const scoresMedio = Math.round(camps.reduce((s, c) => s + c.m.score, 0) / camps.length);
+        const statusCor  = scoresMedio >= 80 ? "text-emerald-400" : scoresMedio >= 60 ? "text-amber-400" : "text-red-400";
+        const statusBg   = scoresMedio >= 80 ? "bg-emerald-500/10 border-emerald-500/20" : scoresMedio >= 60 ? "bg-amber-500/10 border-amber-500/20" : "bg-red-500/10 border-red-500/20";
+
+        return (
+          <section key={tipo}>
+            {/* Header do grupo — clicável para colapsar */}
+            <button
+              onClick={() => toggleGrupo(tipo)}
+              className="w-full flex items-center justify-between mb-3 group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-base">
+                  {bench.emoji}
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`text-[14px] font-bold ${bench.cor}`}>{bench.label}</h3>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBg} ${statusCor}`}>
+                      Score {scoresMedio}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-white/30 mt-0.5">
+                    {camps.length} campanha{camps.length !== 1 ? "s" : ""} · 
+                    R$ {totalGasto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} investidos
+                    {totalLeads > 0 && ` · ${totalLeads} resultados · CPL médio R$${cplMedio.toFixed(2)}`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                {/* Métrica principal */}
+                <div className="text-right hidden sm:block">
+                  <p className="text-[10px] text-white/25 uppercase tracking-wider">{bench.metricaPrincipal}</p>
+                  <p className={`text-[15px] font-bold ${bench.cor}`}>
+                    {bench.metricaPrincipal === "CPL" && cplMedio > 0 ? `R$${cplMedio.toFixed(2)}`
+                    : bench.metricaPrincipal === "CPM" ? `R$${(totalGasto / Math.max(camps.reduce((s,c) => s + (c.impressoes ?? 0), 0), 1) * 1000).toFixed(2)}`
+                    : "—"}
+                  </p>
+                </div>
+                {/* Setinha */}
+                <div className={`w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center transition-all group-hover:bg-white/[0.08] ${colapsados.has(tipo) ? "" : "rotate-180"}`}>
+                  <ChevronRight size={13} className="text-white/30 rotate-90" />
+                </div>
+              </div>
+            </button>
+
+            {/* Barra de health */}
+            <div className="h-px bg-white/[0.05] rounded-full mb-3 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${scoresMedio >= 80 ? "bg-emerald-500" : scoresMedio >= 60 ? "bg-amber-500" : "bg-red-500"}`}
+                style={{ width: `${scoresMedio}%` }}
+              />
+            </div>
+
+            {/* Cards das campanhas — ocultados quando colapsado */}
+            {!colapsados.has(tipo) && (
+              <div className="space-y-2.5 pl-1">
+                {camps
+                  .sort((a, b) => b.m.score - a.m.score)
+                  .map((c, i) => (
+                    <CampanhaCard
+                      key={c.id}
+                      c={c}
+                      rank={i + 1}
+                      delay={i * 40}
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      flags={(health.flagsPorCampanha[c.id] ?? []) as any}
+                      scores={health.scoresPorCampanha[c.id] ?? null}
+                      media={health.mediaConta}
+                      onDecisao={onDecisao}
+                    />
+                  ))}
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+const STATUS_ATIVOS = new Set(["ATIVO", "ACTIVE", "ATIVA"]);
+
 export default function DadosPage() {
   const supabase = useMemo(() => getSupabase(), []);
   const { clienteAtual } = useCliente();
@@ -444,7 +605,8 @@ export default function DadosPage() {
   const [periodo, setPeriodo]                     = useState<Periodo>("30d");
   const [ordem, setOrdem]                         = useState<OrdemMetrica>("score");
   const [filtroCritico, setFiltroCritico]         = useState(false);
-  const [abaAtiva, setAbaAtiva]                   = useState<AbaAtiva>("campanhas");
+  const [abaAtiva, setAbaAtiva]                   = useState<AbaAtiva | "objetivos">("campanhas");
+  const [plataformaAtiva, setPlataformaAtiva]     = useState<PlataformaId | "geral">("geral");
   const [decisaoIgnorada, setDecisaoIgnorada]     = useState(false);
   const [executandoDecisao, setExecutandoDecisao] = useState(false);
   const [decisaoExecutada, setDecisaoExecutada]   = useState(false);
@@ -452,7 +614,8 @@ export default function DadosPage() {
   const [otimizado, setOtimizado]                 = useState(false);
   const [modalSimularIA, setModalSimularIA]       = useState(false);
   const [modoCEO, setModoCEO]                     = useState(false);
-  const [logsDecisao, setLogsDecisao]             = useState<LogDecisao[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_logsDecisao, setLogsDecisao]             = useState<LogDecisao[]>([]);
   const [userId, setUserId]                       = useState<string | undefined>();
   const analiseRef = useRef<AnaliseCompleta | null>(null);
 
@@ -527,7 +690,8 @@ export default function DadosPage() {
       setCampanhas(dados.campanhas);
       setDecisoes(dados.decisoes);
       setSnapshots(dados.snapshots);
-      setSuccess(`${dados.campanhas.length} campanha${dados.campanhas.length !== 1 ? "s" : ""} sincronizada${dados.campanhas.length !== 1 ? "s" : ""}.`);
+      const ativas = dados.campanhas.filter(c => c.status === "ATIVO" || c.status === "ACTIVE" || c.status === "ATIVA").length;
+      setSuccess(`${ativas} campanha${ativas !== 1 ? "s" : ""} ativa${ativas !== 1 ? "s" : ""} sincronizada${ativas !== 1 ? "s" : ""}.`);
       setTimeout(() => setSuccess(""), 4000);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro inesperado.");
@@ -644,10 +808,12 @@ export default function DadosPage() {
   const todasEnriquecidas = useMemo<CampanhaEnriquecida[]>(() =>
     campanhas.map(c => ({ ...c, m: calcMetricas(c) })), [campanhas]);
 
+  // porPeriodo: filtra por período dos DADOS (gasto/leads), não pela data de sync
+  // data_atualizacao reflete quando foi feito o último sync — não quando a campanha rodou
+  // O período aqui serve apenas para ordenação visual; os dados são sempre do date_preset do sync
   const porPeriodo = useMemo(() =>
-    todasEnriquecidas.filter(c =>
-      dentroDoperiodo(c.data_atualizacao || c.data_insercao || c.data_inicio, periodo)
-    ), [todasEnriquecidas, periodo]);
+    todasEnriquecidas.filter(c => STATUS_ATIVOS.has(c.status ?? "")),
+    [todasEnriquecidas]);
 
   const health = useMemo(() =>
     calcularHealth(porPeriodo as unknown as CampanhaInput[], snapshots), [porPeriodo, snapshots]);
@@ -655,10 +821,10 @@ export default function DadosPage() {
   const snapshotsBase = useMemo<SnapshotCampanha[]>(() =>
     snapshots.map(s => ({
       campanha_id: s.campanha_id,
-      data: (s as any).created_at ?? new Date().toISOString(),
-      gasto: (s as any).gasto_ontem ?? 0,
-      leads: (s as any).leads_ontem ?? 0,
-      cpl:   (s as any).cpl_ontem   ?? 0,
+      data:  s.created_at ?? new Date().toISOString(),
+      gasto: s.gasto_ontem ?? 0,
+      leads: s.leads_ontem ?? 0,
+      cpl:   s.cpl_ontem   ?? 0,
     })), [snapshots]);
 
   const campanhasBase = useMemo<CampanhaBase[]>(() =>
@@ -676,7 +842,11 @@ export default function DadosPage() {
   }, [campanhasBase, snapshotsBase, health.score]);
 
   const campanhasProblemaDetalhada = useMemo(() =>
-    porPeriodo.filter(c => c.m.score < 40)
+    porPeriodo
+      .filter(c => {
+        const s = (c.status ?? "").toUpperCase();
+        return (s === "ATIVO" || s === "ACTIVE" || s === "ATIVA") && c.m.score < 40;
+      })
       .sort((a, b) => b.m.investimento - a.m.investimento)
       .map(c => ({ nome: c.nome_campanha, score: c.m.score, gasto: c.m.investimento })),
     [porPeriodo]);
@@ -826,6 +996,90 @@ export default function DadosPage() {
 
         {loading ? <PageSkeleton /> : (
           <>
+            {/* ── Seletor de plataformas ─────────────────────────────────── */}
+            <PlataformaSelector ativa={plataformaAtiva} onChange={setPlataformaAtiva} />
+
+            {/* ── Vista Geral ────────────────────────────────────────────── */}
+            {plataformaAtiva === "geral" ? (
+              <GeralView
+                campanhas={todasEnriquecidas}
+                onSelecionar={p => setPlataformaAtiva(p)}
+              />
+            ) : plataformaAtiva !== "meta" ? (() => {
+              const PLAT_LABEL: Record<string, string> = { google: "Google Ads", tiktok: "TikTok Ads", linkedin: "LinkedIn Ads" };
+              const PLAT_COR:   Record<string, string> = { google: "#EA4335",    tiktok: "#69C9D0",    linkedin: "#0A66C2"    };
+              const PLAT_SIGLA: Record<string, string> = { google: "G",          tiktok: "T",          linkedin: "in"         };
+              const platLabel = PLAT_LABEL[plataformaAtiva] ?? plataformaAtiva;
+              const platCor   = PLAT_COR[plataformaAtiva]   ?? "#888";
+              const platSigla = PLAT_SIGLA[plataformaAtiva] ?? plataformaAtiva;
+              const platCamps = todasEnriquecidas.filter(c => c.plataforma === plataformaAtiva);
+
+              if (platCamps.length === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center py-20 text-center">
+                    <div
+                      className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
+                      style={{ background: platCor + "22", border: `1px solid ${platCor}44` }}
+                    >
+                      <span className="text-[22px] font-black" style={{ color: platCor }}>{platSigla}</span>
+                    </div>
+                    <p className="text-[16px] font-bold text-white/60 mb-2">{platLabel}</p>
+                    <p className="text-[13px] text-white/25 max-w-xs leading-relaxed mb-6">
+                      Nenhuma campanha sincronizada ainda. Conecte sua conta em{" "}
+                      <a href="/settings/integracoes" className="text-purple-400 hover:underline">Integrações</a>{" "}
+                      e sincronize.
+                    </p>
+                    <button
+                      onClick={() => setPlataformaAtiva("geral")}
+                      className="text-[12px] text-purple-400 hover:text-purple-300 transition-colors"
+                    >
+                      ← Voltar para visão geral
+                    </button>
+                  </div>
+                );
+              }
+
+              const totalInvest = platCamps.reduce((s, c) => s + c.m.investimento, 0);
+              const totalLeads  = platCamps.reduce((s, c) => s + c.m.resultado,    0);
+              const cplMedio    = totalLeads > 0 ? totalInvest / totalLeads : 0;
+              const scoreGlobal = totalInvest > 0
+                ? Math.round(platCamps.reduce((s, c) => s + c.m.score * c.m.investimento, 0) / totalInvest)
+                : Math.round(platCamps.reduce((s, c) => s + c.m.score, 0) / platCamps.length);
+
+              return (
+                <div>
+                  {/* Overview strip */}
+                  <div className="grid grid-cols-4 gap-3 mb-6">
+                    {[
+                      { label: "Investimento", value: `R$${totalInvest.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}` },
+                      { label: "Leads", value: totalLeads.toLocaleString("pt-BR") },
+                      { label: "CPL Médio", value: totalLeads > 0 ? `R$${cplMedio.toFixed(2)}` : "—" },
+                      { label: "Score Médio", value: String(scoreGlobal) },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="px-4 py-3 rounded-2xl bg-white/[0.02] border border-white/[0.06]">
+                        <p className="text-[10px] text-white/25 uppercase tracking-widest mb-1">{label}</p>
+                        <p className="text-[18px] font-black font-mono text-white/80">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Campaign cards */}
+                  <div className="space-y-3">
+                    {platCamps.map((c, i) => (
+                      <CampanhaCard
+                        key={c.id} c={c} rank={i + 1} delay={i * 60}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        flags={(health.flagsPorCampanha[c.id] ?? []) as any}
+                        scores={health.scoresPorCampanha[c.id] ?? null}
+                        media={health.mediaConta}
+                        onDecisao={registrarDecisao}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })() : (
+            /* ── Meta Ads — UI existente ──────────────────────────────── */
+            <>
             {modoCEO && contaSaude ? (
               <ModoCEODados
                 scoreGlobal={contaSaude.scoreGlobal}
@@ -960,10 +1214,36 @@ export default function DadosPage() {
                       </span>
                     )}
                   </button>
+                  <button onClick={() => setAbaAtiva("objetivos")}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-medium transition-all ${abaAtiva === "objetivos" ? "bg-white/[0.07] text-white" : "text-white/25 hover:text-white/50"}`}>
+                    <Target size={12} /> Por Objetivo
+                  </button>
+                  <button onClick={() => setAbaAtiva("funil")}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-medium transition-all ${abaAtiva === "funil" ? "bg-white/[0.07] text-white" : "text-white/25 hover:text-white/50"}`}>
+                    <Activity size={12} /> Funil
+                  </button>
                 </div>
 
                 {abaAtiva === "decisoes" ? (
                   <PainelDecisoes decisoes={decisoes} campanhas={todasEnriquecidas} />
+                ) : abaAtiva === "objetivos" ? (
+                  <PainelPorObjetivo campanhas={campanhasFiltradas} health={health} onDecisao={registrarDecisao} />
+                ) : abaAtiva === "funil" ? (
+                  <div className="space-y-4">
+                    {campanhasFiltradas.length === 0 ? (
+                      <EmptyState periodo={periodo} filtrando={filtroCritico} onLimpar={() => setFiltroCritico(false)} />
+                    ) : (
+                      campanhasFiltradas.map(c => (
+                        <div key={c.id} className="rounded-2xl border border-white/[0.06] bg-[#0d0d10] p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-[12px] font-semibold text-white truncate">{c.nome_campanha}</span>
+                            <span className="text-[10px] text-white/25 shrink-0">R$ {fmtBRL0(c.gasto_total)} investidos</span>
+                          </div>
+                          <FunnelPanel campanha={c} gasto={c.gasto_total} />
+                        </div>
+                      ))
+                    )}
+                  </div>
                 ) : (
                   <>
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
@@ -995,6 +1275,7 @@ export default function DadosPage() {
                         {campanhasFiltradas.map((c, i) => (
                           <CampanhaCard
                             key={c.id} c={c} rank={i + 1} delay={i * 60}
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             flags={(health.flagsPorCampanha[c.id] ?? []) as any}
                             scores={health.scoresPorCampanha[c.id] ?? null}
                             media={health.mediaConta}
@@ -1007,6 +1288,8 @@ export default function DadosPage() {
                 )}
               </>
             )}
+            </> /* fecha bloco Meta Ads */
+            )} {/* fecha ternário plataforma */}
           </>
         )}
       </main>

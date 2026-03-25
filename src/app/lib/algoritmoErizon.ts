@@ -5,6 +5,67 @@
  *   Flag, ScoresAvancados, RadarItem, MediaConta (com freq/cpm/ctr)
  */
 
+// Objetivos Meta → tipo interno Erizon
+export type TipoCampanha = "leads" | "trafego" | "conversao" | "awareness" | "outro";
+
+/**
+ * Resolve o tipo da campanha.
+ * Prioridade: nome da campanha > objective Meta > métricas.
+ * O nome tem prioridade porque o gestor nomeia com intenção
+ * (ex: "BOUND – ALCANCE" deve ser awareness, não leads).
+ */
+export function resolverTipo(
+  objective?: string | null,
+  contatos?: number,
+  cliques?: number,
+  nomeCampanha?: string | null,
+  impressoes?: number,
+  gasto?: number
+): TipoCampanha {
+  // 1. Detecção pelo nome (maior confiança — gestor nomeia com intenção)
+  if (nomeCampanha) {
+    const n = nomeCampanha.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (/alcance|reach|awareness|reconhecimento|cobertura/.test(n)) return "awareness";
+    if (/trafego|trafego|traffic|visita|clique|link/.test(n))       return "trafego";
+    if (/lead|leads|cadastro|formulario|captacao|contato/.test(n))  return "leads";
+    if (/venda|vendas|conversao|conversao|compra|checkout/.test(n)) return "conversao";
+  }
+
+  // 2. Objective do Meta
+  if (objective) {
+    const o = objective.toUpperCase();
+    if (o === "OUTCOME_LEADS"    || o.includes("LEAD")    || o === "LEAD_GENERATION") return "leads";
+    if (o === "OUTCOME_TRAFFIC"  || o === "LINK_CLICKS"   || o.includes("TRAFFIC"))   return "trafego";
+    if (o === "OUTCOME_SALES"    || o === "CONVERSIONS"   || o.includes("PURCHASE"))  return "conversao";
+    if (o === "OUTCOME_AWARENESS"|| o === "REACH"         || o === "BRAND_AWARENESS"
+                                  || o.includes("AWARENESS"))                          return "awareness";
+    if (o === "OUTCOME_ENGAGEMENT" || o.includes("ENGAGEMENT")) {
+      if ((contatos ?? 0) > 0) return "leads";
+      if ((cliques  ?? 0) > 0) return "trafego";
+      return "awareness";
+    }
+  }
+
+  // 3. Heurística por métricas — quando nome é genérico (ex: "BRUNA – MEGA HAIR")
+  //    e não tem objective salvo no banco ainda
+  const c = contatos ?? 0;
+  const cl = cliques ?? 0;
+  const imp = impressoes ?? 0;
+  const g = gasto ?? 0;
+
+  // Tem leads → campanha de leads
+  if (c > 0) return "leads";
+  // Tem cliques mas sem leads → tráfego
+  if (cl > 0 && c === 0) return "trafego";
+  // Tem impressões mas sem cliques → awareness
+  if (imp > 100) return "awareness";
+  // Tem gasto mas zero de tudo → ainda não tem dados, trata como awareness
+  // para não penalizar por "sem leads"
+  if (g > 0 && c === 0 && cl === 0) return "awareness";
+
+  return "outro";
+}
+
 export interface CampanhaInput {
   id: string;
   nome_campanha: string;
@@ -18,6 +79,7 @@ export interface CampanhaInput {
   frequencia?: number;
   data_inicio?: string;
   data_insercao?: string;
+  objective?: string | null;
 }
 
 export interface SnapshotHistorico {
@@ -25,6 +87,10 @@ export interface SnapshotHistorico {
   cpl_semana?: number;
   ctr_semana?: number;
   leads_ontem?: number;
+  // Campos adicionais do banco (campaign_snapshots_daily)
+  created_at?: string;
+  gasto_ontem?: number;
+  cpl_ontem?: number;
 }
 
 export type UrgenciaNivel = "critico" | "atencao" | "estavel" | "oportunidade";
@@ -224,35 +290,79 @@ function calcReceita(leads: number, params: EngineParams) {
 }
 
 function calcScore(c: CampanhaInput, receita: number) {
+  const tipo  = resolverTipo(c.objective, safe(c.contatos), safe(c.cliques), c.nome_campanha, safe(c.impressoes), safe(c.gasto_total));
   const gasto = safe(c.gasto_total), leads = safe(c.contatos);
   const freq  = safe(c.frequencia),  ctr   = resolverCTR(c);
   const cpl   = leads > 0 ? gasto / leads : 0;
   const roas  = gasto > 0 ? receita / gasto : 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cpm   = safe((c as any).cpm);
+  const cliques = safe(c.cliques);
   let s = 100;
-  if (cpl > B.CPL_CRITICO)           s -= 25;
-  else if (cpl > B.CPL_BOM)          s -= 10;
-  if (roas < B.ROAS_MINIMO)          s -= 25;
-  if (leads === 0 && gasto > 100)    s -= 30;
-  if (ctr > 0 && ctr < B.CTR_BAIXO) s -= 15;
-  if (freq > B.FREQ_CRITICA)         s -= 10;
+
+  if (tipo === "leads") {
+    // Penaliza CPL alto e ausência de leads
+    if (cpl > B.CPL_CRITICO)        s -= 25;
+    else if (cpl > B.CPL_BOM)       s -= 10;
+    if (leads === 0 && gasto > 100) s -= 30;
+    if (roas < B.ROAS_MINIMO)       s -= 25;
+  } else if (tipo === "trafego") {
+    // Métrica principal: CTR e CPC — não penaliza ausência de leads
+    if (ctr > 0 && ctr < B.CTR_BAIXO) s -= 30;
+    if (ctr === 0 && gasto > 50)       s -= 20;
+    if (cliques === 0 && gasto > 50)   s -= 25;
+    // CPM alto em tráfego é sinal ruim
+    if (cpm > 80)  s -= 15;
+    else if (cpm > 50) s -= 5;
+  } else if (tipo === "conversao") {
+    // ROAS é o KPI principal
+    if (roas < 1)              s -= 40;
+    else if (roas < B.ROAS_MINIMO) s -= 20;
+    if (leads === 0 && gasto > 100) s -= 15; // conversões zeradas
+  } else if (tipo === "awareness") {
+    // CPM e frequência são as métricas — nunca penaliza leads
+    if (cpm > 100) s -= 20;
+    if (freq > B.FREQ_CRITICA) s -= 20;
+    else if (freq > B.FREQ_ATENCAO) s -= 10;
+  } else {
+    // Fallback: comportamento original
+    if (cpl > B.CPL_CRITICO)        s -= 25;
+    else if (cpl > B.CPL_BOM)       s -= 10;
+    if (roas < B.ROAS_MINIMO)       s -= 25;
+    if (leads === 0 && gasto > 100) s -= 30;
+  }
+
+  // Penalidades universais (valem para todos os tipos)
+  if (ctr > 0 && ctr < B.CTR_BAIXO && tipo !== "trafego" && tipo !== "awareness") s -= 15;
+  if (freq > B.FREQ_CRITICA)                               s -= 10;
   return clamp(s);
 }
 
-function calcularUrgencia(score: number, roas: number, margem: number): UrgenciaNivel {
-  if (score < 40 || roas < 1)                                           return "critico";
-  if (score >= 80 && roas >= B.ROAS_ESCALA && margem >= B.MARGEM_ALVO) return "oportunidade";
+function calcularUrgencia(score: number, roas: number, margem: number, tipo?: TipoCampanha): UrgenciaNivel {
+  // Awareness e tráfego não têm ROAS como KPI — nunca marcar crítico por ROAS zerado
+  const ignorarRoas = tipo === "awareness" || tipo === "trafego";
+  if (score < 40 || (!ignorarRoas && roas < 1))                         return "critico";
+  if (score >= 80 && (ignorarRoas || roas >= B.ROAS_ESCALA) && margem >= B.MARGEM_ALVO) return "oportunidade";
   if (score < 65)                                                        return "atencao";
   return "estavel";
 }
 
-function gerarNarrativa(nome: string, roas: number, margem: number, cpl: number, urgencia: UrgenciaNivel) {
+function gerarNarrativa(nome: string, roas: number, margem: number, cpl: number, urgencia: UrgenciaNivel, tipo?: TipoCampanha) {
   const pct = (margem * 100).toFixed(0);
-  if (urgencia === "critico")
+  if (urgencia === "critico") {
+    if (tipo === "trafego")   return `Campanha ${nome} com tráfego ineficiente. Revise criativo e segmentação.`;
+    if (tipo === "awareness") return `Campanha ${nome} com CPM elevado. Audiência pode estar saturada.`;
     return `Campanha ${nome} operando sob risco. ROAS ${roas.toFixed(2)}x e margem ${pct}%. Intervenção imediata recomendada.`;
-  if (urgencia === "oportunidade")
+  }
+  if (urgencia === "oportunidade") {
+    if (tipo === "trafego")   return `Campanha ${nome} com CTR forte. Considere aumentar orçamento.`;
     return `Campanha ${nome} com ROAS ${roas.toFixed(2)}x e margem ${pct}%. Cenário favorável para escala.`;
-  if (urgencia === "atencao")
+  }
+  if (urgencia === "atencao") {
+    if (tipo === "trafego")   return `Campanha ${nome} com CTR abaixo do esperado. Teste novos criativos.`;
+    if (tipo === "awareness") return `Campanha ${nome} com frequência alta. Renove os criativos.`;
     return `Campanha ${nome} exige monitoramento. CPL atual R$${cpl.toFixed(0)}.`;
+  }
   return `Campanha ${nome} operando dentro da estabilidade esperada.`;
 }
 
@@ -260,14 +370,18 @@ function gerarFlags(c: CampanhaInput, urgencia: UrgenciaNivel, roas: number, cpl
   const flags: string[] = [];
   const freq  = safe(c.frequencia), ctr = resolverCTR(c);
   const leads = safe(c.contatos),   gasto = safe(c.gasto_total);
-  if (urgencia === "critico")             flags.push("CRÍTICA");
-  if (urgencia === "oportunidade")        flags.push("ESCALAR");
-  if (leads === 0 && gasto > 100)        flags.push("SEM LEADS");
-  if (roas < B.ROAS_MINIMO && roas > 0) flags.push("ROAS BAIXO");
-  if (cpl > B.CPL_CRITICO)              flags.push("CPL ALTO");
-  if (freq > B.FREQ_CRITICA)            flags.push("FREQ. CRÍTICA");
-  else if (freq > B.FREQ_ATENCAO)       flags.push("FREQ. ALTA");
-  if (ctr > 0 && ctr < B.CTR_BAIXO)    flags.push("CTR BAIXO");
+  const tipo  = resolverTipo(c.objective, safe(c.contatos), safe(c.cliques), c.nome_campanha, safe(c.impressoes), safe(c.gasto_total));
+  const ignorarRoas  = tipo === "awareness" || tipo === "trafego";
+  const ehLeadsType  = tipo === "leads" || tipo === "conversao";
+
+  if (urgencia === "critico")                                                     flags.push("CRÍTICA");
+  if (urgencia === "oportunidade")                                                flags.push("ESCALAR");
+  if (leads === 0 && gasto > 100 && ehLeadsType)                                 flags.push("SEM LEADS");
+  if (!ignorarRoas && roas < B.ROAS_MINIMO && roas > 0)                          flags.push("ROAS BAIXO");
+  if (cpl > B.CPL_CRITICO && ehLeadsType)                                        flags.push("CPL ALTO");
+  if (freq > B.FREQ_CRITICA)                                                      flags.push("FREQ. CRÍTICA");
+  else if (freq > B.FREQ_ATENCAO)                                                 flags.push("FREQ. ALTA");
+  if (ctr > 0 && ctr < B.CTR_BAIXO)                                              flags.push("CTR BAIXO");
   return flags;
 }
 
@@ -281,8 +395,9 @@ export function analisarCampanhas(campanhas: CampanhaInput[], params: EnginePara
     const cpl     = leads > 0 ? gasto / leads : 0;
     const roas    = gasto > 0 ? receita / gasto : 0;
     const score   = calcScore(c, receita);
-    const urgencia  = calcularUrgencia(score, roas, margem);
-    const narrativa = gerarNarrativa(c.nome_campanha, roas, margem, cpl, urgencia);
+    const tipo    = resolverTipo(c.objective, safe(c.contatos), safe(c.cliques), c.nome_campanha, safe(c.impressoes), safe(c.gasto_total));
+    const urgencia  = calcularUrgencia(score, roas, margem, tipo);
+    const narrativa = gerarNarrativa(c.nome_campanha, roas, margem, cpl, urgencia, tipo);
     if (urgencia === "critico")      lucroEmRisco   += Math.abs(lucro);
     if (urgencia === "oportunidade") lucroPotencial += lucro;
     return { id: c.id, nome: c.nome_campanha, gasto, receita, lucro, margem, roas, cpl, score, urgencia, narrativa };
@@ -362,6 +477,7 @@ export function calcularHealth(
   const enriched: CampanhaEnriquecida[] = resultados.map((r, i) => {
     const c = campanhas[i];
     const diasAtivo = (() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((c as any).dias_ativo) return (c as any).dias_ativo as number;
       if (c.data_inicio) {
         const diff = (Date.now() - new Date(c.data_inicio).getTime()) / 86_400_000;

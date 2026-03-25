@@ -1,84 +1,158 @@
 import { NextResponse, NextRequest } from "next/server";
 import { Groq } from "groq-sdk";
 import { requireAuth } from "@/lib/auth-guard";
+import { getContextoCliente } from "@/lib/agente-memoria";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import { checkRateLimit, rateLimitHeaders, RATE_LIMIT_PRESETS } from "@/lib/rate-limiter";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-const PROMPTS_POR_TIPO: Record<string, string> = {
-  headline: `Você é um ESPECIALISTA em HEADLINES que convertem.
+// ── Skills de Copy ────────────────────────────────────────────────────────────
 
-MISSÃO: Criar headlines MAGNÉTICAS, CURIOSAS e IRRESISTÍVEIS.
+const SKILLS: Record<string, (ctx: string) => string> = {
+
+  headline: (ctx) => `Você é especialista em headlines de alta conversão para o mercado brasileiro.
 
 TÉCNICAS QUE VOCÊ DOMINA:
-• Curiosity Gap (criar lacuna de curiosidade)
-• Benefit-Driven (foco no benefício claro)
-• Number-Based (usar números específicos)
-• How-To (ensinar algo valioso)
-• Negative Angle (abordar dor/medo)
-• Question-Based (fazer pergunta poderosa)
-• Shock Value (surpreender)
+• Curiosity Gap — cria lacuna de curiosidade irresistível
+• Benefit-Driven — benefício claro e direto ao ponto
+• Number-Based — números específicos que geram credibilidade
+• How-To — ensinamento valioso que promete resultado
+• Negative Angle — dor/medo que força identificação
+• Question-Based — pergunta poderosa que exige resposta
+• Shock Value — surpreende e para o scroll
+• Social Proof — prova social que gera confiança
 
-FORMATO: Crie 8-10 headlines usando técnicas variadas. Indique a técnica entre [colchetes].
+CONTEXTO:
+${ctx}
 
-Crie headlines para:`,
+TAREFA: Crie 10 headlines usando técnicas variadas. Indique a técnica entre [colchetes].
+Responda SOMENTE as headlines, sem introdução ou explicação extra.`,
 
-  cta: `Você é um MESTRE em CTAs (Call-to-Action) que geram cliques e conversões.
+  cta: (ctx) => `Você é especialista em CTAs que geram cliques e conversões no Brasil.
 
-MISSÃO: Criar CTAs que OBRIGAM a pessoa a agir AGORA.
+TIPOS DE CTA:
+• Baixo compromisso — fácil de dizer sim
+• Alto compromisso — para quem já está convencido
+• Urgência — escassez real ou deadline
+• Curiosidade — desperta vontade de descobrir
+• Prova social — "junte-se a X pessoas"
+• Benefício direto — o que ganho ao clicar
 
-TIPOS: Baixo compromisso | Alto compromisso | Urgência | Curiosidade
+CONTEXTO:
+${ctx}
 
-FORMATO: Crie 6-8 CTAs variados. Indique o tipo entre [colchetes].
+TAREFA: Crie 8 CTAs variados. Indique o tipo entre [colchetes].
+Responda SOMENTE os CTAs.`,
 
-Crie CTAs para:`,
+  body_ad: (ctx) => `Você é copywriter expert em anúncios pagos para Meta Ads Brasil.
 
-  body_ad: `Você é um COPYWRITER EXPERT em anúncios pagos (Meta Ads, Google Ads).
+ESTRUTURA OBRIGATÓRIA: Gancho → Agitação → Solução → Prova → CTA
 
-MISSÃO: Criar body copy que PRENDE atenção, gera DESEJO e leva à AÇÃO.
+FÓRMULAS QUE VOCÊ USA:
+• PAS — Problema, Agitação, Solução
+• AIDA — Atenção, Interesse, Desejo, Ação
+• Before/After/Bridge — antes, depois, como chegar lá
+• 4Ps — Picture, Promise, Prove, Push
 
-ESTRUTURA: Gancho → Agitação → Solução → Prova → CTA
+CONTEXTO:
+${ctx}
 
-FORMATO: Crie 3 versões (50-100 palavras cada): uma focada em DOR, outra em DESEJO, outra em CURIOSIDADE.
+TAREFA: Crie 3 versões de body copy (80-120 palavras cada):
+- Versão 1: focada em DOR (o que a pessoa perde sem agir)
+- Versão 2: focada em DESEJO (o que a pessoa ganha)
+- Versão 3: focada em CURIOSIDADE (cria lacuna de informação)`,
 
-Crie body copy para:`,
-
-  vsl: `Você é um ROTEIRISTA EXPERT em VSLs (Video Sales Letters).
-
-ESTRUTURA: Gancho (0-15s) → Identificação (15-60s) → Descoberta (1-3min) → Solução (3-5min) → Prova (5-8min) → Oferta (8-10min) → CTA Final
-
-FORMATO: Estrutura completa com minutagem. Use [VISUAL] para indicar o que aparece na tela.
-
-Crie VSL para:`,
-
-  email: `Você é um EXPERT em EMAIL MARKETING de alta conversão.
-
-ESTRUTURA:
-ASSUNTO: [irresistível, max 50 chars]
-PREVIEW: [complementa o assunto]
-ABERTURA: [gancho forte]
-CORPO: [história, benefício, prova]
-CTA: [único e claro — aparece 2x]
-P.S.: [reforço final]
-
-REGRAS: Escrever como para UM amigo | Parágrafos curtos | Pessoal
-
-Crie email para:`,
-
-  landing_page: `Você é um EXPERT em LANDING PAGES de alta conversão.
+  email: (ctx) => `Você é expert em email marketing de alta conversão para o Brasil.
 
 ESTRUTURA COMPLETA:
-1. HERO: Headline principal + Sub-headline + CTA primário
-2. PROBLEMA: 3-5 dores do avatar
-3. SOLUÇÃO: Oferta + como funciona (3-5 passos)
-4. BENEFÍCIOS: 5-8 benefícios (não features)
-5. PROVA SOCIAL: Depoimentos + números
-6. GARANTIA: Reverter risco totalmente
-7. FAQ: 5-7 objeções respondidas
-8. CTA FINAL: Urgência + ação clara
+ASSUNTO: [irresistível, máx 50 chars, abre o email]
+PREVIEW: [complementa o assunto, máx 90 chars]
+ABERTURA: [gancho forte — 1 frase que prende]
+CORPO: [história → identificação → solução → prova]
+CTA: [único e claro — aparece 2x no email]
+P.S.: [reforça o benefício principal ou cria urgência]
 
-Crie landing page para:`,
+REGRAS:
+- Escreva como para UM amigo específico
+- Parágrafos de 1-3 linhas máximo
+- Linguagem pessoal, coloquial, sem corporativo
+- Emojis apenas se o nicho permitir
+
+CONTEXTO:
+${ctx}
+
+Crie o email completo seguindo a estrutura acima.`,
+
+  landing_page: (ctx) => `Você é expert em landing pages de alta conversão.
+
+ESTRUTURA COMPLETA:
+1. HERO: Headline + Sub-headline + CTA primário + prova visual
+2. PROBLEMA: 3-5 dores do avatar (linguagem emocional)
+3. SOLUÇÃO: Como funciona em 3-5 passos simples
+4. BENEFÍCIOS: 6-8 benefícios reais (não features técnicas)
+5. PROVA SOCIAL: Depoimentos com números + foto/nome
+6. AUTORIDADE: Quem é você + por que confiar
+7. GARANTIA: Reverte 100% do risco da compra
+8. FAQ: 5-7 objeções respondidas com honestidade
+9. CTA FINAL: Urgência + escassez + ação clara
+
+CONTEXTO:
+${ctx}
+
+Crie a copy completa da landing page seguindo essa estrutura.`,
+
+  copy_carrossel: (ctx) => `Você é copywriter de carrosseis do Instagram/Facebook que param o scroll e geram engajamento e cliques.
+
+REGRAS DO CARROSSEL:
+- Slide 1: Hook impossível de ignorar — para o scroll
+- Slides 2-5: Conteúdo que entrega valor E gera desejo
+- Penúltimo slide: Prova social ou resultado
+- Último slide: CTA forte com instrução clara
+
+TÉCNICAS:
+• Listicle — "5 erros que..."
+• Before/After — transformação visual
+• Tutorial — passo a passo
+• Segredo revelado — "o que ninguém te contou"
+• Comparativo — "você vs quem faz certo"
+
+CONTEXTO:
+${ctx}
+
+FORMATO por slide:
+SLIDE [N]: [Título/headline]
+[Texto do slide — máx 2-3 linhas]
+[CTA se for o último]`,
+
+  copy_imagem: (ctx) => `Você é copywriter de anúncios de imagem estática para Meta Ads Brasil.
+
+ELEMENTOS DA COPY DE IMAGEM:
+• Headline da imagem: máx 5-7 palavras, fonte grande
+• Texto principal do feed: máx 125 chars para não cortar
+• Descrição abaixo do link: reforça a headline
+• CTA do botão: ação específica
+
+GATILHOS QUE FUNCIONAM EM IMAGEM:
+• Número específico ("R$47 apenas hoje")
+• Pergunta direta ("Você ainda faz isso?")
+• Declaração ousada ("Isso dobrou meu faturamento")
+• Benefício imediato ("Resultado em 7 dias")
+
+CONTEXTO:
+${ctx}
+
+TAREFA: Crie 4 variações completas de copy para imagem estática.
+FORMATO:
+VERSÃO [N]:
+HEADLINE DA IMAGEM: 
+TEXTO PRINCIPAL:
+DESCRIÇÃO:
+BOTÃO CTA:`,
 };
+
+// ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -94,7 +168,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { mensagemUsuario, tipoCopy, contexto } = await req.json();
+    const { mensagemUsuario, tipoCopy, contexto, cliente_id } = await req.json();
 
     if (!mensagemUsuario?.trim()) {
       return NextResponse.json({
@@ -102,29 +176,40 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const promptBase = PROMPTS_POR_TIPO[tipoCopy] ?? PROMPTS_POR_TIPO.headline;
+    // Buscar memória do cliente se informado
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
+    );
+    const memoriaCliente = await getContextoCliente(supabase, auth.user.id, cliente_id, "copywriter");
 
-    const promptFinal = `${promptBase}
-
-${mensagemUsuario}
-
-${contexto ? `\nCONTEXTO ADICIONAL:\n${contexto}` : ""}
-
-INSTRUÇÕES:
-- Copywriting de ALTO NÍVEL, conteúdo PRONTO PARA USAR
-- Seja específico e acionável
-- Use emojis quando melhorar a copy
-- NUNCA seja genérico ou clichê
-- Responda em português BR`;
+    const ctxFinal = [mensagemUsuario, contexto, memoriaCliente].filter(Boolean).join("\n\nCONTEXTO ADICIONAL:\n");
+    const skillFn = SKILLS[tipoCopy] ?? SKILLS.headline;
+    const prompt = skillFn(ctxFinal);
 
     const completion = await groq.chat.completions.create({
       messages: [
         {
           role: "system",
-          content:
-            "Você é um copywriter de classe mundial, especialista em direct response e storytelling persuasivo. Seus textos convertem. Cada palavra importa. Responde sempre em português BR.",
+          content: `Você é o Copiloto Criativo da Erizon — copywriter de classe mundial especializado em direct response para o mercado brasileiro de tráfego pago.
+
+IDENTIDADE:
+- 15+ anos de experiência em copy de alta conversão
+- Especialista em Meta Ads, funis de venda e email marketing
+- Conhece profundamente o mercado digital brasileiro
+- Cada palavra tem propósito: persuadir, converter, vender
+
+PRINCÍPIOS:
+- Nunca seja genérico — cada copy é única para o contexto dado
+- Use dados reais da campanha quando disponíveis
+- Priorize clareza sobre criatividade — copy clara converte mais
+- Escreva como humano, não como IA corporativa
+- Português BR fluente, coloquial quando apropriado
+- Nunca diga "não posso" — adapte e entregue sempre`,
         },
-        { role: "user", content: promptFinal },
+        { role: "user", content: prompt },
       ],
       model: "llama-3.3-70b-versatile",
       temperature: 0.85,
@@ -134,12 +219,11 @@ INSTRUÇÕES:
     return NextResponse.json({
       copy: completion.choices[0].message.content,
     });
-  } catch (error: any) {
-    console.error("Erro na API Copywriter:", error);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Erro inesperado";
+    console.error("Erro na API Copywriter:", msg);
     return NextResponse.json(
-      {
-        error: `Erro ao gerar copy: ${error.message}. Verifique se a GROQ_API_KEY está configurada.`,
-      },
+      { error: `Erro ao gerar copy: ${msg}` },
       { status: 500 }
     );
   }

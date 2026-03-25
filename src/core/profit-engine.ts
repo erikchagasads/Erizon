@@ -1,18 +1,23 @@
+import type { CampaignEconomics, CampaignSnapshot, ClientAccount } from "@/types/erizon";
 
-import { CampaignEconomics, CampaignSnapshot, ClientAccount } from "@/types/erizon";
+export function calculateProfit(spend: number, revenue: number) {
+  const profit = revenue - spend;
+  const roi = spend > 0 ? revenue / spend : 0;
+  return { spend, revenue, profit, roi, roas: roi };
+}
 
 export function calculateCampaignEconomics(
   campaign: CampaignSnapshot,
   client: ClientAccount,
 ): CampaignEconomics {
-  const adSpend = campaign.spendToday;
-  const revenue = campaign.revenueToday;
-  const productCost = revenue * client.productCostRate;
-  const paymentFees = revenue * client.paymentFeeRate;
-  const logistics = revenue * client.logisticsRate;
-  const refunds = revenue * client.refundRate;
+  const revenue = Number(campaign.revenueToday ?? 0);
+  const adSpend = Number(campaign.spendToday ?? 0);
+  const productCost = revenue * Number(client.productCostRate ?? 0);
+  const paymentFees = revenue * Number(client.paymentFeeRate ?? 0);
+  const logistics = revenue * Number(client.logisticsRate ?? 0);
+  const refunds = revenue * Number(client.refundRate ?? 0);
   const grossProfit = revenue - adSpend - productCost;
-  const netProfit = revenue - adSpend - productCost - paymentFees - logistics - refunds;
+  const netProfit = grossProfit - paymentFees - logistics - refunds;
   const marginPct = revenue > 0 ? (netProfit / revenue) * 100 : 0;
   const profitRoas = adSpend > 0 ? netProfit / adSpend : 0;
 

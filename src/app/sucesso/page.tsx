@@ -44,7 +44,8 @@ const PASSOS = [
 function SucessoContent() {
   const params   = useSearchParams();
   const router   = useRouter();
-  const session  = params.get("session_id");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _session  = params.get("session_id");
   const [step, setStep] = useState(0);
 
   useEffect(() => {

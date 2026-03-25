@@ -1,6 +1,40 @@
 // lib/engine/pulseEngine.ts
 // Motor financeiro da Erizon — regra de negócio separada da UI.
 
+// ─── Detecção de tipo de campanha (inline, sem dependência externa) ───────────
+type TipoCampanha = "leads" | "trafego" | "conversao" | "awareness" | "outro";
+
+function resolverTipoCampanha(c: CampanhaRaw): TipoCampanha {
+  // 1. Nome
+  if (c.nome_campanha) {
+    const n = c.nome_campanha.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (/alcance|reach|awareness|reconhecimento|cobertura/.test(n)) return "awareness";
+    if (/trafego|traffic|visita|clique/.test(n))                    return "trafego";
+    if (/lead|leads|cadastro|formulario|captacao|contato/.test(n))  return "leads";
+    if (/venda|vendas|conversao|compra|checkout/.test(n))           return "conversao";
+  }
+  // 2. Objective do Meta
+  const o = (c.objective ?? "").toUpperCase();
+  if (o === "OUTCOME_LEADS"    || o.includes("LEAD"))     return "leads";
+  if (o === "OUTCOME_TRAFFIC"  || o.includes("TRAFFIC"))  return "trafego";
+  if (o === "OUTCOME_SALES"    || o.includes("PURCHASE")) return "conversao";
+  if (o === "OUTCOME_AWARENESS"|| o.includes("AWARENESS")|| o === "REACH") return "awareness";
+  // 3. Métricas
+  const contatos = Number(c.contatos ?? 0);
+  const cliques  = Number(c.cliques  ?? 0);
+  const impressoes = Number(c.impressoes ?? 0);
+  const gasto    = Number(c.gasto_total ?? 0);
+  if (contatos > 0)                    return "leads";
+  if (cliques > 0 && contatos === 0)   return "trafego";
+  if (impressoes > 100)                return "awareness";
+  if (gasto > 0 && contatos === 0)     return "awareness"; // gasto sem leads → não penalizar
+  return "outro";
+}
+
+export function ehAwareness(c: CampanhaRaw): boolean {
+  return resolverTipoCampanha(c) === "awareness" || resolverTipoCampanha(c) === "trafego";
+}
+
 export interface CampanhaRaw {
   id: string;
   nome_campanha: string;
@@ -13,6 +47,7 @@ export interface CampanhaRaw {
   criado_at?: string;
   data_insercao?: string;
   data_inicio?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 
@@ -135,15 +170,17 @@ function calcularRecomendacao(
   const roasMin = config.roasMinimo    ?? 1.5;
   const ctr     = safeNumber(c.ctr);
   const freq    = safeNumber(c.frequencia);
+  const tipo    = resolverTipoCampanha(c);
+  const isAwareness = tipo === "awareness" || tipo === "trafego";
 
-  if (diasAtivo < diasMat)                   return { recomendacao: "Maturando",       scoreCampanha: 70  };
-  if (margem < 0)                            return { recomendacao: "Pausar",          scoreCampanha: 35  };
-  if (roas < roasMin)                        return { recomendacao: "ROAS crítico",    scoreCampanha: 45  };
-  if (budgetConsumo > 90)                    return { recomendacao: "Budget crítico",  scoreCampanha: 55  };
-  if (freq > 3.5)                            return { recomendacao: "Saturação",       scoreCampanha: 60  };
-  if (ctr > 0 && ctr < 0.9)                 return { recomendacao: "Trocar Criativo", scoreCampanha: 70  };
-  if (margem > 0.45 && roas > roasMin * 1.5) return { recomendacao: "Escalar",        scoreCampanha: 100 };
-  return                                            { recomendacao: "Manter",          scoreCampanha: 80  };
+  if (diasAtivo < diasMat)                    return { recomendacao: "Maturando",       scoreCampanha: 70  };
+  if (margem < 0 && !isAwareness)             return { recomendacao: "Pausar",          scoreCampanha: 35  };
+  if (roas < roasMin && !isAwareness)         return { recomendacao: "ROAS crítico",    scoreCampanha: 45  };
+  if (budgetConsumo > 90)                     return { recomendacao: "Budget crítico",  scoreCampanha: 55  };
+  if (freq > 3.5)                             return { recomendacao: "Saturação",       scoreCampanha: 60  };
+  if (ctr > 0 && ctr < 0.9 && !isAwareness)  return { recomendacao: "Trocar Criativo", scoreCampanha: 70  };
+  if (margem > 0.45 && roas > roasMin * 1.5) return { recomendacao: "Escalar",         scoreCampanha: 100 };
+  return                                             { recomendacao: "Manter",          scoreCampanha: 80  };
 }
 
 // ─── Score global ─────────────────────────────────────────────────────────────

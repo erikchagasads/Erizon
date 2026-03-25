@@ -2,11 +2,14 @@
 // Tipos compartilhados entre os componentes da página Dados.
 // v2: adicionados tipos para Decision Intelligence Engine
 
+export type PlataformaId = "meta" | "google" | "tiktok" | "linkedin";
+
 export interface Campanha {
   id: string;
   nome_campanha: string;
   status: string;
   gasto_total: number;
+  plataforma?: PlataformaId;
   orcamento: number;
   contatos: number;
   impressoes: number;
@@ -22,6 +25,26 @@ export interface Campanha {
   receita_estimada?: number;
   dias_ativo?: number;
   ticket_medio?: number;
+  objective?: string | null;      // ← campo Meta API sincronizado pelo ads-sync
+  tipo_campanha?: string | null;  // ← tipo detectado pelo motor de análise
+  // Campos de métricas estendidas (campanhas de vídeo, app, engajamento)
+  visualizacoes?: number;
+  instalacoes?: number;
+  engajamentos?: number;
+  mensagens_iniciadas?: number;
+  // Funil completo — Camada 1 (Meta Pixel events)
+  compras?: number;
+  add_to_cart?: number;
+  checkout_iniciado?: number;
+  cadastros?: number;
+  visualizacoes_conteudo?: number;
+  agendamentos?: number;
+  assinaturas?: number;
+  buscas?: number;
+  video_views_p25?: number;
+  video_views_p50?: number;
+  video_views_p75?: number;
+  video_views_p100?: number;
 }
 
 export interface DecisaoHistorico {
@@ -85,7 +108,7 @@ export interface Metricas {
   scoreBadge: ScoreBadge;
   alertas: Alerta[];
   cta: CTA | null;
-  roas: number; // v2 — adicionado
+  roas: number;
 }
 
 export interface CampanhaEnriquecida extends Campanha {
@@ -106,4 +129,4 @@ export interface DecisaoIA {
 
 export type Periodo      = "hoje" | "7d" | "30d" | "mes";
 export type OrdemMetrica = "score" | "gasto" | "cpl" | "ctr" | "leads";
-export type AbaAtiva     = "campanhas" | "decisoes";
+export type AbaAtiva     = "campanhas" | "decisoes" | "funil";

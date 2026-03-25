@@ -6,6 +6,7 @@
  * Remove dependência de HealthResult, CampanhaEnriquecidaAlgo, RadarItem
  */
 
+import { useState } from "react";
 import type { ContaHealth, UrgenciaNivel } from "@/app/lib/algoritmoErizon";
 import { AlertTriangle, TrendingUp, Gauge, CheckCircle2, Clock, Zap } from "lucide-react";
 
@@ -46,7 +47,7 @@ const URGENCIA_CFG: Record<UrgenciaNivel, {
 
 // ── Linha do radar ────────────────────────────────────────────────────────────
 function RadarLinha({ tipo, mensagem, valorEmJogo }: {
-  tipo: "escala" | "critico" | "saturacao"; mensagem: string; valorEmJogo: number;
+  tipo: "escala" | "critico" | "saturacao"; mensagem: string; valorEmJogo: number; key?: string | number;
 }) {
   const s = {
     escala:    { dot: "bg-emerald-500", text: "text-emerald-400", valor: "text-emerald-400", prefix: "+" },
@@ -95,6 +96,52 @@ function ProjecaoItem({ label, valor72h, valor7d, cor }: {
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
+
+type RadarLinhaItem = { tipo: "escala" | "critico" | "saturacao"; mensagem: string; valorEmJogo: number };
+
+function RadarListaPaginada({ linhas }: { linhas: RadarLinhaItem[] }) {
+  const [pagina, setPagina] = useState(0);
+  const POR_PAGINA = 6;
+  const totalPaginas = Math.ceil(linhas.length / POR_PAGINA);
+  const visiveis = linhas.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA);
+
+  return (
+    <div className="flex-1 px-6 py-5">
+      {linhas.length > 0 ? (
+        <>
+          {visiveis.map((item, i) => (
+            <RadarLinha key={pagina * POR_PAGINA + i} tipo={item.tipo} mensagem={item.mensagem} valorEmJogo={item.valorEmJogo} />
+          ))}
+          {totalPaginas > 1 && (
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.04]">
+              <button
+                onClick={() => setPagina(p => Math.max(0, p - 1))}
+                disabled={pagina === 0}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-white/30 hover:text-white/60 disabled:opacity-20 disabled:cursor-not-allowed border border-white/[0.06] hover:border-white/[0.12] transition-colors"
+              >
+                ← Anterior
+              </button>
+              <span className="text-[10px] text-white/20 font-mono">{pagina + 1} / {totalPaginas}</span>
+              <button
+                onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))}
+                disabled={pagina === totalPaginas - 1}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-white/30 hover:text-white/60 disabled:opacity-20 disabled:cursor-not-allowed border border-white/[0.06] hover:border-white/[0.12] transition-colors"
+              >
+                Próxima →
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="flex items-center gap-2 py-2">
+          <CheckCircle2 size={14} className="text-emerald-400/60" />
+          <span className="text-[13px] text-white/30">Todas as campanhas dentro dos parâmetros</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RadarOperacional({ health }: { health: ContaHealth }) {
   if (!health?.enriched || health.enriched.length === 0) return null;
 
@@ -202,18 +249,7 @@ export default function RadarOperacional({ health }: { health: ContaHealth }) {
         </div>
 
         {/* Radar de campanhas */}
-        <div className="flex-1 px-6 py-5">
-          {radarLinhas.length > 0 ? (
-            radarLinhas.map((item, i) => (
-              <RadarLinha key={i} tipo={item.tipo} mensagem={item.mensagem} valorEmJogo={item.valorEmJogo} />
-            ))
-          ) : (
-            <div className="flex items-center gap-2 py-2">
-              <CheckCircle2 size={14} className="text-emerald-400/60" />
-              <span className="text-[13px] text-white/30">Todas as campanhas dentro dos parâmetros</span>
-            </div>
-          )}
-        </div>
+        <RadarListaPaginada linhas={radarLinhas} />
 
         {/* Projeções 72h + 7d */}
         <div className="flex flex-col justify-center gap-4 px-6 py-5 lg:min-w-[220px] lg:shrink-0">

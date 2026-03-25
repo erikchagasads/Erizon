@@ -182,6 +182,7 @@ export default function StudioPage() {
 
   // Recarrega campanhas quando o cliente muda
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCampanhaSelecionada("todas"); // reset dropdown ao trocar cliente
     async function init() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -214,6 +215,18 @@ export default function StudioPage() {
     const filtradas = campanhaSelecionada === "todas"
       ? campanhasAtivas
       : campanhas.filter(c => c.nome_campanha === campanhaSelecionada);
+
+    // Mapeia campos do banco para o schema esperado pela API (nome, gasto, leads, cpl, ctr, status)
+    const metrics = filtradas.map(c => ({
+      nome:   c.nome_campanha,
+      status: c.status,
+      gasto:  Number(c.gasto_total ?? 0),
+      leads:  Number(c.contatos ?? 0),
+      cpl:    c.contatos > 0 ? Number(c.gasto_total ?? 0) / Number(c.contatos) : 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ctr:    Number((c as any).ctr ?? 0),
+    }));
+
     const contexto =
       `ANALISTA GROWTH OS — MÉTRICAS ATUAIS:\n` +
       filtradas.map(c => {
@@ -221,7 +234,8 @@ export default function StudioPage() {
         return `• ${c.nome_campanha} | Status: ${c.status} | Gasto: R$${c.gasto_total?.toFixed(2)} | Leads: ${c.contatos} | CPL: R$${cpl}`;
       }).join("\n") +
       `\n\nHISTÓRICO:\n${msgs.slice(-4).map(m => `${m.role}: ${m.content}`).join("\n")}`;
-    return { metrics: filtradas, objetivo: "DIAGNÓSTICO COMPLETO", mensagemUsuario: input, contexto };
+
+    return { metrics, mensagemUsuario: input, contexto };
   };
 
   const extractReply = (data: unknown) => {

@@ -4,7 +4,7 @@
  * Usa MSW (Mock Service Worker) style com fetch mock para simular a Graph API.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { MetaAdsRealConnector } from "@/connectors/meta-ads/MetaAdsRealConnector";
 import type { IntegrationCredential } from "@/types/erizon";
 

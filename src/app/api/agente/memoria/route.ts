@@ -12,7 +12,12 @@ async function getSupabase() {
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (n) => cookieStore.get(n)?.value } }
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(values) { values.forEach(({ name, value, options }) => { try { cookieStore.set(name, value, options); } catch {} }); },
+      },
+    }
   );
   const { data: { user } } = await supabase.auth.getUser();
   return { supabase, user };
@@ -54,7 +59,7 @@ export async function GET() {
       alertas: alertas ?? [],
       totalNaoLidos: totalNaoLidos ?? 0,
     });
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });
   }
 }
@@ -120,7 +125,7 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     return NextResponse.json({ ok: true, memoria: data });
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });
   }
 }
@@ -149,7 +154,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true });
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });
   }
 }

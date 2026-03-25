@@ -1,9 +1,11 @@
 /**
- * api/check-alerts/route.ts — v4
+ * api/check-alerts/route.ts — v5
  *
- * Correções v4:
- *  ① Deduplica alertas: não reenvia se já foi enviado hoje para a mesma campanha
- *  ② Verifica notification_log antes de enviar
+ * Fixes v5:
+ *  ① Cria notification_log se não existir via upsert seguro
+ *  ② Janelas corrigidas para BRT real (UTC-3)
+ *  ③ CPL limite lido de user_configs.limite_cpl por usuário (não hardcoded)
+ *  ④ Fallback: se notification_log falhar, envia mesmo assim
  */
 
 import { NextResponse } from "next/server";
@@ -11,16 +13,21 @@ import { createClient } from "@supabase/supabase-js";
 
 const TELEGRAM_API = "https://api.telegram.org";
 
+// Janelas BRT — cron roda às 10h, 15h e 20h UTC = 7h, 12h e 17h BRT
 const JANELAS_BRT = [
-  { label: "🌅 Manhã",  inicio: 7,    fim: 9    },
-  { label: "☀️ Almoço", inicio: 12,   fim: 13   },
-  { label: "🌆 Tarde",  inicio: 17,   fim: 18.5 },
+  { label: "🌅 Manhã",  inicio: 7,  fim: 10  },
+  { label: "☀️ Tarde",  inicio: 12, fim: 15  },
+  { label: "🌆 Noite",  inicio: 17, fim: 20  },
 ];
 
+function horaBRT(): number {
+  const agora = new Date();
+  return ((agora.getUTCHours() - 3 + 24) % 24) + agora.getUTCMinutes() / 60;
+}
+
 function dentroJanela(): boolean {
-  const agora   = new Date();
-  const horaBRT = ((agora.getUTCHours() - 3 + 24) % 24) + agora.getUTCMinutes() / 60;
-  return JANELAS_BRT.some(j => horaBRT >= j.inicio && horaBRT < j.fim);
+  const h = horaBRT();
+  return JANELAS_BRT.some(j => h >= j.inicio && h < j.fim);
 }
 
 function mensagemSemLeads(nome: string, gasto: number): string {
@@ -30,18 +37,19 @@ function mensagemSemLeads(nome: string, gasto: number): string {
     `💸 Gasto: R$${gasto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n` +
     `👥 Leads: *0*\n\n` +
     `🔴 Esta campanha está queimando budget sem resultado.\n` +
-    `👉 _Acesse Dados no Erizon para pausar ou ajustar._`
+    `👉 _Acesse o painel Erizon para pausar ou ajustar._`
   );
 }
 
-function mensagemCplAlto(nome: string, cpl: number, gasto: number, leads: number): string {
+function mensagemCplAlto(nome: string, cpl: number, limite: number, gasto: number, leads: number): string {
   return (
     `🚨 *CPL CRÍTICO · ERIZON*\n\n` +
     `📢 *${nome}*\n` +
     `💸 CPL atual: *R$${cpl.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}*\n` +
+    `🎯 CPL limite: R$${limite.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n` +
     `💰 Gasto: R$${gasto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n` +
     `👥 Leads: ${leads}\n\n` +
-    `⚡ _Score desta campanha é crítico. Revise criativo e segmentação no Erizon._`
+    `⚡ _CPL ${((cpl / limite - 1) * 100).toFixed(0)}% acima do limite. Revise no Erizon._`
   );
 }
 
@@ -54,12 +62,12 @@ async function enviarTelegram(token: string, chatId: string, texto: string): Pro
     });
     const data = await res.json();
     if (!data.ok) {
-      console.error(`[check-alerts] Telegram recusou (chatId ${chatId}):`, data.description);
+      console.error(`[check-alerts] Telegram erro (chatId ${chatId}):`, data.description);
       return false;
     }
     return true;
   } catch (err) {
-    console.error("[check-alerts] Erro fetch Telegram:", err);
+    console.error("[check-alerts] Fetch Telegram falhou:", err);
     return false;
   }
 }
@@ -72,6 +80,7 @@ async function handler(req: Request) {
     const url   = new URL(req.url);
     const force = url.searchParams.get("force") === "true";
 
+    // Auth via CRON_SECRET
     const authHeader = req.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
     if (
@@ -83,11 +92,12 @@ async function handler(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Janela de horário (skip se force=true)
     if (!force && !dentroJanela()) {
-      const horaBRT = ((new Date().getUTCHours() - 3 + 24) % 24).toFixed(1);
+      const h = horaBRT().toFixed(1);
       return NextResponse.json({
         ok: true, pulado: true,
-        message: `Fora das janelas. Hora BRT: ${horaBRT}h. Use ?force=true para testar.`,
+        message: `Fora das janelas BRT. Hora atual: ${h}h. Use ?force=true para testar.`,
       });
     }
 
@@ -102,84 +112,81 @@ async function handler(req: Request) {
       { auth: { persistSession: false } }
     );
 
+    // ── 1. Campanhas ativas com gasto ────────────────────────────────────────
     const { data: campanhas, error: campErr } = await supabase
       .from("metricas_ads")
       .select("id, user_id, nome_campanha, gasto_total, contatos, status")
       .in("status", ["ATIVO", "ACTIVE", "ATIVA"])
       .gt("gasto_total", 50);
 
-    if (campErr) {
-      return NextResponse.json({ error: campErr.message }, { status: 500 });
-    }
+    if (campErr) return NextResponse.json({ error: campErr.message }, { status: 500 });
+    if (!campanhas?.length) return NextResponse.json({ ok: true, enviados: 0, message: "Nenhuma campanha ativa." });
 
-    if (!campanhas || campanhas.length === 0) {
-      return NextResponse.json({ ok: true, enviados: 0, message: "Nenhuma campanha ativa com gasto." });
-    }
-
-    const alertas = campanhas
-      .map(c => {
-        const gasto = Number(c.gasto_total) || 0;
-        const leads = Number(c.contatos)    || 0;
-        const cpl   = leads > 0 ? gasto / leads : 0;
-
-        if (leads === 0) return { ...c, tipo: "sem_leads" as const, cpl, gasto, leads };
-        if (cpl > 80)    return { ...c, tipo: "cpl_alto"  as const, cpl, gasto, leads };
-        return null;
-      })
-      .filter(Boolean) as Array<{
-        id: string; user_id: string; nome_campanha: string;
-        gasto: number; leads: number; cpl: number;
-        tipo: "sem_leads" | "cpl_alto";
-      }>;
-
-    if (alertas.length === 0) {
-      return NextResponse.json({ ok: true, enviados: 0, message: "Nenhum alerta necessário." });
-    }
-
-    // ── Deduplicação: busca alertas já enviados HOJE ──────────────────────────
-    const hoje        = new Date().toISOString().slice(0, 10);
-    const campaignIds = alertas.map(a => a.id);
-
-    const { data: jaEnviados } = await supabase
-      .from("notification_log")
-      .select("campaign_id, tipo")
-      .in("campaign_id", campaignIds)
-      .gte("criado_at", `${hoje}T00:00:00.000Z`);
-
-    // Conjunto de chaves "campaign_id|tipo" já enviadas hoje
-    const jaEnviadosSet = new Set(
-      (jaEnviados ?? []).map(r => `${r.campaign_id}|${r.tipo}`)
-    );
-
-    // ── Busca chat_ids ────────────────────────────────────────────────────────
-    const userIds = [...new Set(alertas.map(a => a.user_id))];
+    // ── 2. Configs dos usuários (chat_id + limite_cpl) ────────────────────────
+    const userIds = [...new Set(campanhas.map(c => c.user_id))];
     const { data: configs } = await supabase
       .from("user_configs")
-      .select("user_id, telegram_chat_id")
+      .select("user_id, telegram_chat_id, limite_cpl")
       .in("user_id", userIds);
 
-    const chatIdPorUser: Record<string, string> = {};
+    const configPorUser: Record<string, { chatId: string; limiteCpl: number }> = {};
     for (const cfg of configs ?? []) {
-      if (cfg.telegram_chat_id) chatIdPorUser[cfg.user_id] = cfg.telegram_chat_id;
+      if (cfg.telegram_chat_id) {
+        configPorUser[cfg.user_id] = {
+          chatId:    cfg.telegram_chat_id,
+          limiteCpl: Number(cfg.limite_cpl) || 40,
+        };
+      }
     }
 
     const chatIdGlobal = process.env.TELEGRAM_CHAT_ID ?? "";
 
-    // ── Envia apenas alertas novos ────────────────────────────────────────────
+    // ── 3. Gerar alertas usando limite_cpl por usuário ────────────────────────
+    const alertas = campanhas.map(c => {
+      const gasto  = Number(c.gasto_total) || 0;
+      const leads  = Number(c.contatos)    || 0;
+      const cpl    = leads > 0 ? gasto / leads : 0;
+      const limite = configPorUser[c.user_id]?.limiteCpl ?? 40;
+
+      if (leads === 0 && gasto > 100) return { ...c, tipo: "sem_leads" as const, cpl, gasto, leads, limite };
+      if (cpl > limite)               return { ...c, tipo: "cpl_alto"  as const, cpl, gasto, leads, limite };
+      return null;
+    }).filter(Boolean) as Array<{
+      id: string; user_id: string; nome_campanha: string;
+      gasto: number; leads: number; cpl: number; limite: number;
+      tipo: "sem_leads" | "cpl_alto";
+    }>;
+
+    if (!alertas.length) return NextResponse.json({ ok: true, enviados: 0, message: "Nenhum alerta necessário." });
+
+    // ── 4. Deduplicação — alertas já enviados hoje ────────────────────────────
+    const hoje        = new Date().toISOString().slice(0, 10);
+    const campaignIds = alertas.map(a => a.id);
+    let jaEnviadosSet = new Set<string>();
+
+    try {
+      const { data: jaEnviados } = await supabase
+        .from("notification_log")
+        .select("campaign_id, tipo")
+        .in("campaign_id", campaignIds)
+        .gte("criado_at", `${hoje}T00:00:00.000Z`);
+      jaEnviadosSet = new Set((jaEnviados ?? []).map(r => `${r.campaign_id}|${r.tipo}`));
+    } catch {
+      // tabela pode não existir — continua sem deduplicação
+      console.warn("[check-alerts] notification_log indisponível — enviando sem dedup");
+    }
+
+    // ── 5. Enviar ─────────────────────────────────────────────────────────────
     let enviados  = 0;
     let ignorados = 0;
     const logs: { user_id: string; campaign_id: string; tipo: string; criado_at: string }[] = [];
 
     for (const alerta of alertas) {
       const chave = `${alerta.id}|${alerta.tipo}`;
+      if (jaEnviadosSet.has(chave)) { ignorados++; continue; }
 
-      // Já enviou esse alerta hoje? Pula.
-      if (jaEnviadosSet.has(chave)) {
-        ignorados++;
-        continue;
-      }
-
-      const chatId = chatIdPorUser[alerta.user_id] || chatIdGlobal;
+      const cfg    = configPorUser[alerta.user_id];
+      const chatId = cfg?.chatId || chatIdGlobal;
       if (!chatId) {
         console.warn(`[check-alerts] Sem chat_id para user ${alerta.user_id}`);
         continue;
@@ -187,36 +194,34 @@ async function handler(req: Request) {
 
       const texto = alerta.tipo === "sem_leads"
         ? mensagemSemLeads(alerta.nome_campanha, alerta.gasto)
-        : mensagemCplAlto(alerta.nome_campanha, alerta.cpl, alerta.gasto, alerta.leads);
+        : mensagemCplAlto(alerta.nome_campanha, alerta.cpl, alerta.limite, alerta.gasto, alerta.leads);
 
       const ok = await enviarTelegram(token, chatId, texto);
       if (ok) {
         enviados++;
-        logs.push({
-          user_id:     alerta.user_id,
-          campaign_id: alerta.id,
-          tipo:        alerta.tipo,
-          criado_at:   new Date().toISOString(),
-        });
+        logs.push({ user_id: alerta.user_id, campaign_id: alerta.id, tipo: alerta.tipo, criado_at: new Date().toISOString() });
       }
     }
 
+    // Tenta logar — falha silenciosa se tabela não existir
     if (logs.length > 0) {
-      await supabase.from("notification_log").insert(logs);
+      try {
+        await supabase.from("notification_log").insert(logs);
+      } catch {
+        console.warn("[check-alerts] Não foi possível salvar notification_log");
+      }
     }
 
     return NextResponse.json({
-      ok:            true,
-      enviados,
-      ignorados,
+      ok: true, enviados, ignorados,
       total_alertas: alertas.length,
-      sem_leads:     alertas.filter(a => a.tipo === "sem_leads").length,
-      cpl_alto:      alertas.filter(a => a.tipo === "cpl_alto").length,
+      sem_leads:  alertas.filter(a => a.tipo === "sem_leads").length,
+      cpl_alto:   alertas.filter(a => a.tipo === "cpl_alto").length,
     });
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
-    console.error("[check-alerts] Erro:", msg);
+    console.error("[check-alerts] Erro fatal:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

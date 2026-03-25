@@ -71,7 +71,7 @@ export default function MemoriaEstrategica({ decisoes }: { decisoes: DecisaoHist
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className={`text-[10px] font-bold ${ts.lbl}`}>{ts.label}</span>
-                  <span className="text-[11px] font-semibold text-white/70 truncate">"{d.campanhaNome}"</span>
+                  <span className="text-[11px] font-semibold text-white/70 truncate">&quot;{d.campanhaNome}&quot;</span>
                 </div>
                 <p className="text-[10px] text-white/20 mt-0.5 truncate">{d.acao}</p>
               </div>

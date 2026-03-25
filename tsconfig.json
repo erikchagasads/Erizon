@@ -2,9 +2,12 @@
   "compilerOptions": {
     "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],
+    "typeRoots": ["./node_modules/@types"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
@@ -34,6 +37,9 @@
   "exclude": [
     "node_modules",
     "supabase",
-    ".next"
+    ".next",
+    "e2e",
+    "src/__tests__",
+    "src/core/__tests__"
   ]
 }

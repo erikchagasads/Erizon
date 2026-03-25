@@ -1,5 +1,5 @@
 
-import { appendAutopilotTimeline, evaluateAutopilotRule } from "@/core/autopilot-engine";
+import { evaluateAutopilotRule } from "@/core/autopilot-engine";
 import { applyAutopilotGovernance } from "@/core/autopilot-governance";
 import { buildCreativeInsights } from "@/core/creative-engine";
 import { buildDecisionRecommendations, evaluateCampaignHealth } from "@/core/decision-engine";
@@ -212,8 +212,6 @@ export class OperatingSystemService {
         },
       };
     }
-
-    const portalCampaigns = campaignViews.filter((item) => item.cliente === portalClient.name);
 
     // ── portalSummary com dados reais dos últimos 30 dias ─────────────────────
     // Busca todos os snapshots do cliente nos últimos 30 dias para somar

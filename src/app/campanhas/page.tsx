@@ -3,18 +3,29 @@
 // src/app/clientes/page.tsx — Gerenciador de Anúncios Erizon
 // Interface inspirada no Meta Ads Manager
 
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Search, RefreshCw, Download, BarChart3, ChevronDown, ChevronUp,
-  Loader2, Filter, X, Play, Pause, Eye, FileText, ArrowUpDown,
-  TrendingUp, TrendingDown, Minus, ChevronRight, Settings2,
-  AlertTriangle, CheckCircle, Circle, MoreHorizontal, Users,
-  DollarSign, Target, Zap, Clock, Plus, SlidersHorizontal,
+  Loader2, X, Eye, ArrowUpDown,
+  AlertTriangle, CheckCircle, Target, Zap, Clock,
+  Sparkles, ImageIcon, ThumbsUp, ThumbsDown, Lightbulb,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { fetchSafe } from "@/lib/fetchSafe";
+import { useSessionGuard } from "@/app/hooks/useSessionGuard";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+interface AnaliseCriativoIA {
+  score: number;
+  tipo_criativo: "imagem" | "video";
+  hook: string;
+  pontos_fortes: string[];
+  problemas: string[];
+  sugestoes: string[];
+  resumo: string;
+  analisado_em: string;
+}
+
 interface Campanha {
   id: string;
   nome_campanha: string;
@@ -32,6 +43,8 @@ interface Campanha {
   cliente_id?: string;
   cliente_nome?: string;
   score?: number;
+  meta_campaign_id?: string;
+  analise_criativo?: AnaliseCriativoIA;
 }
 
 interface Cliente {
@@ -157,14 +170,6 @@ function MetricCell({ value, sub, color = "text-white/80", mono = true }: {
   );
 }
 
-// ─── Trend Indicator ─────────────────────────────────────────────────────────
-function Trend({ val, invert = false }: { val: number; invert?: boolean }) {
-  if (val === 0) return <Minus size={10} className="text-white/20"/>;
-  const positivo = invert ? val < 0 : val > 0;
-  return positivo
-    ? <TrendingUp size={10} className="text-emerald-400"/>
-    : <TrendingDown size={10} className="text-red-400"/>;
-}
 
 // ─── Exportar PDF ─────────────────────────────────────────────────────────────
 async function gerarPDF(campanhas: Campanha[], titulo: string) {
@@ -310,11 +315,189 @@ function gerarAnalise(camp: Campanha): AnaliseIndividual {
   return { camp, cpl, roas, score, decisao, titulo, descricao, impacto, corDecisao, bgDecisao, borderDecisao };
 }
 
+// ─── Seção de Análise de Criativo IA ─────────────────────────────────────────
+function SecaoCriativo({ campanha }: { campanha: Campanha }) {
+  useSessionGuard();
+
+  const [analise, setAnalise]   = useState<AnaliseCriativoIA | null>(campanha.analise_criativo ?? null);
+  const [loading, setLoading]   = useState(false);
+  const [erro, setErro]         = useState<string | null>(null);
+
+  async function analisar() {
+    setLoading(true);
+    setErro(null);
+    try {
+      const res  = await fetch("/api/ai-criativo", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ campanha_id: campanha.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setErro(data.error ?? "Erro ao analisar criativo.");
+      } else {
+        setAnalise(data.analise);
+      }
+    } catch {
+      setErro("Erro de conexão.");
+    }
+    setLoading(false);
+  }
+
+  const corScore = (s: number) => s >= 70 ? "#10b981" : s >= 45 ? "#f59e0b" : "#ef4444";
+  const ctr = campanha.ctr ?? 0;
+  const cpl = campanha.contatos > 0 ? campanha.gasto_total / campanha.contatos : 0;
+  const precisaAnalise = ctr < 0.8 || cpl > 60;
+
+  return (
+    <div className="px-6 mt-5 shrink-0">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/20 flex items-center gap-1.5">
+          <Sparkles size={10} className="text-purple-400"/>
+          Análise de Criativo IA
+        </p>
+        {analise && (
+          <button onClick={analisar} disabled={loading}
+            className="text-[9px] text-white/20 hover:text-purple-400 transition-colors flex items-center gap-1">
+            <RefreshCw size={9} className={loading ? "animate-spin" : ""}/>
+            Reanalisar
+          </button>
+        )}
+      </div>
+
+      {!analise && !loading && (
+        <div className={`rounded-xl border p-4 flex flex-col gap-3 ${precisaAnalise ? "border-purple-500/20 bg-purple-500/[0.04]" : "border-white/[0.06] bg-white/[0.02]"}`}>
+          {precisaAnalise && (
+            <div className="flex items-start gap-2">
+              <ImageIcon size={12} className="text-purple-400 mt-0.5 shrink-0"/>
+              <p className="text-[11px] text-purple-300/70 leading-relaxed">
+                {ctr < 0.8 ? "CTR baixo detectado." : "CPL alto detectado."} A IA pode identificar problemas no criativo desta campanha.
+              </p>
+            </div>
+          )}
+          <button onClick={analisar}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-[12px] font-semibold text-white transition-all">
+            <Sparkles size={12}/> Analisar criativo agora
+          </button>
+        </div>
+      )}
+
+      {loading && (
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 flex flex-col items-center gap-3">
+          <Loader2 size={20} className="text-purple-400 animate-spin"/>
+          <p className="text-[11px] text-white/30">Buscando criativo e analisando...</p>
+        </div>
+      )}
+
+      {erro && !loading && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/[0.04] p-3 flex items-start gap-2">
+          <AlertTriangle size={12} className="text-red-400 mt-0.5 shrink-0"/>
+          <div>
+            <p className="text-[11px] text-red-400 font-medium">{erro}</p>
+            <button onClick={analisar} className="text-[10px] text-white/30 hover:text-white mt-1 transition-colors">
+              Tentar novamente
+            </button>
+          </div>
+        </div>
+      )}
+
+      {analise && !loading && (
+        <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+          {/* Score + tipo + resumo */}
+          <div className="p-4 border-b border-white/[0.05] flex items-start gap-3">
+            <div className="shrink-0 flex flex-col items-center gap-1">
+              <div className="relative" style={{ width: 44, height: 44 }}>
+                <svg width={44} height={44} className="-rotate-90">
+                  <circle cx={22} cy={22} r={17} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={3}/>
+                  <circle cx={22} cy={22} r={17} fill="none" stroke={corScore(analise.score)} strokeWidth={3}
+                    strokeDasharray={`${(analise.score/100)*(2*Math.PI*17)} ${2*Math.PI*17}`} strokeLinecap="round"/>
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-[11px] font-black text-white">{analise.score}</span>
+              </div>
+              <span className="text-[8px] text-white/20 uppercase tracking-wider">
+                {analise.tipo_criativo === "video" ? "vídeo" : "imagem"}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] text-purple-300/60 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <Zap size={9}/> Hook visual
+              </p>
+              <p className="text-[12px] text-white/70 leading-relaxed">{analise.hook}</p>
+            </div>
+          </div>
+
+          {/* Resumo */}
+          <div className="px-4 py-3 border-b border-white/[0.05]">
+            <p className="text-[11px] text-white/50 leading-relaxed italic">&quot;{analise.resumo}&quot;</p>
+          </div>
+
+          {/* Pontos fortes */}
+          {analise.pontos_fortes.length > 0 && (
+            <div className="px-4 py-3 border-b border-white/[0.05]">
+              <p className="text-[9px] text-emerald-400/60 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <ThumbsUp size={9}/> Pontos fortes
+              </p>
+              <div className="space-y-1">
+                {analise.pontos_fortes.map((p, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <div className="w-1 h-1 rounded-full bg-emerald-500/50 mt-1.5 shrink-0"/>
+                    <p className="text-[11px] text-white/40 leading-relaxed">{p}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Problemas */}
+          {analise.problemas.length > 0 && (
+            <div className="px-4 py-3 border-b border-white/[0.05]">
+              <p className="text-[9px] text-red-400/60 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <ThumbsDown size={9}/> Problemas identificados
+              </p>
+              <div className="space-y-1">
+                {analise.problemas.map((p, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <div className="w-1 h-1 rounded-full bg-red-500/50 mt-1.5 shrink-0"/>
+                    <p className="text-[11px] text-white/40 leading-relaxed">{p}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sugestões */}
+          {analise.sugestoes.length > 0 && (
+            <div className="px-4 py-3">
+              <p className="text-[9px] text-amber-400/60 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <Lightbulb size={9}/> Sugestões de melhoria
+              </p>
+              <div className="space-y-1.5">
+                {analise.sugestoes.map((s, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="text-[9px] text-amber-500/40 font-bold mt-0.5 shrink-0">{i+1}.</span>
+                    <p className="text-[11px] text-white/50 leading-relaxed">{s}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="px-4 py-2 bg-white/[0.02] border-t border-white/[0.04]">
+            <p className="text-[9px] text-white/15">
+              Analisado em {new Date(analise.analisado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PainelAnaliseIndividual({ analise, onFechar }: {
   analise: AnaliseIndividual;
   onFechar: () => void;
 }) {
-  const { camp, cpl, roas, score, decisao, titulo, descricao, impacto, corDecisao, bgDecisao, borderDecisao } = analise;
+  const { camp, cpl, roas, score, titulo, descricao, impacto, corDecisao, bgDecisao, borderDecisao } = analise;
 
   const r = 20, circ = 2 * Math.PI * r;
   const corScore = score >= 70 ? "#10b981" : score >= 45 ? "#f59e0b" : "#ef4444";
@@ -334,7 +517,7 @@ function PainelAnaliseIndividual({ analise, onFechar }: {
     <div className="fixed inset-0 z-50 flex" onClick={onFechar}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"/>
       <div
-        className="relative ml-auto w-full max-w-[480px] bg-[#0c0c0f] border-l border-white/[0.07] flex flex-col overflow-hidden shadow-2xl"
+        className="relative ml-auto w-full max-w-[480px] bg-[#0c0c0f] border-l border-white/[0.07] flex flex-col shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -375,6 +558,7 @@ function PainelAnaliseIndividual({ analise, onFechar }: {
           </button>
         </div>
 
+        <div className="flex-1 overflow-y-auto">
         {/* Decisão IA */}
         <div className={`mx-6 mt-5 p-4 rounded-2xl border ${borderDecisao} ${bgDecisao} shrink-0`}>
           <p className={`text-[12px] font-bold mb-1.5 ${corDecisao}`}>{titulo}</p>
@@ -438,8 +622,11 @@ function PainelAnaliseIndividual({ analise, onFechar }: {
           </div>
         )}
 
+        {/* Análise de Criativo IA */}
+        <SecaoCriativo campanha={camp} />
+
         {/* Ações */}
-        <div className="px-6 mt-6 mb-6 flex flex-col gap-2 shrink-0">
+        <div className="px-6 mt-5 mb-6 flex flex-col gap-2 shrink-0">
           <button
             onClick={() => { window.location.href = `/dados?cliente=${camp.cliente_id}`; }}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-[13px] font-semibold text-white transition-all">
@@ -449,6 +636,7 @@ function PainelAnaliseIndividual({ analise, onFechar }: {
             className="w-full py-3 rounded-xl border border-white/[0.07] text-[12px] text-white/30 hover:text-white transition-all">
             Fechar
           </button>
+        </div>
         </div>
       </div>
     </div>
@@ -473,7 +661,6 @@ export default function GerenciadorAnunciosPage() {
   const [ordenar, setOrdenar]           = useState<OrdenarPor>("gasto_total");
   const [dir, setDir]                   = useState<"asc"|"desc">("desc");
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
-  const [showFiltros, setShowFiltros]   = useState(false);
   const [syncingId, setSyncingId]       = useState<string|null>(null);
 
   // ── Carregar campanhas de todos os clientes ──────────────────────────────────
@@ -515,6 +702,8 @@ export default function GerenciadorAnunciosPage() {
           score:            c.score != null
             ? Number(c.score)
             : calcScore(Number(c.gasto ?? 0), Number(c.leads ?? 0), Number(c.receita ?? 0)),
+          meta_campaign_id: c.meta_campaign_id ? String(c.meta_campaign_id) : undefined,
+          analise_criativo: c.analise_criativo as AnaliseCriativoIA | undefined,
         };
       });
       setCampanhas(camps);
@@ -524,6 +713,7 @@ export default function GerenciadorAnunciosPage() {
     setLoading(false);
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { carregar(); }, []);
 
   // ── Filtros e ordenação ───────────────────────────────────────────────────────
@@ -584,7 +774,7 @@ export default function GerenciadorAnunciosPage() {
   function toggleSel(id: string) {
     setSelecionados(prev => {
       const novo = new Set(prev);
-      novo.has(id) ? novo.delete(id) : novo.add(id);
+      if (novo.has(id)) { novo.delete(id); } else { novo.add(id); }
       return novo;
     });
   }

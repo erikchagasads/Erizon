@@ -13,7 +13,8 @@ import {
   X, Send, Sparkles, Loader2, ChevronDown,
   FileText, BarChart3, AlertCircle, Zap,
   Minimize2, Maximize2, RotateCcw, Bell,
-  TrendingUp, TrendingDown, Shield, ChevronRight,
+  TrendingUp, Shield, ChevronRight,
+  HelpCircle, Users, Settings,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -51,10 +52,12 @@ interface Props {
 
 // ─── Sugestões rápidas ─────────────────────────────────────────────────────────
 const SUGESTOES = [
-  { icon: BarChart3,   texto: "Analisar minha conta agora",          prompt: "Analisa minha conta agora e me diz o que está crítico e o que posso escalar." },
-  { icon: AlertCircle, texto: "Quais campanhas estão queimando $?",   prompt: "Quais campanhas estão com score crítico e queimando dinheiro? Me dá o diagnóstico completo." },
-  { icon: Zap,         texto: "Onde posso escalar hoje?",             prompt: "Quais campanhas têm melhor ROAS e estão prontas para escalar? Quero ver as oportunidades." },
-  { icon: FileText,    texto: "Gerar relatório PDF",                  prompt: "Gera um relatório PDF completo de todas as minhas campanhas." },
+  { icon: HelpCircle,  texto: "Como começo a usar o Erizon?",         prompt: "Me explica como dar os primeiros passos no Erizon. Por onde começo?" },
+  { icon: Zap,         texto: "Como ligo os alertas no Telegram?",    prompt: "Como configuro os alertas do Erizon no Telegram? Quero receber notificações das campanhas." },
+  { icon: BarChart3,   texto: "O que é o Pulse e como usar?",         prompt: "Me explica o que é o Pulse e como interpretar o health score das campanhas." },
+  { icon: FileText,    texto: "Como conecto o Meta Ads?",             prompt: "Como conecto minha conta do Meta Ads ao Erizon? Me passa o passo a passo completo." },
+  { icon: Users,       texto: "Como organizo meus clientes?",         prompt: "Como cadastro e organizo meus clientes no Erizon? Como vinculo campanhas a cada cliente?" },
+  { icon: Settings,    texto: "O que cada página do Erizon faz?",     prompt: "Me explica o que cada página do Erizon faz: Pulse, Analytics, Decision Feed, Risk Radar, Automações, Creative Lab." },
 ];
 
 // ─── Gerador de PDF ────────────────────────────────────────────────────────────
@@ -157,7 +160,7 @@ function renderMarkdown(text: string) {
 }
 
 // ─── AlertaCard ────────────────────────────────────────────────────────────────
-function AlertaCard({ alerta, onPerguntar }: { alerta: Alerta; onPerguntar: (a: Alerta) => void }) {
+function AlertaCard({ alerta, onPerguntar }: { alerta: Alerta; onPerguntar: (a: Alerta) => unknown; key?: string | number }) {
   const configs = {
     critico:      { cor: "border-red-500/25 bg-red-500/[0.04]",      icon: AlertCircle,   iconCor: "text-red-400",    label: "Crítico" },
     oportunidade: { cor: "border-emerald-500/25 bg-emerald-500/[0.04]", icon: TrendingUp,  iconCor: "text-emerald-400", label: "Oportunidade" },
@@ -168,6 +171,7 @@ function AlertaCard({ alerta, onPerguntar }: { alerta: Alerta; onPerguntar: (a: 
   const cfg = configs[alerta.tipo] ?? configs.anomalia;
   const Icon = cfg.icon;
   const tempo = (() => {
+    // eslint-disable-next-line react-hooks/purity
     const diff = Date.now() - new Date(alerta.created_at).getTime();
     const h = Math.floor(diff / 3600000);
     if (h < 1) return "agora";
@@ -453,6 +457,7 @@ export default function AgenteChat({ clienteId }: Props) {
 
     setToolAtiva(null);
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input, loading, msgs, clienteId, aba]);
 
   function handleKey(e: React.KeyboardEvent) {
@@ -488,7 +493,7 @@ export default function AgenteChat({ clienteId }: Props) {
         {/* Tooltip */}
         <div className="absolute right-16 top-1/2 -translate-y-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
           <div className="bg-[#111113] border border-white/[0.08] text-white/70 text-[11px] px-3 py-1.5 rounded-xl shadow-xl">
-            {totalNaoLidos > 0 ? `${totalNaoLidos} alerta${totalNaoLidos > 1 ? "s" : ""} novo${totalNaoLidos > 1 ? "s" : ""}` : "Erizon AI · Parceiro de anúncios"}
+            {totalNaoLidos > 0 ? `${totalNaoLidos} alerta${totalNaoLidos > 1 ? "s" : ""} novo${totalNaoLidos > 1 ? "s" : ""}` : "Erizon AI · suporte e análise"}
           </div>
         </div>
       </button>
@@ -701,7 +706,7 @@ export default function AgenteChat({ clienteId }: Props) {
                   onKeyDown={handleKey}
                   disabled={loading}
                   rows={1}
-                  placeholder="Pergunte sobre campanhas, metas, corretor..."
+                  placeholder="Pergunte sobre campanhas, como usar a plataforma..."
                   style={{ resize: "none", minHeight: "40px", maxHeight: "110px" }}
                   className="w-full bg-white/[0.05] border border-white/[0.07] rounded-xl px-4 py-2.5 text-[13px] text-white placeholder-white/15 focus:outline-none focus:border-purple-500/35 transition-all disabled:opacity-40"
                   onInput={e => {
@@ -719,7 +724,7 @@ export default function AgenteChat({ clienteId }: Props) {
               </button>
             </div>
             <p className="text-[9px] text-white/10 text-center mt-1.5">
-              Erizon AI · dados em tempo real · memória ativa · Enter para enviar
+              Erizon AI · suporte + análise de métricas · Enter para enviar
             </p>
           </div>
         </>

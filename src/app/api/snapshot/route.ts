@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-export async function POST(req: NextRequest) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function POST(_req: NextRequest) {
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,21 +45,18 @@ export async function POST(req: NextRequest) {
     let receita_total    = 0;
     let total_leads      = 0;
     let total_impressoes = 0;
-    let total_cliques    = 0;
     let melhorCampanha: Record<string, unknown> | null = null;
 
     for (const c of campanhas) {
       const gasto      = Number(c.gasto_total)      || 0;
       const leads      = Number(c.contatos)         || 0;
       const impressoes = Number(c.impressoes)       || 0;
-      const cliques    = Number(c.cliques)          || 0;
       const receita    = Number(c.receita_estimada) || leads * 0.04 * 450;
 
       gasto_total      += gasto;
       receita_total    += receita;
       total_leads      += leads;
       total_impressoes += impressoes;
-      total_cliques    += cliques;
 
       if (!melhorCampanha || gasto > (Number(melhorCampanha.gasto_total) || 0)) {
         melhorCampanha = c;
@@ -126,7 +124,8 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET(req: NextRequest) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function GET(_req: NextRequest) {
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

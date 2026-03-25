@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createBrowserClient } from "@supabase/ssr";
+import ErizonLogo from "@/components/ErizonLogo";
 import {
   ArrowRight, Zap, Shield, BarChart2, Users,
   TrendingUp, AlertTriangle, CheckCircle, ChevronRight,
@@ -59,7 +62,7 @@ const DECISOES = [
   { camp: "Infoproduto · Webinar", acao: "🚀 Escalar +20%", motivo: "CPL R$12 · 2× abaixo da meta", cor: "text-emerald-400", borda: "border-emerald-500/20 bg-emerald-500/5" },
 ];
 
-function DecisaoCard({ d, delay }: { d: typeof DECISOES[0]; delay: number }) {
+function DecisaoCard({ d, delay }: { d: typeof DECISOES[0]; delay: number; key?: string | number }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), delay);
@@ -79,16 +82,82 @@ function DecisaoCard({ d, delay }: { d: typeof DECISOES[0]; delay: number }) {
   );
 }
 
+// ── Blog Preview ─────────────────────────────────────────────────────────────
+interface BlogPostPreview {
+  slug: string; title: string; description: string; category: string; publicado_em: string; read_time: string;
+}
+
+const CATEGORY_COLORS_LP: Record<string, string> = {
+  "Estratégia": "text-purple-400", "Métricas": "text-amber-400",
+  "Notícias": "text-orange-400", "Tendências": "text-cyan-400",
+  "Automação": "text-emerald-400", "Geral": "text-white/40",
+};
+
+function BlogPreview() {
+  const [posts, setPosts] = useState<BlogPostPreview[]>([]);
+
+  useEffect(() => {
+    fetch("/api/blog?limit=3")
+      .then(r => r.json())
+      .then(d => setPosts(d.posts ?? []))
+      .catch(() => {});
+  }, []);
+
+  if (posts.length === 0) return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {[1,2,3].map(i => (
+        <div key={i} className="h-40 rounded-2xl bg-white/[0.02] border border-white/[0.05] animate-pulse" />
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {posts.map(post => (
+        <Link key={post.slug} href={`/blog/${post.slug}`}
+          className="group flex flex-col gap-3 p-5 rounded-2xl border border-white/[0.07] bg-white/[0.02] hover:border-fuchsia-500/25 hover:bg-fuchsia-500/[0.03] transition-all">
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-semibold ${CATEGORY_COLORS_LP[post.category] ?? "text-white/40"}`}>
+              {post.category}
+            </span>
+            <span className="text-[10px] text-white/20">
+              {new Date(post.publicado_em).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
+            </span>
+          </div>
+          <h3 className="text-[13px] font-semibold text-white/80 leading-snug group-hover:text-white transition-colors line-clamp-2">
+            {post.title}
+          </h3>
+          <p className="text-[11px] text-white/30 leading-relaxed line-clamp-2 flex-1">{post.description}</p>
+          <div className="flex items-center justify-between pt-1 border-t border-white/[0.05]">
+            <span className="text-[10px] text-white/20">{post.read_time}</span>
+            <ArrowRight size={11} className="text-white/20 group-hover:text-fuchsia-400 transition-all" />
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 export default function LandingPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) router.replace("/pulse");
+    });
+  }, [router]);
+
   return (
     <main className="min-h-screen bg-[#040406] text-white overflow-x-hidden">
 
       {/* NAV */}
       <nav className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-6 py-4 border-b border-white/[0.04] bg-[#040406]/80 backdrop-blur-xl">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-purple-700 flex items-center justify-center">
-            <Zap size={13} className="text-white" />
-          </div>
+          <ErizonLogo size={28} />
           <span className="text-sm font-bold tracking-tight">Erizon</span>
         </div>
         <div className="hidden md:flex items-center gap-6 text-sm text-white/40">
@@ -97,7 +166,7 @@ export default function LandingPage() {
           <a href="#resultados" className="hover:text-white transition-colors">Resultados</a>
         </div>
         <Link href="/signup"
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-sm font-semibold text-white transition-all">
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-violet-700 hover:from-fuchsia-500 hover:to-violet-600 text-sm font-semibold text-white transition-all">
           Começar grátis <ArrowRight size={13} />
         </Link>
       </nav>
@@ -105,14 +174,14 @@ export default function LandingPage() {
       {/* HERO */}
       <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-24 pb-16 text-center">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-violet-600/10 blur-[120px]" />
+          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-gradient-to-r from-fuchsia-600 to-violet-700/10 blur-[120px]" />
           <div className="absolute inset-0 opacity-[0.02]"
             style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)", backgroundSize: "60px 60px" }} />
         </div>
 
         <div className="relative max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-violet-500/25 bg-violet-500/10 text-violet-300 text-xs font-semibold uppercase tracking-wider mb-8">
-            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-fuchsia-500/25 bg-fuchsia-500/10 text-fuchsia-300 text-xs font-semibold uppercase tracking-wider mb-8">
+            <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 animate-pulse" />
             Sistema de decisão para gestores de tráfego
           </div>
 
@@ -120,7 +189,7 @@ export default function LandingPage() {
             Pare de{" "}
             <span className="text-white/20 line-through decoration-red-500">adivinhar.</span>
             <br />
-            <span className="bg-gradient-to-r from-violet-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-fuchsia-400 via-violet-400 to-pink-400 bg-clip-text text-transparent">
               Deixe a IA decidir.
             </span>
           </h1>
@@ -131,7 +200,7 @@ export default function LandingPage() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-4">
             <Link href="/signup"
-              className="flex items-center gap-2 px-7 py-4 rounded-2xl bg-violet-600 hover:bg-violet-500 text-white text-base font-bold transition-all shadow-lg shadow-violet-500/20 hover:-translate-y-0.5">
+              className="flex items-center gap-2 px-7 py-4 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-violet-700 hover:from-fuchsia-500 hover:to-violet-600 text-white text-base font-bold transition-all shadow-lg shadow-fuchsia-500/20 hover:-translate-y-0.5">
               Testar grátis agora <ArrowRight size={16} />
             </Link>
             <Link href="/login"
@@ -144,7 +213,7 @@ export default function LandingPage() {
 
         {/* Preview do produto */}
         <div className="relative mt-20 w-full max-w-2xl mx-auto">
-          <div className="absolute -inset-4 bg-violet-500/5 rounded-3xl blur-xl" />
+          <div className="absolute -inset-4 bg-fuchsia-500/5 rounded-3xl blur-xl" />
           <div className="relative rounded-2xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.05] bg-white/[0.01]">
               <div className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
@@ -184,13 +253,13 @@ export default function LandingPage() {
       <section id="como-funciona" className="py-24 px-6 border-t border-white/[0.04]">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
-            <p className="text-xs text-violet-400 font-semibold uppercase tracking-wider mb-3">Como funciona</p>
+            <p className="text-xs text-fuchsia-400 font-semibold uppercase tracking-wider mb-3">Como funciona</p>
             <h2 className="text-4xl md:text-5xl font-black">Do dado à decisão<br />em segundos</h2>
           </div>
           <div className="grid md:grid-cols-3 gap-4">
             {[
-              { n: "01", title: "Conecta o Meta Ads", desc: "Token de acesso + Account ID. Sincroniza todas as campanhas automaticamente.", icon: Zap, cor: "text-violet-400" },
-              { n: "02", title: "IA analisa em tempo real", desc: "CPL, ROAS, frequência, saturação, margem — processado com benchmarks do Brasil.", icon: BarChart2, cor: "text-purple-400" },
+              { n: "01", title: "Conecta o Meta Ads", desc: "Token de acesso + Account ID. Sincroniza todas as campanhas automaticamente.", icon: Zap, cor: "text-fuchsia-400" },
+              { n: "02", title: "IA analisa em tempo real", desc: "CPL, ROAS, frequência, saturação, margem — processado com benchmarks do Brasil.", icon: BarChart2, cor: "text-fuchsia-400" },
               { n: "03", title: "Recebe decisões prontas", desc: "Pausar, escalar, ajustar criativo. Com motivo e dado. Você aprova ou ignora.", icon: CheckCircle, cor: "text-pink-400" },
             ].map((s, i) => (
               <div key={i} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 relative overflow-hidden">
@@ -211,12 +280,12 @@ export default function LandingPage() {
       <section id="modulos" className="py-24 px-6 border-t border-white/[0.04]">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
-            <p className="text-xs text-violet-400 font-semibold uppercase tracking-wider mb-3">Módulos</p>
+            <p className="text-xs text-fuchsia-400 font-semibold uppercase tracking-wider mb-3">Módulos</p>
             <h2 className="text-4xl md:text-5xl font-black">Uma plataforma.<br />Quatro superpoderes.</h2>
           </div>
           <div className="grid md:grid-cols-2 gap-4">
             {[
-              { icon: TrendingUp, cor: "from-violet-600/20 to-transparent", iconCor: "text-violet-400", tag: "Decision Feed", title: "Decisões que você realmente usa", desc: "Cada campanha recebe uma recomendação: escalar, pausar ou ajustar. Com o dado que justifica. Sem achismo.", href: "/decision-feed" },
+              { icon: TrendingUp, cor: "from-fuchsia-600/20 to-transparent", iconCor: "text-fuchsia-400", tag: "Decision Feed", title: "Decisões que você realmente usa", desc: "Cada campanha recebe uma recomendação: escalar, pausar ou ajustar. Com o dado que justifica. Sem achismo.", href: "/decision-feed" },
               { icon: AlertTriangle, cor: "from-amber-600/15 to-transparent", iconCor: "text-amber-400", tag: "Risk Radar", title: "Detecta problemas antes do cliente", desc: "Campanhas zumbi, saturação de frequência, concentração de risco. Você vê antes que vire reclamação.", href: "/risk-radar" },
               { icon: Users, cor: "from-emerald-600/15 to-transparent", iconCor: "text-emerald-400", tag: "Portal do cliente", title: "Relatório que o cliente entende", desc: "Um link limpo com investimento, leads e CPL. Sem planilha. Transparência que fideliza.", href: "/portal" },
               { icon: Shield, cor: "from-pink-600/15 to-transparent", iconCor: "text-pink-400", tag: "Copiloto IA", title: "Analista disponível 24h", desc: "Pergunta o que quiser sobre suas campanhas. O Copiloto conhece seus dados e responde com contexto real.", href: "/copiloto" },
@@ -264,7 +333,7 @@ export default function LandingPage() {
               <p className="text-2xl md:text-3xl font-black text-white mb-2">A Erizon resolve todos esses pontos.</p>
               <p className="text-white/40 mb-6">Sem planilha. Sem achismo. Com dados do seu mercado.</p>
               <Link href="/signup"
-                className="inline-flex items-center gap-2 px-7 py-4 rounded-2xl bg-violet-600 hover:bg-violet-500 text-white font-bold transition-all shadow-lg shadow-violet-500/20">
+                className="inline-flex items-center gap-2 px-7 py-4 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-violet-700 hover:from-fuchsia-500 hover:to-violet-600 text-white font-bold transition-all shadow-lg shadow-fuchsia-500/20">
                 Quero testar grátis <ArrowRight size={16} />
               </Link>
             </div>
@@ -275,7 +344,7 @@ export default function LandingPage() {
       {/* PARA QUEM É */}
       <section className="py-24 px-6 border-t border-white/[0.04]">
         <div className="max-w-5xl mx-auto text-center">
-          <p className="text-xs text-violet-400 font-semibold uppercase tracking-wider mb-3">Para quem é</p>
+          <p className="text-xs text-fuchsia-400 font-semibold uppercase tracking-wider mb-3">Para quem é</p>
           <h2 className="text-4xl font-black mb-12">Feito para quem vive de resultado</h2>
           <div className="grid md:grid-cols-3 gap-4">
             {[
@@ -293,12 +362,36 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* SEÇÃO BLOG */}
+      <section className="py-24 px-6 border-t border-white/[0.04]">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex items-end justify-between mb-10">
+            <div>
+              <p className="text-xs text-fuchsia-400 font-semibold uppercase tracking-wider mb-2">Blog</p>
+              <h2 className="text-3xl md:text-4xl font-black leading-tight">
+                Aprenda com quem<br />
+                <span className="text-fuchsia-400">vive tráfego pago</span>
+              </h2>
+            </div>
+            <Link href="/blog" className="hidden md:flex items-center gap-1.5 text-[13px] text-white/40 hover:text-white transition-colors">
+              Ver todos os artigos <ArrowRight size={13} />
+            </Link>
+          </div>
+          <BlogPreview />
+          <div className="mt-8 text-center md:hidden">
+            <Link href="/blog" className="text-[13px] text-white/40 hover:text-white transition-colors flex items-center justify-center gap-1.5">
+              Ver todos os artigos <ArrowRight size={13} />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* CTA FINAL */}
       <section className="py-24 px-6 border-t border-white/[0.04]">
         <div className="max-w-3xl mx-auto text-center relative">
-          <div className="absolute inset-0 bg-violet-500/5 rounded-3xl blur-3xl pointer-events-none" />
+          <div className="absolute inset-0 bg-fuchsia-500/5 rounded-3xl blur-3xl pointer-events-none" />
           <div className="relative">
-            <p className="text-xs text-violet-400 font-semibold uppercase tracking-wider mb-4">Comece agora</p>
+            <p className="text-xs text-fuchsia-400 font-semibold uppercase tracking-wider mb-4">Comece agora</p>
             <h2 className="text-5xl md:text-6xl font-black mb-4 leading-tight">
               Seu próximo mês<br />começa hoje.
             </h2>
@@ -306,7 +399,7 @@ export default function LandingPage() {
               Conecte o Meta Ads em 2 minutos e veja as primeiras decisões da IA sobre suas campanhas.
             </p>
             <Link href="/signup"
-              className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white text-base font-bold transition-all shadow-2xl shadow-violet-500/20 hover:-translate-y-0.5">
+              className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-violet-700 hover:from-violet-500 hover:to-purple-500 text-white text-base font-bold transition-all shadow-2xl shadow-fuchsia-500/20 hover:-translate-y-0.5">
               Criar conta grátis <ArrowRight size={18} />
             </Link>
             <p className="text-xs text-white/20 mt-4">Sem cartão de crédito · Setup em 2 minutos · Cancela quando quiser</p>
@@ -318,15 +411,14 @@ export default function LandingPage() {
       <footer className="border-t border-white/[0.04] px-6 py-8">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-violet-600 to-purple-700 flex items-center justify-center">
-              <Zap size={11} className="text-white" />
-            </div>
+            <ErizonLogo size={24} />
             <span className="text-sm font-bold">Erizon</span>
             <span className="text-white/20 text-sm">· AI Marketing Operating System</span>
           </div>
           <div className="flex items-center gap-5 text-xs text-white/25">
             <Link href="/privacidade" className="hover:text-white transition-colors">Privacidade</Link>
             <Link href="/termos" className="hover:text-white transition-colors">Termos</Link>
+            <Link href="/sobre" className="hover:text-white transition-colors">Sobre</Link>
             <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
             <Link href="/login" className="hover:text-white transition-colors">Login</Link>
           </div>

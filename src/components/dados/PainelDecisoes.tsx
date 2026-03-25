@@ -8,18 +8,18 @@
 // - Export CSV do histórico
 
 import { useState, useMemo } from "react";
-import { History, TrendingUp, PauseCircle, Filter, Download, CheckCircle2, MessageSquare } from "lucide-react";
+import { History, Download, CheckCircle2, MessageSquare } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import type { CampanhaEnriquecida, DecisaoHistorico } from "@/app/analytics/types";
 
 interface Props {
   decisoes: DecisaoHistorico[];
-  campanhas: CampanhaEnriquecida[];
+  campanhas?: CampanhaEnriquecida[];
 }
 
 type FiltroTipo = "todas" | "pausa" | "escala" | "outro";
 
-export default function PainelDecisoes({ decisoes, campanhas }: Props) {
+export default function PainelDecisoes({ decisoes }: Props) {
   const [filtro, setFiltro] = useState<FiltroTipo>("todas");
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [resultado, setResultado] = useState("");
@@ -75,7 +75,7 @@ export default function PainelDecisoes({ decisoes, campanhas }: Props) {
         `"${d.acao}"`,
         `"${d.campanha_nome || d.campanha}"`,
         `"${d.impacto}"`,
-        `"${(d as any).resultado_real || ""}"`,
+        `"${d.resultado_real || ""}"`,
       ].join(","))
     ];
     const blob = new Blob([linhas.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -134,8 +134,8 @@ export default function PainelDecisoes({ decisoes, campanhas }: Props) {
           const isEscala = d.acao.toLowerCase().includes("escal");
           const cor      = isPausa ? "text-red-400" : isEscala ? "text-emerald-400" : "text-amber-400";
           const icon     = isPausa ? "🛑" : isEscala ? "🚀" : "⚡";
-          const temId    = !!(d as any).id;
-          const resReal  = (d as any).resultado_real;
+          const temId   = !!d.id;
+          const resReal = d.resultado_real;
 
           return (
             <div key={i}
@@ -165,13 +165,13 @@ export default function PainelDecisoes({ decisoes, campanhas }: Props) {
 
                   {/* Botão registrar resultado */}
                   {temId && !resReal && editandoId !== d.id && (
-                    <button onClick={() => { setEditandoId((d as any).id); setResultado(""); }}
+                    <button onClick={() => { setEditandoId(d.id ?? null); setResultado(""); }}
                       className="flex items-center gap-1 text-[10px] text-white/20 hover:text-purple-400 transition-colors mt-1">
                       <MessageSquare size={10} /> Registrar resultado real
                     </button>
                   )}
 
-                  {editandoId === (d as any).id && (
+                  {editandoId === d.id && (
                     <div className="flex items-center gap-2 mt-2">
                       <input
                         value={resultado}
@@ -179,7 +179,7 @@ export default function PainelDecisoes({ decisoes, campanhas }: Props) {
                         placeholder="Ex: CPL caiu 40% após pausa, conta estabilizou..."
                         className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[11px] text-white placeholder-white/20 focus:outline-none focus:border-white/20"
                       />
-                      <button onClick={() => salvarResultado((d as any).id)} disabled={salvando}
+                      <button onClick={() => salvarResultado(d.id ?? "")} disabled={salvando}
                         className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-[11px] font-semibold text-white transition-all disabled:opacity-50">
                         {salvando ? "..." : "Salvar"}
                       </button>

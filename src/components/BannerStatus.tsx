@@ -4,7 +4,7 @@
 // Exibe banner de aviso quando dados estão desatualizados ou credenciais ausentes.
 // Usa fetchSafe para evitar crash em respostas não-JSON da API.
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, X, Clock, Zap, AlertCircle } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { fetchSafe } from "@/lib/fetchSafe";
@@ -22,6 +22,8 @@ export default function BannerStatus({ clienteId, onSyncSuccess }: BannerStatusP
   const [descartado, setDescartado]     = useState(false);
   const [loading, setLoading]           = useState(true);
   const [erroSync, setErroSync]         = useState("");
+  // eslint-disable-next-line react-hooks/purity
+  const renderNowRef = useRef(Date.now());
 
   const checar = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -69,7 +71,7 @@ export default function BannerStatus({ clienteId, onSyncSuccess }: BannerStatusP
     );
   }
 
-  const horasDesde = ultimoSync ? (Date.now() - ultimoSync.getTime()) / 3_600_000 : 999;
+  const horasDesde = ultimoSync ? (renderNowRef.current - ultimoSync.getTime()) / 3_600_000 : 999;
   const desatualizado = horasDesde > 24;
 
   if (!desatualizado) return null;

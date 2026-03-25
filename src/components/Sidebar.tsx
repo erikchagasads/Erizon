@@ -1,16 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import ErizonLogo from "@/components/ErizonLogo";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
-  Zap, BarChart3, Users, Building2,
+  Zap, BarChart3, BarChart2, Users, Users2, Building2,
   BrainCircuit, Sparkles, Settings, LogOut,
   ShieldAlert, Bot, FileText, Layers,
-  Cpu, CreditCard, Radar, Globe,
+  Cpu, Globe, GitBranch, Instagram, Activity, Kanban,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
+
 
 type NavItem  = { href: string; icon: React.ElementType; label: string };
 type NavGroup = { group: true; icon: React.ElementType; label: string; items: NavItem[] };
@@ -20,8 +22,9 @@ const NAV: NavEntry[] = [
   // ── Principal ──────────────────────────────────────────
   { href: "/pulse",     icon: Zap,       label: "Pulse"      },
   { href: "/campanhas", icon: Users,     label: "Campanhas"  },
-  { href: "/clientes",  icon: Building2, label: "Clientes"   },
   { href: "/analytics", icon: BarChart3, label: "Analytics"  },
+  { href: "/clientes",  icon: Building2, label: "Clientes"   },
+  { href: "/crm",       icon: Kanban,    label: "CRM"        },
 
   null,
 
@@ -29,10 +32,11 @@ const NAV: NavEntry[] = [
   {
     group: true, icon: Cpu, label: "Engines",
     items: [
-      { href: "/decision-feed", icon: Cpu,        label: "Decision Feed"        },
-      { href: "/risk-radar",    icon: ShieldAlert, label: "Risk Radar"           },
-      { href: "/automacoes",    icon: Radar,       label: "Autopilot"            },
-      { href: "/inteligencia",  icon: Globe,       label: "Network Intelligence" },
+      { href: "/decision-feed",   icon: Cpu,        label: "Decision Feed"        },
+      { href: "/risk-radar",     icon: ShieldAlert, label: "Risk Radar"          },
+      { href: "/inteligencia",   icon: Globe,       label: "Network Intelligence"},
+      { href: "/inteligencia/ena", icon: Activity,  label: "ENA · Atribuição"    },
+      { href: "/automacoes",     icon: GitBranch,   label: "Automações"          },
     ],
   },
 
@@ -40,8 +44,10 @@ const NAV: NavEntry[] = [
   {
     group: true, icon: BrainCircuit, label: "IA & Criativos",
     items: [
-      { href: "/copiloto",     icon: Bot,          label: "Copiloto AI"  },
-      { href: "/creative-lab", icon: Sparkles,     label: "Creative Lab" },
+      { href: "/copiloto",      icon: Bot,       label: "Copiloto AI"      },
+      { href: "/creative-lab",  icon: Sparkles,  label: "Creative Lab"     },
+      { href: "/funil-publico", icon: Users,     label: "Funil de Público" },
+      { href: "/benchmarks",    icon: BarChart2, label: "Benchmarks"       },
     ],
   },
 
@@ -49,16 +55,16 @@ const NAV: NavEntry[] = [
   {
     group: true, icon: Layers, label: "Clientes",
     items: [
-      { href: "/relatorios", icon: FileText, label: "Relatórios"    },
-      { href: "/portal",     icon: Layers,   label: "Portal Cliente" },
+      { href: "/relatorios", icon: FileText,  label: "Relatórios"        },
+      { href: "/portal",     icon: Layers,    label: "Portal do Cliente"  },
+      { href: "/insights",   icon: Instagram, label: "Insights Instagram" },
     ],
   },
 
   null,
 
   // ── Conta ──────────────────────────────────────────────
-  { href: "/billing",  icon: CreditCard, label: "Billing"       },
-  { href: "/settings", icon: Settings,   label: "Configurações" },
+  { href: "/settings", icon: Settings, label: "Configurações" },
 ];
 
 // ─── Tooltip ──────────────────────────────────────────────────
@@ -79,18 +85,16 @@ function Tip({ children }: { children: React.ReactNode }) {
 
 // ─── Item de link ─────────────────────────────────────────────
 function SideLink({ href, icon: Icon, label, active }: NavItem & { active: boolean }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
 
   return (
     <Link href={href} className="group relative flex items-center justify-center w-full py-[2px]">
       <div
-        className="absolute left-0 w-[3px] h-4 bg-purple-500 rounded-r-full shadow-[0_0_8px_rgba(168,85,247,0.7)] transition-opacity duration-150"
-        style={{ opacity: mounted && active ? 1 : 0 }}
+        className="absolute left-0 w-[3px] h-4 bg-fuchsia-500 rounded-r-full shadow-[0_0_8px_rgba(168,85,247,0.7)] transition-opacity duration-150"
+        style={{ opacity: active ? 1 : 0 }}
       />
       <div className={`p-[9px] rounded-xl transition-all duration-150 ${
-        mounted && active
-          ? "bg-purple-600 text-white shadow-[0_4px_12px_rgba(168,85,247,0.35)]"
+        active
+          ? "bg-gradient-to-r from-fuchsia-600 to-violet-700 text-white shadow-[0_4px_12px_rgba(168,85,247,0.35)]"
           : "text-white/25 hover:text-white hover:bg-white/[0.06]"
       }`}>
         <Icon size={16} />
@@ -102,11 +106,9 @@ function SideLink({ href, icon: Icon, label, active }: NavItem & { active: boole
 
 // ─── Grupo com flyout lateral ─────────────────────────────────
 function SideGroup({ icon: Icon, label, items, pathname }: NavGroup & { pathname: string }) {
-  const hasActive = items.some(i => pathname === i.href);
-  const [open, setOpen]       = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const hasActive = items.some(i => pathname === i.href || pathname.startsWith(i.href + '/'));
+  const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -124,14 +126,14 @@ function SideGroup({ icon: Icon, label, items, pathname }: NavGroup & { pathname
         className="group relative flex items-center justify-center w-full py-[2px]"
       >
         <div
-          className="absolute left-0 w-[3px] h-4 bg-purple-400/60 rounded-r-full transition-opacity duration-150"
-          style={{ opacity: mounted && hasActive ? 1 : 0 }}
+          className="absolute left-0 w-[3px] h-4 bg-fuchsia-400/60 rounded-r-full transition-opacity duration-150"
+          style={{ opacity: hasActive ? 1 : 0 }}
         />
         <div className={`p-[9px] rounded-xl transition-all duration-150 ${
           open
             ? "bg-white/[0.08] text-white"
-            : mounted && hasActive
-              ? "bg-purple-600/30 text-purple-300"
+            : hasActive
+              ? "bg-gradient-to-r from-fuchsia-600 to-violet-700/30 text-fuchsia-300"
               : "text-white/25 hover:text-white hover:bg-white/[0.06]"
         }`}>
           <Icon size={16} />
@@ -155,8 +157,8 @@ function SideGroup({ icon: Icon, label, items, pathname }: NavGroup & { pathname
               href={item.href}
               onClick={() => setOpen(false)}
               className={`flex items-center gap-2.5 px-3 py-2.5 text-[12px] font-medium transition-colors ${
-                pathname === item.href
-                  ? "bg-purple-600/20 text-purple-300"
+                pathname === item.href || pathname.startsWith(item.href + '/')
+                  ? "bg-gradient-to-r from-fuchsia-600 to-violet-700/20 text-fuchsia-300"
                   : "text-white/50 hover:bg-white/[0.05] hover:text-white"
               }`}
             >
@@ -178,7 +180,6 @@ export default function Sidebar() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
-
   return (
     <>
       <OnboardingChecklist />
@@ -189,8 +190,8 @@ export default function Sidebar() {
         py-3 gap-0
       ">
         {/* Logo */}
-        <div className="mb-2 text-[18px] font-black italic text-purple-500 tracking-tighter select-none">
-          E.
+        <div className="mb-2 flex items-center justify-center select-none">
+          <ErizonLogo size={38} />
         </div>
 
         {/* Nav */}
@@ -200,10 +201,16 @@ export default function Sidebar() {
               <div key={i} className="w-6 h-px bg-white/[0.05] my-1 shrink-0" />
             );
             if ("group" in entry) return (
-              <SideGroup key={entry.label} {...entry} pathname={pathname} />
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+              <SideGroup key={entry.label} {...(entry as any)} pathname={pathname} />
             );
+ 
+ 
+ 
+ 
             return (
-              <SideLink key={entry.href} {...entry} active={pathname === entry.href} />
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+              <SideLink key={entry.href} {...(entry as any)} active={pathname === entry.href || pathname.startsWith(entry.href + '/')} />
             );
           })}
         </div>

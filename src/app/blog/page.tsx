@@ -1,170 +1,141 @@
-// src/app/blog/page.tsx
+// src/app/blog/page.tsx — lê do Supabase, geração automática diária
 
 import Link from "next/link";
-import { getAllPosts } from "@/lib/blog";
-import { Zap, ArrowRight } from "lucide-react";
+import { Zap, ArrowRight, Clock, Eye } from "lucide-react";
+import { createClient } from "@supabase/supabase-js";
+
+export const revalidate = 3600; // ISR — revalida a cada hora
 
 export const metadata = {
-  title: "Blog ErizonAI — Estratégias de Meta Ads e Tráfego Pago",
-  description: "Artigos sobre otimização de campanhas, Meta Ads, ROAS, CPL e inteligência artificial para gestores de tráfego pago brasileiros.",
+  title: "Blog Erizon — Estratégias de Meta Ads e Tráfego Pago",
+  description: "Artigos sobre otimização de campanhas, Meta Ads, ROAS, CPL e IA para gestores de tráfego pago brasileiros. Atualizado diariamente.",
+  keywords: "meta ads, tráfego pago, gestão de campanhas, CPL, ROAS, gestor de tráfego, marketing digital brasil",
+  openGraph: {
+    title: "Blog Erizon — Estratégias de Meta Ads e Tráfego Pago",
+    description: "Artigos práticos sobre Meta Ads, tráfego pago e IA para gestores brasileiros.",
+    url: "https://erizonai.com.br/blog",
+    siteName: "Erizon",
+    type: "website",
+  },
+  alternates: { canonical: "https://erizonai.com.br/blog" },
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  "Comparativos":  "bg-purple-500/10 text-purple-400 border-purple-500/20",
-  "Estratégia":    "bg-blue-500/10   text-blue-400   border-blue-500/20",
-  "Métricas":      "bg-amber-500/10  text-amber-400  border-amber-500/20",
-  "Automação":     "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  "Geral":         "bg-white/[0.06]  text-white/40   border-white/[0.08]",
+  "Estratégia":  "bg-purple-500/10 text-purple-400 border-purple-500/20",
+  "Métricas":    "bg-amber-500/10  text-amber-400  border-amber-500/20",
+  "Automação":   "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  "Criativos":   "bg-pink-500/10   text-pink-400   border-pink-500/20",
+  "Gestão":      "bg-blue-500/10   text-blue-400   border-blue-500/20",
+  "Notícias":    "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  "Tendências":  "bg-cyan-500/10   text-cyan-400   border-cyan-500/20",
+  "Geral":       "bg-white/[0.06]  text-white/40   border-white/[0.08]",
 };
 
 function formatDate(dateStr: string) {
-  const date = new Date(dateStr + "T00:00:00");
-  return date.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" });
+  return new Date(dateStr).toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" });
 }
 
-export default function BlogPage() {
-  const posts = getAllPosts();
+interface BlogPost {
+  slug: string; title: string; description: string;
+  category: string; read_time: string; views: number; publicado_em: string;
+}
+
+async function getPosts(): Promise<BlogPost[]> {
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    const { data } = await supabase
+      .from("blog_posts")
+      .select("slug, title, description, category, read_time, views, publicado_em")
+      .eq("published", true)
+      .order("publicado_em", { ascending: false })
+      .limit(30);
+    return (data ?? []) as BlogPost[];
+  } catch { return []; }
+}
+
+export default async function BlogPage() {
+  const posts = await getPosts();
+  const categorias = [...new Set(posts.map(p => p.category))];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#060608] via-[#0b0b0d] to-[#060608] text-white">
-
-      {/* Navbar */}
       <nav className="sticky top-0 z-50 border-b border-white/[0.05] bg-[#060608]/80 backdrop-blur-xl">
-        <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-purple-600 flex items-center justify-center">
-                <Zap size={12} className="text-white" />
-              </div>
-              <span className="text-[14px] font-black italic uppercase tracking-tight text-white">Erizon</span>
-            </Link>
-            <span className="text-white/20 mx-1">·</span>
-            <span className="text-[13px] text-white/40 font-medium">Blog</span>
-          </div>
+        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-purple-600 flex items-center justify-center">
+              <Zap size={12} className="text-white" />
+            </div>
+            <span className="text-[14px] font-black italic uppercase tracking-tight text-white">Erizon</span>
+          </Link>
           <div className="flex items-center gap-4">
-            <Link href="/login" className="text-[12px] text-white/30 hover:text-white transition-colors">
-              Entrar
-            </Link>
-            <Link
-              href="/signup"
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[12px] font-bold transition-all"
-            >
-              Teste grátis <ArrowRight size={11} />
-            </Link>
+            <Link href="/sobre" className="text-[13px] text-white/40 hover:text-white transition-colors">Sobre</Link>
+            <Link href="/login" className="text-[13px] text-white/40 hover:text-white transition-colors">Entrar</Link>
+            <Link href="/signup" className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-[13px] font-semibold text-white transition-all">Começar grátis</Link>
           </div>
         </div>
       </nav>
 
-      <main className="max-w-4xl mx-auto px-6 py-14">
-
-        {/* Header */}
-        <header className="mb-12 pb-10 border-b border-white/[0.04]">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-purple-400/60 mb-3">
-            Conteúdo
-          </p>
-          <h1 className="text-[2.2rem] font-black italic uppercase tracking-tight mb-3">
-            Estratégias de<br />
-            <span className="text-purple-500">Tráfego Pago</span>
-          </h1>
-          <p className="text-[14px] text-white/30 leading-relaxed max-w-xl">
-            Artigos sobre Meta Ads, otimização de campanhas, métricas e inteligência artificial para gestores brasileiros.
-          </p>
-        </header>
-
-        {/* Posts */}
-        {posts.length === 0 ? (
-          <div className="text-center py-24">
-            <p className="text-white/20 text-[14px]">Nenhum artigo publicado ainda.</p>
+      <div className="max-w-5xl mx-auto px-6 py-16">
+        <div className="mb-12">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-400 font-medium mb-4">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+            Atualizado diariamente
           </div>
-        ) : (
-          <div className="space-y-4">
-            {posts.map((post, i) => {
-              const catStyle = CATEGORY_COLORS[post.category] ?? CATEGORY_COLORS["Geral"];
-              return (
-                <Link
-                  key={post.slug}
-                  href={`/blog/${post.slug}`}
-                  className="group flex items-start gap-5 p-6 rounded-[20px] bg-white/[0.02] border border-white/[0.05] hover:border-white/[0.10] hover:bg-white/[0.04] transition-all"
-                >
-                  {/* Thumbnail — tamanho fixo forçado via style */}
-                  {post.coverImage ? (
-                    <div style={{ width: 80, height: 80, minWidth: 80, minHeight: 80, borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-                      <img
-                        src={post.coverImage}
-                        alt={post.title}
-                        style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.7 }}
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[11px] font-black text-white/20">
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                    </div>
-                  )}
+          <h1 className="text-[2.5rem] font-black text-white mb-3 leading-tight">
+            Estratégias de tráfego pago<br />
+            <span className="text-purple-400">que funcionam no Brasil</span>
+          </h1>
+          <p className="text-[15px] text-white/40 max-w-xl">
+            Artigos práticos sobre Meta Ads, CPL, ROAS e gestão de campanhas para gestores de tráfego e agências brasileiras.
+          </p>
+        </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg border ${catStyle}`}>
-                        {post.category}
-                      </span>
-                      <span className="text-[11px] text-white/20">{formatDate(post.date)}</span>
-                      <span className="text-[11px] text-white/15">·</span>
-                      <span className="text-[11px] text-white/20">{post.readTime} de leitura</span>
-                    </div>
-
-                    <h2 className="text-[16px] font-bold text-white group-hover:text-white/90 leading-snug mb-2 transition-colors">
-                      {post.title}
-                    </h2>
-
-                    <p className="text-[13px] text-white/35 leading-relaxed line-clamp-2">
-                      {post.description}
-                    </p>
-
-                    <p className="text-[11px] text-white/20 mt-2">Por {post.author}</p>
-                  </div>
-
-                  <div className="shrink-0 w-8 h-8 rounded-lg border border-white/[0.06] flex items-center justify-center text-white/20 group-hover:text-white/50 group-hover:border-white/15 transition-all mt-0.5">
-                    →
-                  </div>
-                </Link>
-              );
-            })}
+        {categorias.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-10">
+            {categorias.map(cat => (
+              <span key={cat} className={`px-3 py-1 rounded-full text-[11px] font-medium border ${CATEGORY_COLORS[cat] ?? CATEGORY_COLORS.Geral}`}>{cat}</span>
+            ))}
           </div>
         )}
 
-        {/* CTA */}
-        <div className="mt-14 p-8 rounded-[24px] bg-purple-500/[0.04] border border-purple-500/15 text-center">
-          <p className="text-[15px] font-bold text-white mb-2">
-            Quer ver seus dados reais analisados pela IA?
-          </p>
-          <p className="text-[13px] text-white/30 mb-5">
-            O ErizonAI identifica campanhas críticas e recomenda o que fazer — em português.
-          </p>
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[13px] font-bold transition-all shadow-[0_0_25px_rgba(147,51,234,0.25)]"
-          >
-            Teste grátis por 7 dias <ArrowRight size={13} />
-          </Link>
-        </div>
-
-        {/* Footer mini */}
-        <div className="mt-10 pt-8 border-t border-white/[0.04] flex items-center justify-between flex-wrap gap-4">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-md bg-purple-600 flex items-center justify-center">
-              <Zap size={10} className="text-white" />
-            </div>
-            <span className="text-[12px] font-black italic uppercase text-white/40">Erizon</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/privacidade" className="text-[11px] text-white/20 hover:text-white/40 transition-colors">Privacidade</Link>
-            <Link href="/termos" className="text-[11px] text-white/20 hover:text-white/40 transition-colors">Termos</Link>
-            <Link href="/login" className="text-[11px] text-white/20 hover:text-white/40 transition-colors">Entrar</Link>
+        {posts.length === 0 ? (
+          <div className="text-center py-24 text-white/20">
+            <p className="text-[14px]">Primeiros artigos chegando em breve.</p>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {posts.map((post) => (
+              <Link key={post.slug} href={`/blog/${post.slug}`}
+                className="group flex flex-col gap-3 p-5 rounded-2xl border border-white/[0.07] bg-white/[0.02] hover:border-purple-500/30 hover:bg-purple-500/[0.03] transition-all">
+                <div className="flex items-center justify-between">
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${CATEGORY_COLORS[post.category] ?? CATEGORY_COLORS.Geral}`}>{post.category}</span>
+                  <span className="text-[11px] text-white/20">{formatDate(post.publicado_em)}</span>
+                </div>
+                <h2 className="text-[14px] font-semibold text-white/85 leading-snug group-hover:text-white transition-colors line-clamp-2">{post.title}</h2>
+                <p className="text-[12px] text-white/35 leading-relaxed line-clamp-2 flex-1">{post.description}</p>
+                <div className="flex items-center justify-between pt-1 border-t border-white/[0.05]">
+                  <div className="flex items-center gap-3 text-[11px] text-white/25">
+                    <span className="flex items-center gap-1"><Clock size={10} /> {post.read_time}</span>
+                    {post.views > 0 && <span className="flex items-center gap-1"><Eye size={10} /> {post.views}</span>}
+                  </div>
+                  <ArrowRight size={13} className="text-white/20 group-hover:text-purple-400 transition-all" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
 
-      </main>
+        <div className="mt-16 p-8 rounded-2xl border border-purple-500/20 bg-purple-500/[0.04] text-center">
+          <h3 className="text-[18px] font-bold text-white mb-2">Gerencie suas campanhas com inteligência</h3>
+          <p className="text-[13px] text-white/40 mb-5">Veja como a Erizon monitora CPL, ROAS e alerta quando uma campanha está queimando dinheiro.</p>
+          <Link href="/signup" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-[13px] font-bold text-white transition-all">
+            Começar grátis — 7 dias <ArrowRight size={14} />
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

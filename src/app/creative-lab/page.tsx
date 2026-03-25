@@ -8,8 +8,9 @@ import Sidebar from "@/components/Sidebar";
 import { getSupabase } from "@/lib/supabase";
 import {
   Sparkles, Loader2, Copy, Check, ChevronDown,
-  FileText, Megaphone, Mail, Layout, Video, Type,
+  FileText, Megaphone, Mail, Layout, Video, Type, Wand2, Map,
 } from "lucide-react";
+import { BriefToCampaign } from "@/components/BriefToCampaign";
 
 interface Campanha {
   id: string;
@@ -60,6 +61,7 @@ function CopyOutput({ text }: { text: string }) {
 
 export default function CreativeLabPage() {
   const supabase = useMemo(() => getSupabase(), []);
+  const [abaLab, setAbaLab]            = useState<"copy" | "brief">("copy");
   const [campanhas, setCampanhas]       = useState<Campanha[]>([]);
   const [tipoCopy, setTipoCopy]         = useState<TipoCopy>("headline");
   const [prompt, setPrompt]             = useState("");
@@ -111,6 +113,7 @@ export default function CreativeLabPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Erro na geração");
       setResultado(json.copy ?? "");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setErro(e.message ?? "Erro ao gerar copy.");
     } finally {
@@ -119,7 +122,6 @@ export default function CreativeLabPage() {
   }
 
   const tipoAtual = TIPOS_COPY.find(t => t.id === tipoCopy)!;
-  const TipoIcon = tipoAtual.icon;
 
   return (
     <>
@@ -128,14 +130,36 @@ export default function CreativeLabPage() {
         <div className="max-w-4xl mx-auto px-6 py-8">
 
           {/* Header */}
-          <div className="mb-8">
+          <div className="mb-6">
             <p className="text-[11px] text-purple-400 font-semibold uppercase tracking-wider mb-1">Creative Lab</p>
             <h1 className="text-2xl font-bold text-white">Creative Lab</h1>
             <p className="text-sm text-white/40 mt-1">
-              Geração de copy e roteiros com IA. Use o contexto das suas campanhas para resultados mais precisos.
+              Geração de copy, roteiros e estruturas completas de campanha com IA.
             </p>
           </div>
 
+          {/* Tabs */}
+          <div className="flex gap-1 mb-6 bg-white/[0.03] rounded-xl p-1 border border-white/[0.05] w-fit">
+            <button onClick={() => setAbaLab("copy")}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-medium transition-all ${
+                abaLab === "copy" ? "bg-purple-600/30 border border-purple-500/30 text-purple-300" : "text-white/30 hover:text-white/60"
+              }`}>
+              <Wand2 size={12} /> Copy & Roteiro
+            </button>
+            <button onClick={() => setAbaLab("brief")}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-medium transition-all ${
+                abaLab === "brief" ? "bg-fuchsia-600/30 border border-fuchsia-500/30 text-fuchsia-300" : "text-white/30 hover:text-white/60"
+              }`}>
+              <Map size={12} /> Brief → Campanha
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-fuchsia-500/15 border border-fuchsia-500/20 text-fuchsia-400 font-bold uppercase ml-1">Novo</span>
+            </button>
+          </div>
+
+          {abaLab === "brief" && (
+            <BriefToCampaign />
+          )}
+
+          {abaLab === "copy" && (
           <div className="space-y-5">
             {/* Seletor de tipo */}
             <div>
@@ -243,6 +267,7 @@ export default function CreativeLabPage() {
             {/* Output */}
             {resultado && <CopyOutput text={resultado} />}
           </div>
+          )}
         </div>
       </div>
     </>

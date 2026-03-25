@@ -100,26 +100,6 @@ function buildNumber(checks: Array<(v: number, path: string) => void> = []): Num
   return base;
 }
 
-// ─── Boolean ──────────────────────────────────────────────────────────────────
-
-function buildBoolean(): Schema<boolean> {
-  return makeSchema((input, path) => {
-    if (typeof input !== "boolean") throw new Error(`${path}: esperado boolean`);
-    return input;
-  });
-}
-
-// ─── Enum ─────────────────────────────────────────────────────────────────────
-
-function buildEnum<T extends string>(values: readonly T[]): Schema<T> {
-  return makeSchema((input, path) => {
-    if (!values.includes(input as T)) {
-      throw new Error(`${path}: deve ser um de [${values.join(", ")}]`);
-    }
-    return input as T;
-  });
-}
-
 // ─── Object ───────────────────────────────────────────────────────────────────
 
 type SchemaShape = Record<string, Schema<unknown>>;
@@ -139,7 +119,7 @@ interface ObjectSchema<T> extends Schema<T> {
 }
 
 function buildObject<S extends SchemaShape>(shape: S): ObjectSchema<Infer<S>> {
-  const fn = (input: unknown, _path: string): Infer<S> => {
+  const fn = (input: unknown): Infer<S> => {
     if (typeof input !== "object" || input === null || Array.isArray(input)) {
       throw new Error(`_path: esperado objeto`);
     }
@@ -173,13 +153,13 @@ function buildObject<S extends SchemaShape>(shape: S): ObjectSchema<Infer<S>> {
       return buildObject(partialShape) as unknown as ObjectSchema<Partial<Infer<S>>>;
     },
     optional(): FlexSchema<Infer<S> | undefined> {
-      return makeSchema<Infer<S> | undefined>((input, path) => {
+      return makeSchema<Infer<S> | undefined>((input) => {
         if (input === undefined || input === null) return undefined;
         return schema.parse(input);
       }) as FlexSchema<Infer<S> | undefined>;
     },
     nullable(): FlexSchema<Infer<S> | null> {
-      return makeSchema<Infer<S> | null>((input, path) => {
+      return makeSchema<Infer<S> | null>((input) => {
         if (input === null || input === undefined) return null;
         return schema.parse(input);
       }) as FlexSchema<Infer<S> | null>;
@@ -187,15 +167,6 @@ function buildObject<S extends SchemaShape>(shape: S): ObjectSchema<Infer<S>> {
   };
 
   return base;
-}
-
-// ─── Array ────────────────────────────────────────────────────────────────────
-
-function buildArray<T>(itemSchema: Schema<T>): Schema<T[]> {
-  return makeSchema((input, path) => {
-    if (!Array.isArray(input)) throw new Error(`${path}: esperado array`);
-    return input.map((item, i) => itemSchema.parse(item) as T);
-  });
 }
 
 // ─── Union ────────────────────────────────────────────────────────────────────
@@ -245,9 +216,10 @@ export function parseBody<T>(
 /**
  * Resposta padrão de erro de validação
  */
-export function validationError(result: { error: string; issues: string[] }) {
+export function validationError(result: ValidationResult<unknown> | { error: string; issues: string[] }) {
+  const issues = "issues" in result ? result.issues : [];
   return {
     error: "Dados inválidos",
-    details: result.issues,
+    details: issues,
   };
 }
