@@ -1,8 +1,9 @@
 // src/app/blog/[slug]/page.tsx — post individual do blog
 
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
-import { Zap, ArrowLeft, Clock, Eye, Calendar } from "lucide-react";
+import { ArrowLeft, ArrowRight, Clock, Eye, Calendar } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
@@ -155,8 +156,8 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         <nav className="sticky top-0 z-50 border-b border-white/[0.05] bg-[#060608]/80 backdrop-blur-xl">
           <div className="max-w-3xl mx-auto px-6 h-14 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-purple-600 flex items-center justify-center">
-                <Zap size={12} className="text-white" />
+              <div className="shrink-0 rounded-xl overflow-hidden ring-1 ring-white/10 shadow-[0_0_14px_rgba(168,85,247,0.2)]" style={{ width: 28, height: 28 }}>
+                <Image src="/logo-erizon.png" alt="Erizon" width={28} height={28} className="w-full h-full object-cover" priority />
               </div>
               <span className="text-[14px] font-black italic uppercase tracking-tight text-white">Erizon</span>
             </Link>
@@ -214,7 +215,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             Monitore CPL, ROAS e performance de campanhas em tempo real. 7 dias grátis, sem cartão.
           </p>
           <Link href="/signup" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-[13px] font-bold text-white transition-all">
-            Começar agora <Zap size={13} />
+            Começar agora <ArrowRight size={13} />
           </Link>
         </div>
       </article>
