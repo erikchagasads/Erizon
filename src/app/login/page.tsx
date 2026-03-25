@@ -68,13 +68,21 @@ export default function LoginPage() {
 
   // 2FA
   const [etapa2FA, setEtapa2FA]       = useState<"off" | "aguardando">("off");
-  const [, setUserId2FA]     = useState("");
+  const [userId2FA, setUserId2FA]     = useState("");
   const [codigo, setCodigo]           = useState("");
   const [mfaLoading, setMfaLoading]   = useState(false);
   const [mfaErro, setMfaErro]         = useState("");
   const [reenvioTimer, setTimer]      = useState(0);
+  const [confiavel, setConfiavel]     = useState(false);
   const emailRef = useRef(email);
   emailRef.current = email;
+
+  // ── Dispositivo confiável ─────────────────────────────────────────────────
+  function getDeviceToken(): string {
+    let t = localStorage.getItem("erizon_td");
+    if (!t) { t = crypto.randomUUID(); localStorage.setItem("erizon_td", t); }
+    return t;
+  }
 
   useEffect(() => {
     if (reenvioTimer <= 0) return;
@@ -110,8 +118,25 @@ export default function LoginPage() {
         .maybeSingle();
 
       if (mfaConf?.ativo) {
-        // Tem 2FA — envia código e pede verificação
-        await supabase.auth.signOut(); // desloga temporariamente até confirmar OTP
+        // Verifica se este aparelho é confiável (query enquanto ainda autenticado)
+        const deviceToken = getDeviceToken();
+        const { data: trusted } = await supabase
+          .from("trusted_devices")
+          .select("id")
+          .eq("user_id", uid)
+          .eq("token", deviceToken)
+          .gt("expires_at", new Date().toISOString())
+          .maybeSingle();
+
+        if (trusted) {
+          // Aparelho confiável → pula 2FA
+          setAttempts(0); setBlockedUntil(null);
+          router.push("/pulse"); router.refresh();
+          return;
+        }
+
+        // Não confiável — envia código e pede verificação
+        await supabase.auth.signOut();
         setUserId2FA(uid);
         await enviarOTP(email);
         setEtapa2FA("aguardando");
@@ -159,6 +184,15 @@ export default function LoginPage() {
       });
       if (error) throw error;
       if (!data.session) throw new Error("Sessão não criada.");
+      // Salva dispositivo confiável se solicitado
+      if (confiavel && userId2FA) {
+        const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        await supabase.from("trusted_devices").insert({
+          user_id: userId2FA,
+          token: getDeviceToken(),
+          expires_at: expires,
+        });
+      }
       setAttempts(0); setBlockedUntil(null);
       router.push("/pulse"); router.refresh();
     } catch (err: unknown) {
@@ -316,6 +350,21 @@ export default function LoginPage() {
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-white/25 mb-4 text-center">Digite o código recebido</p>
                 <InputOTP value={codigo} onChange={setCodigo} disabled={mfaLoading} />
               </div>
+
+              {/* Confiar neste dispositivo */}
+              <label className="flex items-center gap-3 px-1 mb-5 cursor-pointer group">
+                <div
+                  onClick={() => setConfiavel(v => !v)}
+                  className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all
+                    ${confiavel ? "bg-fuchsia-600 border-fuchsia-500" : "bg-white/[0.04] border-white/[0.12] group-hover:border-white/25"}`}
+                >
+                  {confiavel && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+                <div>
+                  <p className="text-[12px] text-white/60 group-hover:text-white/80 transition-colors">Confiar neste dispositivo por 30 dias</p>
+                  <p className="text-[10px] text-white/25">Você não precisará digitar o código novamente aqui</p>
+                </div>
+              </label>
 
               {/* Botão confirmar */}
               <button onClick={verificarOTP} disabled={mfaLoading || codigo.length < 6}
