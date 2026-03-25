@@ -410,7 +410,7 @@ export default function CRMGestorPage() {
     return (
       <div className="flex h-screen bg-[#0a0a0a]">
         <Sidebar />
-        <div className="ml-[60px] flex-1 flex items-center justify-center">
+        <div className="md:ml-[60px] pb-20 md:pb-0 flex-1 flex items-center justify-center">
           <Loader2 className="animate-spin text-[#6366f1]" size={28} />
         </div>
       </div>
@@ -436,7 +436,7 @@ export default function CRMGestorPage() {
         />
       )}
 
-      <div className="ml-[60px] flex-1 flex flex-col">
+      <div className="md:ml-[60px] pb-20 md:pb-0 flex-1 flex flex-col">
 
         {/* Header */}
         <div className="px-8 py-5 border-b border-white/5 flex items-center justify-between gap-4">

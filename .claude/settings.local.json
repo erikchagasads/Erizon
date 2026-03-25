@@ -106,7 +106,10 @@
       "Bash(powershell -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force; Write-Host ''Done''\")",
       "Bash(powershell -Command \"Remove-Item ''c:\\\\Users\\\\isado\\\\Documents\\\\erizon\\\\.next\\\\dev\\\\lock'' -Force -ErrorAction SilentlyContinue; Write-Host ''Lock removed''\")",
       "Bash(powershell -Command \"Resolve-DnsName -Name ''erizonai.com.br'' -Type TXT | Where-Object {$_Strings -like ''*google-site-verification*''} | Select-Object -ExpandProperty Strings\")",
-      "Bash(nslookup -type=TXT erizonai.com.br 8.8.8.8)"
+      "Bash(nslookup -type=TXT erizonai.com.br 8.8.8.8)",
+      "Bash(powershell -Command \"Get-ChildItem -Path src -Recurse -Filter ''*.tsx'' | ForEach-Object { \\(Get-Content $_FullName -Raw\\) -replace ''ml-\\\\[60px\\\\]'', ''md:ml-[60px]'' | Set-Content $_FullName -NoNewline }\")",
+      "Bash(xargs -I{} sed -i 's/ml-\\\\[60px\\\\]/md:ml-\\\\[60px\\\\]/g' {})",
+      "Bash(xargs -I{} sed -i 's/md:ml-\\\\[60px\\\\]/md:ml-[60px] pb-20 md:pb-0/g' {})"
     ]
   }
 }

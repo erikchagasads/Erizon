@@ -441,7 +441,7 @@ export default function InsightsPage() {
         .print-header { display: none; }
       `}</style>
       <Sidebar />
-      <main className="flex-1 ml-[60px] flex flex-col">
+      <main className="flex-1 md:ml-[60px] pb-20 md:pb-0 flex flex-col">
         {/* Header de impressão */}
         <div className="print-header items-center justify-between px-8 py-6 border-b border-gray-200 mb-2">
           <div className="flex items-center gap-3">

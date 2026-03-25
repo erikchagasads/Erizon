@@ -218,7 +218,7 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        <div className="w-full max-w-[380px]">
+        <div className="w-full max-w-[380px] px-4 sm:px-0">
           <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full border border-fuchsia-500/15 bg-fuchsia-500/5 mb-8">
             <span className="relative flex h-1.5 w-1.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75" />

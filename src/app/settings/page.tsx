@@ -82,7 +82,7 @@ export default function SettingsPage() {
   return (
     <div className="flex min-h-screen bg-[#060609] text-white">
       <Sidebar/>
-      <main className="ml-[60px] flex-1 px-8 py-8 max-w-3xl">
+      <main className="md:ml-[60px] pb-20 md:pb-0 flex-1 px-8 py-8 max-w-3xl">
 
         <div className="mb-8">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/25 mb-1">Erizon</p>

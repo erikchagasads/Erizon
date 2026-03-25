@@ -181,12 +181,23 @@ export default function Sidebar() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
+  const MOBILE_NAV: NavItem[] = [
+    { href: "/pulse",     icon: Zap,       label: "Pulse"     },
+    { href: "/campanhas", icon: Users,      label: "Campanhas" },
+    { href: "/analytics", icon: BarChart3,  label: "Analytics" },
+    { href: "/clientes",  icon: Building2,  label: "Clientes"  },
+    { href: "/copiloto",  icon: Bot,        label: "Copiloto"  },
+  ];
+
   return (
     <>
       <OnboardingChecklist />
+
+      {/* ── Sidebar desktop (≥ md) ── */}
       <aside className="
+        hidden md:flex
         fixed left-0 top-0 z-50 h-screen w-[60px]
-        flex flex-col items-center
+        flex-col items-center
         border-r border-white/[0.04] bg-[#040406]
         py-3 gap-0
       ">
@@ -205,10 +216,6 @@ export default function Sidebar() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
               <SideGroup key={entry.label} {...(entry as any)} pathname={pathname} />
             );
- 
- 
- 
- 
             return (
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
               <SideLink key={entry.href} {...(entry as any)} active={pathname === entry.href || pathname.startsWith(entry.href + '/')} />
@@ -227,6 +234,36 @@ export default function Sidebar() {
           <Tip>Sair</Tip>
         </div>
       </aside>
+
+      {/* ── Bottom nav mobile (< md) ── */}
+      <nav className="
+        md:hidden fixed bottom-0 inset-x-0 z-50
+        flex items-center justify-around
+        border-t border-white/[0.06] bg-[#040406]/95 backdrop-blur-xl
+        px-2 py-2 pb-[env(safe-area-inset-bottom)]
+      ">
+        {MOBILE_NAV.map(item => {
+          const active = pathname === item.href || pathname.startsWith(item.href + "/");
+          return (
+            <Link key={item.href} href={item.href} className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition-all">
+              <item.icon
+                size={20}
+                className={active ? "text-fuchsia-400" : "text-white/30"}
+              />
+              <span className={`text-[9px] font-medium ${active ? "text-fuchsia-400" : "text-white/30"}`}>
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+        <button
+          onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }}
+          className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-white/30 hover:text-red-400 transition-all"
+        >
+          <LogOut size={20} />
+          <span className="text-[9px] font-medium">Sair</span>
+        </button>
+      </nav>
     </>
   );
 }

@@ -164,11 +164,18 @@ export default function LandingPage() {
           <a href="#como-funciona" className="hover:text-white transition-colors">Como funciona</a>
           <a href="#modulos" className="hover:text-white transition-colors">Módulos</a>
           <a href="#resultados" className="hover:text-white transition-colors">Resultados</a>
+          <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
+          <Link href="/sobre" className="hover:text-white transition-colors">Sobre</Link>
         </div>
-        <Link href="/signup"
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-violet-700 hover:from-fuchsia-500 hover:to-violet-600 text-sm font-semibold text-white transition-all">
-          Começar grátis <ArrowRight size={13} />
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/login" className="hidden md:block text-sm text-white/40 hover:text-white transition-colors">
+            Entrar
+          </Link>
+          <Link href="/signup"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-violet-700 hover:from-fuchsia-500 hover:to-violet-600 text-sm font-semibold text-white transition-all">
+            Começar grátis <ArrowRight size={13} />
+          </Link>
+        </div>
       </nav>
 
       {/* HERO */}

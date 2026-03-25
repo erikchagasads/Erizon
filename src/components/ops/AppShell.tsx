@@ -13,7 +13,7 @@ export function SkeletonPage({ cols = 1 }: { cols?: 1 | 2 | 3 | 4 }) {
   return (
     <div className="flex min-h-screen bg-[#060609]">
       <Sidebar />
-      <main className="ml-[60px] flex-1 px-8 py-8 space-y-5 max-w-7xl">
+      <main className="md:ml-[60px] flex-1 px-4 md:px-8 py-6 md:py-8 pb-24 md:pb-8 space-y-5 max-w-7xl">
         {/* Header */}
         <div className="space-y-2 mb-2">
           <Bone className="h-3 w-24" />
@@ -51,7 +51,7 @@ export default function AppShell({
 
   return (
     <div className="min-h-screen bg-[#05070F] text-[#F5F7FF]">
-      <div className="mx-auto max-w-7xl px-6 py-8">
+      <div className="mx-auto max-w-7xl px-4 md:px-6 py-6 md:py-8 pb-24 md:pb-8">
         <header className="mb-8 rounded-[24px] border border-white/[0.07] bg-white/[0.03] px-8 py-6">
           {eyebrow && (
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-[#2FFFCB]">

@@ -607,7 +607,7 @@ export default function PulseCockpit() {
   if (loading) return (
     <div className="flex h-screen bg-[#040406]">
       <Sidebar />
-      <main className="ml-[60px] flex-1 p-6">
+      <main className="md:ml-[60px] pb-20 md:pb-0 flex-1 p-6">
         <SkeletonPage cols={3} />
       </main>
     </div>
@@ -617,7 +617,7 @@ export default function PulseCockpit() {
   if (hasData === false) return (
     <div className="flex h-screen bg-[#040406]">
       <Sidebar />
-      <main className="ml-[60px] flex-1 flex items-center justify-center p-6">
+      <main className="md:ml-[60px] pb-20 md:pb-0 flex-1 flex items-center justify-center p-6">
         <div className="max-w-[420px] w-full text-center space-y-6">
           {/* Ícone */}
           <div className="w-16 h-16 rounded-2xl bg-fuchsia-500/10 border border-fuchsia-500/20
@@ -676,7 +676,7 @@ export default function PulseCockpit() {
     <div className="flex h-screen bg-[#040406] overflow-hidden">
       <Sidebar />
 
-      <main className="ml-[60px] flex-1 overflow-y-auto">
+      <main className="md:ml-[60px] pb-20 md:pb-0 flex-1 overflow-y-auto">
         <div className="max-w-[960px] mx-auto px-6 py-6 space-y-5">
 
           {/* ─── ZONA 1: Status Bar ─────────────────────────────────────────── */}

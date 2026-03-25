@@ -139,7 +139,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
 
-      <body className={`${jakarta.className} bg-[#0a0a0b] antialiased`}>
+      <body className={`${jakarta.className} bg-[#0a0a0b] antialiased overflow-x-hidden`}>
         {children}
         <CookieBanner />
         <Toaster />

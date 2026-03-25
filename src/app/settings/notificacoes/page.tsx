@@ -103,7 +103,7 @@ export default function NotificacoesPage() {
   return (
     <div className="flex min-h-screen bg-[#060609] text-white">
       <Sidebar />
-      <main className="ml-[60px] flex-1 px-8 py-8 max-w-2xl">
+      <main className="md:ml-[60px] pb-20 md:pb-0 flex-1 px-8 py-8 max-w-2xl">
         <button onClick={() => router.push("/settings")}
           className="flex items-center gap-2 text-[11px] text-white/30 hover:text-white/60 transition-colors mb-6">
           <ArrowLeft size={13} /> Configurações

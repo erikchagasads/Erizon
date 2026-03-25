@@ -114,7 +114,7 @@ export default function SignupPage() {
           </Link>
         </div>
 
-        <div className="w-full max-w-[380px]">
+        <div className="w-full max-w-[380px] px-4 sm:px-0">
 
           {success ? (
             <div className="text-center">

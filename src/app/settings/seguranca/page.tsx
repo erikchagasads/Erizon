@@ -232,7 +232,7 @@ export default function SegurancaPage() {
   return (
     <div className="flex min-h-screen bg-[#060609] text-white">
       <Sidebar />
-      <main className="ml-[60px] flex-1 px-8 py-8 max-w-2xl">
+      <main className="md:ml-[60px] pb-20 md:pb-0 flex-1 px-8 py-8 max-w-2xl">
 
         {/* Voltar */}
         <button onClick={() => router.push("/settings")}

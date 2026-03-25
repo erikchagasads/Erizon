@@ -900,7 +900,7 @@ export default function ClientesPage() {
   return (
     <>
       <Sidebar />
-      <div className="ml-[60px] min-h-screen bg-[#040406] text-white">
+      <div className="md:ml-[60px] pb-20 md:pb-0 min-h-screen bg-[#040406] text-white">
         <div className="max-w-5xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between mb-8">
             <div>

@@ -97,14 +97,14 @@ export default function DashboardPage() {
   if (loading) return (
     <div className="flex min-h-screen bg-[#060609] text-white">
       <Sidebar />
-      <main className="ml-[60px] flex-1 flex items-center justify-center text-white/30">Carregando...</main>
+      <main className="md:ml-[60px] pb-20 md:pb-0 flex-1 flex items-center justify-center text-white/30">Carregando...</main>
     </div>
   );
 
   return (
     <div className="flex min-h-screen bg-[#060609] text-white">
       <Sidebar />
-      <main className="ml-[60px] flex-1">
+      <main className="md:ml-[60px] pb-20 md:pb-0 flex-1">
         <AppShell eyebrow="Dashboard OS" title="Visão operacional da conta"
           description="Performance real das campanhas ativas, decisões registradas e saúde da operação.">
 
