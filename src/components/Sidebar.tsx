@@ -8,7 +8,7 @@ import {
   Zap, BarChart3, BarChart2, Users, Users2, Building2,
   BrainCircuit, Sparkles, Settings, LogOut,
   ShieldAlert, Bot, FileText, Layers,
-  Cpu, Globe, GitBranch, Instagram, Activity, Kanban,
+  Cpu, Globe, GitBranch, Instagram, Activity, Kanban, BookOpen,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
@@ -64,6 +64,7 @@ const NAV: NavEntry[] = [
   null,
 
   // ── Conta ──────────────────────────────────────────────
+  { href: "/blog",     icon: BookOpen,  label: "Blog"          },
   { href: "/settings", icon: Settings, label: "Configurações" },
 ];
 
