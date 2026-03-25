@@ -101,7 +101,7 @@ export default async function BlogPage() {
         </nav>
       )}
 
-      <div className={`max-w-5xl mx-auto px-6 py-16 ${logado ? "ml-[60px]" : ""}`}
+      <div className={`max-w-5xl mx-auto px-6 py-16 ${logado ? "ml-[60px]" : ""}`}>
         <div className="mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-400 font-medium mb-4">
             <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />

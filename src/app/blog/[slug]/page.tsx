@@ -168,7 +168,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         </nav>
       )}
 
-      <article className={`max-w-3xl mx-auto px-6 py-16 ${logado ? "ml-[60px]" : ""}`}
+      <article className={`max-w-3xl mx-auto px-6 py-16 ${logado ? "ml-[60px]" : ""}`}>
         {/* Meta */}
         <div className="flex items-center gap-3 mb-6 flex-wrap">
           <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
