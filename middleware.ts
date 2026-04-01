@@ -20,6 +20,7 @@ const ROTAS_CLIENTE = ["/cliente", "/login", "/signup", "/api"];
 const ERIZON_HOSTS = [
   "erizonai.com.br",
   "www.erizonai.com.br",
+  "onboarding.erizonai.com.br",
   "erizon.vercel.app",
   "localhost",
   "127.0.0.1",

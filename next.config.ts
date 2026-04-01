@@ -12,6 +12,16 @@ const withPWA = nextPWA({
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   turbopack: {},
+  async rewrites() {
+    return [
+      // Subdomínio onboarding.erizonai.com.br → landing de diagnóstico
+      {
+        source: "/",
+        has: [{ type: "host", value: "onboarding.erizonai.com.br" }],
+        destination: "/lp/diagnostico",
+      },
+    ];
+  },
   async redirects() {
     return [
       // Rotas renomeadas
