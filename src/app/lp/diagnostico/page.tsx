@@ -128,9 +128,6 @@ export default function DiagnosticoPage() {
 
   function avancarLead() {
     if (!form.nome.trim()) { setErro("Coloca seu nome."); return; }
-    if (!form.whatsapp.replace(/\D/g, "") || form.whatsapp.replace(/\D/g, "").length < 10) {
-      setErro("WhatsApp inválido."); return;
-    }
     setErro("");
     setTela("form");
     setPasso(0);
@@ -194,39 +191,17 @@ export default function DiagnosticoPage() {
   if (tela === "lead") {
     return (
       <div className="min-h-screen bg-[#080810] flex flex-col items-center justify-center px-4">
-        <div className="w-full max-w-sm space-y-5">
+        <div className="w-full max-w-sm space-y-4">
           <div className="text-center mb-2">
-            <h2 className="text-2xl font-bold text-white mb-1">Antes de começar</h2>
-            <p className="text-white/40 text-sm">Para quem eu envio o panorama?</p>
+            <h2 className="text-2xl font-bold text-white mb-1">Como posso te chamar?</h2>
+            <p className="text-white/40 text-sm">Só isso, prometo.</p>
           </div>
           <input
             autoFocus
             value={form.nome}
             onChange={(e) => { set("nome", e.target.value); setErro(""); }}
-            placeholder="Seu nome"
-            className="w-full bg-white/[0.04] border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-white/20 text-base focus:outline-none focus:border-purple-500 transition-colors"
-          />
-          <input
-            value={form.empresa}
-            onChange={(e) => set("empresa", e.target.value)}
-            placeholder="Empresa ou marca (opcional)"
-            className="w-full bg-white/[0.04] border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-white/20 text-base focus:outline-none focus:border-purple-500 transition-colors"
-          />
-          <div className="relative">
-            <span className="absolute left-5 top-1/2 -translate-y-1/2 text-white/30 text-base select-none">@</span>
-            <input
-              value={form.instagram}
-              onChange={(e) => set("instagram", e.target.value.replace("@", ""))}
-              placeholder="seu.instagram (opcional)"
-              className="w-full bg-white/[0.04] border border-white/10 rounded-2xl pl-9 pr-5 py-4 text-white placeholder-white/20 text-base focus:outline-none focus:border-purple-500 transition-colors"
-            />
-          </div>
-          <input
-            value={form.whatsapp}
-            onChange={(e) => { set("whatsapp", e.target.value); setErro(""); }}
             onKeyDown={(e) => e.key === "Enter" && avancarLead()}
-            placeholder="WhatsApp (com DDD)"
-            type="tel"
+            placeholder="Seu nome"
             className="w-full bg-white/[0.04] border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-white/20 text-base focus:outline-none focus:border-purple-500 transition-colors"
           />
           {erro && <p className="text-red-400 text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{erro}</p>}
