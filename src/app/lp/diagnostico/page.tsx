@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   ArrowRight, Loader2, ChevronRight, TrendingUp, Zap,
   Target, AlertTriangle, CheckCircle2, BarChart3, Lightbulb,
-  Clock, DollarSign, Megaphone, Star,
+  Clock, Megaphone, Star,
 } from "lucide-react";
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
@@ -15,13 +15,11 @@ interface Alavanca {
   prazo: string;
   como_comecar: string;
 }
-
 interface CanalRec {
   canal: string;
   por_que_para_este_nicho: string;
   como_usar: string;
 }
-
 interface Diagnostico {
   titulo_diagnostico: string;
   resumo_executivo: string;
@@ -34,375 +32,408 @@ interface Diagnostico {
   frase_motivacional: string;
 }
 
-// ── Dados do formulário ────────────────────────────────────────────────────────
+// ── Opções ─────────────────────────────────────────────────────────────────────
 const NICHOS = [
-  "E-commerce / Loja virtual",
-  "Imobiliária / Corretor",
-  "Clínica / Saúde",
-  "Restaurante / Food",
-  "Infoproduto / Curso online",
-  "SaaS / Software",
-  "Serviço local (salão, academia, etc.)",
-  "Consultoria / Agência",
-  "Varejo físico",
-  "Educação / Escola",
-  "Indústria / B2B",
-  "Outro",
+  { label: "E-commerce", emoji: "🛍️" },
+  { label: "Imobiliária / Corretor", emoji: "🏠" },
+  { label: "Clínica / Saúde", emoji: "🏥" },
+  { label: "Restaurante / Food", emoji: "🍽️" },
+  { label: "Infoproduto / Curso", emoji: "🎓" },
+  { label: "SaaS / Software", emoji: "💻" },
+  { label: "Serviço local", emoji: "📍" },
+  { label: "Consultoria / Agência", emoji: "📊" },
+  { label: "Varejo físico", emoji: "🏪" },
+  { label: "Educação / Escola", emoji: "📚" },
+  { label: "Indústria / B2B", emoji: "🏭" },
+  { label: "Outro", emoji: "✳️" },
 ];
-
-const MODELOS = ["B2C (venda direto ao consumidor)", "B2B (venda para empresas)", "B2B2C", "Marketplace", "Assinatura/Recorrência"];
 
 const FATURAMENTOS = [
-  "Ainda não faturando (pré-revenue)",
-  "Até R$ 10 mil/mês",
-  "R$ 10 mil – R$ 50 mil/mês",
-  "R$ 50 mil – R$ 150 mil/mês",
-  "R$ 150 mil – R$ 500 mil/mês",
-  "Acima de R$ 500 mil/mês",
+  { label: "Ainda não faturando", emoji: "🌱" },
+  { label: "Até R$ 10k/mês", emoji: "📈" },
+  { label: "R$ 10k – R$ 50k/mês", emoji: "💰" },
+  { label: "R$ 50k – R$ 150k/mês", emoji: "🚀" },
+  { label: "R$ 150k – R$ 500k/mês", emoji: "⚡" },
+  { label: "Acima de R$ 500k/mês", emoji: "🏆" },
 ];
 
-const CANAIS_OPTIONS = [
-  "Instagram / Facebook orgânico",
-  "Meta Ads (Facebook/Instagram pago)",
-  "Google Ads",
-  "SEO / Blog",
-  "WhatsApp",
-  "TikTok",
-  "E-mail marketing",
-  "Indicação / boca a boca",
-  "YouTube",
-  "LinkedIn",
-  "Nenhum canal estruturado",
+const CANAIS = [
+  { label: "Instagram orgânico", emoji: "📸" },
+  { label: "Meta Ads", emoji: "🎯" },
+  { label: "Google Ads", emoji: "🔍" },
+  { label: "WhatsApp", emoji: "💬" },
+  { label: "TikTok", emoji: "🎵" },
+  { label: "SEO / Blog", emoji: "✍️" },
+  { label: "E-mail marketing", emoji: "📧" },
+  { label: "Indicação", emoji: "🤝" },
+  { label: "LinkedIn", emoji: "💼" },
+  { label: "Nenhum ainda", emoji: "🚫" },
+];
+
+const DESAFIOS = [
+  { label: "Gerar mais leads", emoji: "🎣" },
+  { label: "Converter mais vendas", emoji: "💳" },
+  { label: "Reduzir custo de aquisição", emoji: "📉" },
+  { label: "Fidelizar clientes", emoji: "❤️" },
+  { label: "Escalar sem perder qualidade", emoji: "⚖️" },
+  { label: "Ter previsibilidade de receita", emoji: "📅" },
+  { label: "Construir presença digital", emoji: "🌐" },
+  { label: "Lançar um novo produto", emoji: "🚀" },
+];
+
+const METAS = [
+  { label: "Dobrar o faturamento", emoji: "2️⃣" },
+  { label: "Chegar a 100 clientes", emoji: "👥" },
+  { label: "Atingir R$ 50k/mês", emoji: "💰" },
+  { label: "Lançar meu produto", emoji: "🎯" },
+  { label: "Automatizar o marketing", emoji: "🤖" },
+  { label: "Montar time de vendas", emoji: "🏆" },
+  { label: "Entrar em novo mercado", emoji: "🗺️" },
+  { label: "Reduzir o CAC pela metade", emoji: "✂️" },
 ];
 
 const ORCAMENTOS = [
-  "Sem orçamento definido",
-  "Até R$ 500/mês",
-  "R$ 500 – R$ 2.000/mês",
-  "R$ 2.000 – R$ 5.000/mês",
-  "R$ 5.000 – R$ 15.000/mês",
-  "Acima de R$ 15.000/mês",
+  { label: "Sem orçamento definido", emoji: "🤔" },
+  { label: "Até R$ 500/mês", emoji: "🌱" },
+  { label: "R$ 500 – R$ 2k/mês", emoji: "📈" },
+  { label: "R$ 2k – R$ 5k/mês", emoji: "💰" },
+  { label: "R$ 5k – R$ 15k/mês", emoji: "🚀" },
+  { label: "Acima de R$ 15k/mês", emoji: "⚡" },
+];
+
+// ── Passos ─────────────────────────────────────────────────────────────────────
+const PASSOS = [
+  { titulo: "Seu negócio", subtitulo: "Qual é o seu nicho?" },
+  { titulo: "Tamanho atual", subtitulo: "Qual é o faturamento mensal?" },
+  { titulo: "Marketing hoje", subtitulo: "Quais canais você usa? (pode marcar vários)" },
+  { titulo: "Principal desafio", subtitulo: "O que está travando o crescimento?" },
+  { titulo: "Sua meta", subtitulo: "Onde quer chegar nos próximos 3 meses?" },
+  { titulo: "Investimento", subtitulo: "Quanto investe em marketing por mês?" },
 ];
 
 // ── Componente principal ───────────────────────────────────────────────────────
 export default function DiagnosticoGrowth() {
+  const [tela, setTela] = useState<"hero" | "lead" | "form" | "loading" | "resultado">("hero");
   const [passo, setPasso] = useState(0);
-  const [loading, setLoading] = useState(false);
   const [diagnostico, setDiagnostico] = useState<Diagnostico | null>(null);
   const [erro, setErro] = useState("");
 
   const [form, setForm] = useState({
-    nome: "",
-    email: "",
-    nicho: "",
-    nichoCustom: "",
-    modelo_negocio: "",
-    faturamento: "",
+    nome: "", email: "",
+    nicho: "", faturamento: "",
     canais: [] as string[],
-    desafio: "",
-    meta: "",
-    orcamento: "",
+    desafio: "", meta: "", orcamento: "",
   });
 
-  function set(field: string, value: string | string[]) {
+  function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
-    setErro("");
   }
 
-  function toggleCanal(canal: string) {
-    set(
-      "canais",
-      form.canais.includes(canal)
-        ? form.canais.filter((c) => c !== canal)
-        : [...form.canais, canal]
-    );
+  function toggleCanal(c: string) {
+    setForm((f) => ({
+      ...f,
+      canais: f.canais.includes(c) ? f.canais.filter((x) => x !== c) : [...f.canais, c],
+    }));
   }
 
-  const TOTAL_PASSOS = 6;
-  const progresso = Math.round((passo / TOTAL_PASSOS) * 100);
+  // Seleciona e avança automaticamente (para campos de escolha única)
+  function selecionarEAvancar(field: string, value: string) {
+    setForm((f) => ({ ...f, [field]: value }));
+    setTimeout(() => setPasso((p) => p + 1), 180);
+  }
 
   async function enviar() {
-    setLoading(true);
+    setTela("loading");
     setErro("");
     try {
       const res = await fetch("/api/growth-diagnostico", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          canais: form.canais.join(", ") || "Nenhum",
-        }),
+        body: JSON.stringify({ ...form, canais: form.canais.join(", ") || "Nenhum" }),
       });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error ?? "Erro ao gerar diagnóstico");
       setDiagnostico(json.diagnostico);
-      setPasso(7);
+      setTela("resultado");
     } catch (e: unknown) {
       setErro(e instanceof Error ? e.message : "Erro inesperado");
-    } finally {
-      setLoading(false);
+      setTela("form");
     }
   }
 
-  function avancar() {
-    if (passo === 0 && (!form.nome.trim() || !form.email.includes("@"))) {
-      setErro("Preencha seu nome e e-mail corretamente.");
-      return;
-    }
-    if (passo === 1 && !form.nicho) { setErro("Selecione o seu nicho."); return; }
-    if (passo === 1 && form.nicho === "Outro" && !form.nichoCustom.trim()) {
-      setErro("Descreva o seu nicho."); return;
-    }
-    if (passo === 2 && (!form.modelo_negocio || !form.faturamento)) {
-      setErro("Preencha todos os campos."); return;
-    }
-    if (passo === 4 && (!form.desafio.trim() || !form.meta.trim())) {
-      setErro("Descreva seu desafio e meta."); return;
-    }
-    if (passo === 5) { enviar(); return; }
-    setPasso((p) => p + 1);
+  function avancarLead() {
+    if (!form.nome.trim()) { setErro("Coloca seu nome."); return; }
+    if (!form.email.includes("@")) { setErro("E-mail inválido."); return; }
+    setErro("");
+    setTela("form");
+    setPasso(0);
   }
 
-  // ── Tela de resultado ────────────────────────────────────────────────────────
-  if (passo === 7 && diagnostico) {
-    return <ResultadoDiagnostico diagnostico={diagnostico} nome={form.nome} />;
-  }
-
-  // ── Loading ──────────────────────────────────────────────────────────────────
-  if (loading) {
+  // ── Tela hero ────────────────────────────────────────────────────────────────
+  if (tela === "hero") {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center gap-6 px-4">
-        <div className="w-16 h-16 rounded-2xl bg-purple-600/20 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center px-4 text-center">
+        <div className="inline-flex items-center gap-2 bg-purple-600/10 border border-purple-600/20 rounded-full px-4 py-1.5 mb-8">
+          <Zap className="w-3.5 h-3.5 text-purple-400" />
+          <span className="text-purple-300 text-xs font-medium">Diagnóstico gratuito em 90 segundos</span>
         </div>
-        <div className="text-center">
-          <p className="text-white text-xl font-semibold mb-2">Analisando seu negócio…</p>
-          <p className="text-white/40 text-sm max-w-xs">
-            Nosso analista de growth está mapeando as melhores oportunidades para o seu nicho.
-          </p>
-        </div>
-        <div className="flex gap-1.5 mt-4">
-          {["Mapeando nicho", "Identificando gaps", "Construindo plano"].map((t, i) => (
-            <div key={i} className="flex items-center gap-1.5 text-xs text-white/30">
-              {i > 0 && <span className="text-white/10">›</span>}
-              <span>{t}</span>
-            </div>
-          ))}
+        <h1 className="text-4xl sm:text-5xl font-black text-white mb-5 leading-tight max-w-lg">
+          Descubra o que está<br />
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
+            travando seu crescimento
+          </span>
+        </h1>
+        <p className="text-white/50 text-base max-w-sm mb-10">
+          Responda 6 perguntas rápidas e receba um plano de ação personalizado para o seu negócio — gerado por IA.
+        </p>
+        <button
+          onClick={() => setTela("lead")}
+          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-2xl px-10 py-4 text-lg transition-all shadow-lg shadow-purple-900/30"
+        >
+          Quero meu diagnóstico <ArrowRight className="w-5 h-5" />
+        </button>
+        <p className="text-white/20 text-xs mt-4">Gratuito · Sem cartão · 90 segundos</p>
+      </div>
+    );
+  }
+
+  // ── Tela lead ────────────────────────────────────────────────────────────────
+  if (tela === "lead") {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm space-y-6">
+          <div className="text-center mb-2">
+            <h2 className="text-2xl font-bold text-white mb-1">Antes de começar</h2>
+            <p className="text-white/40 text-sm">Para onde envio o diagnóstico?</p>
+          </div>
+          <div className="space-y-3">
+            <input
+              autoFocus
+              value={form.nome}
+              onChange={(e) => { set("nome", e.target.value); setErro(""); }}
+              onKeyDown={(e) => e.key === "Enter" && avancarLead()}
+              placeholder="Seu nome"
+              className="w-full bg-white/[0.04] border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-white/20 text-base focus:outline-none focus:border-purple-500 transition-colors"
+            />
+            <input
+              value={form.email}
+              onChange={(e) => { set("email", e.target.value); setErro(""); }}
+              onKeyDown={(e) => e.key === "Enter" && avancarLead()}
+              placeholder="Seu e-mail"
+              type="email"
+              className="w-full bg-white/[0.04] border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-white/20 text-base focus:outline-none focus:border-purple-500 transition-colors"
+            />
+          </div>
+          {erro && <p className="text-red-400 text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{erro}</p>}
+          <button
+            onClick={avancarLead}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-2xl py-4 transition-all"
+          >
+            Começar <ArrowRight className="w-4 h-4" />
+          </button>
+          <button onClick={() => setTela("hero")} className="w-full text-white/25 text-sm hover:text-white/40 transition-colors">
+            ← Voltar
+          </button>
         </div>
       </div>
     );
   }
 
-  // ── Formulário ───────────────────────────────────────────────────────────────
+  // ── Loading ──────────────────────────────────────────────────────────────────
+  if (tela === "loading") {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center gap-6 px-4 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-purple-600/20 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+        </div>
+        <div>
+          <p className="text-white text-xl font-semibold mb-2">Analisando seu negócio…</p>
+          <p className="text-white/40 text-sm max-w-xs">Mapeando oportunidades específicas para o seu nicho.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Resultado ────────────────────────────────────────────────────────────────
+  if (tela === "resultado" && diagnostico) {
+    return <ResultadoDiagnostico diagnostico={diagnostico} />;
+  }
+
+  // ── Formulário multi-choice ──────────────────────────────────────────────────
+  const progresso = Math.round(((passo) / PASSOS.length) * 100);
+  const { titulo, subtitulo } = PASSOS[passo];
+
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex flex-col">
-      {/* Hero / Header */}
-      {passo === 0 && (
-        <div className="pt-16 pb-8 px-4 text-center">
-          <div className="inline-flex items-center gap-2 bg-purple-600/10 border border-purple-600/20 rounded-full px-4 py-1.5 mb-6">
-            <Zap className="w-3.5 h-3.5 text-purple-400" />
-            <span className="text-purple-300 text-xs font-medium">Diagnóstico gratuito em 2 minutos</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4 leading-tight">
-            Descubra o que está<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
-              travando o seu crescimento
-            </span>
-          </h1>
-          <p className="text-white/50 text-base max-w-md mx-auto">
-            Responda 6 perguntas rápidas e receba um diagnóstico personalizado com o plano de ação para o seu negócio.
-          </p>
-        </div>
-      )}
-
       {/* Barra de progresso */}
-      {passo > 0 && passo < 7 && (
-        <div className="pt-8 px-4 max-w-lg mx-auto w-full">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-white/30 text-xs">Etapa {passo} de {TOTAL_PASSOS}</span>
-            <span className="text-purple-400 text-xs font-medium">{progresso}%</span>
-          </div>
-          <div className="h-1 bg-white/[0.06] rounded-full">
-            <div
-              className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500"
-              style={{ width: `${progresso}%` }}
-            />
-          </div>
+      <div className="pt-8 px-4 max-w-lg mx-auto w-full">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-white/30 text-xs">{passo + 1} de {PASSOS.length}</span>
+          <span className="text-purple-400 text-xs font-medium">{progresso}%</span>
         </div>
-      )}
+        <div className="h-1 bg-white/[0.06] rounded-full">
+          <div
+            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500"
+            style={{ width: `${progresso}%` }}
+          />
+        </div>
+      </div>
 
-      {/* Conteúdo do passo */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+      <div className="flex-1 flex flex-col items-center px-4 py-8">
         <div className="w-full max-w-lg">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-white mb-1">{titulo}</h2>
+            <p className="text-white/40 text-sm">{subtitulo}</p>
+          </div>
 
-          {/* Passo 0: Dados pessoais */}
+          {/* Passo 0: Nicho */}
           {passo === 0 && (
-            <Card titulo="Vamos começar" subtitulo="Como posso te chamar?">
-              <Input label="Seu nome" value={form.nome} onChange={(v) => set("nome", v)} placeholder="João Silva" />
-              <Input label="Seu e-mail" value={form.email} onChange={(v) => set("email", v)} placeholder="joao@empresa.com" type="email" />
-            </Card>
+            <div className="grid grid-cols-3 gap-2">
+              {NICHOS.map(({ label, emoji }) => (
+                <button
+                  key={label}
+                  onClick={() => selecionarEAvancar("nicho", label)}
+                  className={`flex flex-col items-center gap-2 py-4 px-2 rounded-2xl border transition-all text-center ${
+                    form.nicho === label
+                      ? "border-purple-500 bg-purple-500/10"
+                      : "border-white/[0.08] hover:border-white/20 bg-white/[0.02]"
+                  }`}
+                >
+                  <span className="text-2xl">{emoji}</span>
+                  <span className="text-white/70 text-xs leading-tight">{label}</span>
+                </button>
+              ))}
+            </div>
           )}
 
-          {/* Passo 1: Nicho */}
+          {/* Passo 1: Faturamento */}
           {passo === 1 && (
-            <Card titulo="Seu negócio" subtitulo="Qual é o seu nicho ou segmento?">
-              <div className="grid grid-cols-2 gap-2">
-                {NICHOS.map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => set("nicho", n)}
-                    className={`text-left text-sm px-3 py-3 rounded-xl border transition-all ${
-                      form.nicho === n
-                        ? "border-purple-500 bg-purple-500/10 text-white"
-                        : "border-white/10 text-white/50 hover:border-white/20 hover:text-white/70"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              {form.nicho === "Outro" && (
-                <Input
-                  label="Descreva seu nicho"
-                  value={form.nichoCustom}
-                  onChange={(v) => set("nichoCustom", v)}
-                  placeholder="Ex: petshop, advocacia, etc."
-                />
-              )}
-            </Card>
+            <div className="space-y-2">
+              {FATURAMENTOS.map(({ label, emoji }) => (
+                <button
+                  key={label}
+                  onClick={() => selecionarEAvancar("faturamento", label)}
+                  className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl border transition-all ${
+                    form.faturamento === label
+                      ? "border-purple-500 bg-purple-500/10"
+                      : "border-white/[0.08] hover:border-white/20 bg-white/[0.02]"
+                  }`}
+                >
+                  <span className="text-2xl">{emoji}</span>
+                  <span className="text-white/80 text-sm font-medium">{label}</span>
+                </button>
+              ))}
+            </div>
           )}
 
-          {/* Passo 2: Modelo e faturamento */}
+          {/* Passo 2: Canais (múltipla escolha) */}
           {passo === 2 && (
-            <Card titulo="Modelo e tamanho" subtitulo="Como seu negócio opera?">
-              <div className="space-y-3">
-                <label className="text-white/60 text-sm">Modelo de negócio</label>
-                <div className="space-y-2">
-                  {MODELOS.map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => set("modelo_negocio", m)}
-                      className={`w-full text-left text-sm px-4 py-3 rounded-xl border transition-all ${
-                        form.modelo_negocio === m
-                          ? "border-purple-500 bg-purple-500/10 text-white"
-                          : "border-white/10 text-white/50 hover:border-white/20"
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
+            <>
+              <div className="grid grid-cols-2 gap-2 mb-5">
+                {CANAIS.map(({ label, emoji }) => (
+                  <button
+                    key={label}
+                    onClick={() => toggleCanal(label)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all text-left ${
+                      form.canais.includes(label)
+                        ? "border-purple-500 bg-purple-500/10"
+                        : "border-white/[0.08] hover:border-white/20 bg-white/[0.02]"
+                    }`}
+                  >
+                    <span className="text-xl">{emoji}</span>
+                    <span className="text-white/70 text-xs">{label}</span>
+                  </button>
+                ))}
               </div>
-              <div className="space-y-3 mt-4">
-                <label className="text-white/60 text-sm">Faturamento mensal atual</label>
-                <div className="space-y-2">
-                  {FATURAMENTOS.map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => set("faturamento", f)}
-                      className={`w-full text-left text-sm px-4 py-3 rounded-xl border transition-all ${
-                        form.faturamento === f
-                          ? "border-purple-500 bg-purple-500/10 text-white"
-                          : "border-white/10 text-white/50 hover:border-white/20"
-                      }`}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </Card>
+              <button
+                onClick={() => setPasso((p) => p + 1)}
+                disabled={form.canais.length === 0}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-2xl py-4 transition-all disabled:opacity-40"
+              >
+                Continuar <ArrowRight className="w-4 h-4" />
+              </button>
+            </>
           )}
 
-          {/* Passo 3: Canais */}
+          {/* Passo 3: Desafio */}
           {passo === 3 && (
-            <Card titulo="Marketing atual" subtitulo="Quais canais você usa hoje? (pode marcar vários)">
-              <div className="grid grid-cols-2 gap-2">
-                {CANAIS_OPTIONS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => toggleCanal(c)}
-                    className={`text-left text-sm px-3 py-3 rounded-xl border transition-all ${
-                      form.canais.includes(c)
-                        ? "border-purple-500 bg-purple-500/10 text-white"
-                        : "border-white/10 text-white/50 hover:border-white/20 hover:text-white/70"
-                    }`}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            </Card>
+            <div className="grid grid-cols-2 gap-2">
+              {DESAFIOS.map(({ label, emoji }) => (
+                <button
+                  key={label}
+                  onClick={() => selecionarEAvancar("desafio", label)}
+                  className={`flex flex-col items-start gap-2 px-4 py-4 rounded-2xl border transition-all ${
+                    form.desafio === label
+                      ? "border-purple-500 bg-purple-500/10"
+                      : "border-white/[0.08] hover:border-white/20 bg-white/[0.02]"
+                  }`}
+                >
+                  <span className="text-2xl">{emoji}</span>
+                  <span className="text-white/70 text-xs leading-snug">{label}</span>
+                </button>
+              ))}
+            </div>
           )}
 
-          {/* Passo 4: Desafio e meta */}
+          {/* Passo 4: Meta */}
           {passo === 4 && (
-            <Card titulo="Desafio e objetivo" subtitulo="O que está travando e onde quer chegar?">
-              <Textarea
-                label="Qual é o seu maior desafio de crescimento hoje?"
-                value={form.desafio}
-                onChange={(v) => set("desafio", v)}
-                placeholder="Ex: não consigo gerar leads qualificados, meu CAC tá alto, não tenho previsibilidade de receita..."
-              />
-              <Textarea
-                label="Qual é a sua meta para os próximos 3 meses?"
-                value={form.meta}
-                onChange={(v) => set("meta", v)}
-                placeholder="Ex: dobrar o faturamento, chegar a 100 clientes, lançar meu produto..."
-              />
-            </Card>
+            <div className="grid grid-cols-2 gap-2">
+              {METAS.map(({ label, emoji }) => (
+                <button
+                  key={label}
+                  onClick={() => selecionarEAvancar("meta", label)}
+                  className={`flex flex-col items-start gap-2 px-4 py-4 rounded-2xl border transition-all ${
+                    form.meta === label
+                      ? "border-purple-500 bg-purple-500/10"
+                      : "border-white/[0.08] hover:border-white/20 bg-white/[0.02]"
+                  }`}
+                >
+                  <span className="text-2xl">{emoji}</span>
+                  <span className="text-white/70 text-xs leading-snug">{label}</span>
+                </button>
+              ))}
+            </div>
           )}
 
-          {/* Passo 5: Orçamento */}
+          {/* Passo 5: Orçamento + enviar */}
           {passo === 5 && (
-            <Card titulo="Investimento em marketing" subtitulo="Quanto você investe (ou pode investir) por mês?">
-              <div className="space-y-2">
-                {ORCAMENTOS.map((o) => (
+            <>
+              <div className="space-y-2 mb-5">
+                {ORCAMENTOS.map(({ label, emoji }) => (
                   <button
-                    key={o}
-                    onClick={() => set("orcamento", o)}
-                    className={`w-full text-left text-sm px-4 py-3 rounded-xl border transition-all ${
-                      form.orcamento === o
-                        ? "border-purple-500 bg-purple-500/10 text-white"
-                        : "border-white/10 text-white/50 hover:border-white/20"
+                    key={label}
+                    onClick={() => set("orcamento", label)}
+                    className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl border transition-all ${
+                      form.orcamento === label
+                        ? "border-purple-500 bg-purple-500/10"
+                        : "border-white/[0.08] hover:border-white/20 bg-white/[0.02]"
                     }`}
                   >
-                    {o}
+                    <span className="text-2xl">{emoji}</span>
+                    <span className="text-white/80 text-sm font-medium">{label}</span>
                   </button>
                 ))}
               </div>
-              <div className="mt-4 p-4 bg-purple-600/10 border border-purple-600/20 rounded-xl">
-                <p className="text-purple-300 text-sm">
-                  Tudo pronto! Ao clicar em continuar, nossa IA vai analisar suas respostas e montar um diagnóstico personalizado para o seu negócio.
-                </p>
-              </div>
-            </Card>
+              <button
+                onClick={enviar}
+                disabled={!form.orcamento}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-2xl py-4 transition-all disabled:opacity-40"
+              >
+                <Zap className="w-4 h-4" /> Gerar meu diagnóstico
+              </button>
+            </>
           )}
 
-          {/* Erro */}
           {erro && (
-            <p className="text-red-400 text-sm mt-3 flex items-center gap-2">
+            <p className="text-red-400 text-sm mt-4 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4" /> {erro}
             </p>
           )}
 
-          {/* Botão avançar */}
-          <button
-            onClick={avancar}
-            disabled={loading}
-            className="mt-6 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold rounded-2xl py-4 transition-all disabled:opacity-50"
-          >
-            {passo === 5 ? (
-              <><Zap className="w-4 h-4" /> Gerar meu diagnóstico</>
-            ) : (
-              <><span>Continuar</span><ArrowRight className="w-4 h-4" /></>
-            )}
-          </button>
-
           {passo > 0 && (
             <button
               onClick={() => setPasso((p) => p - 1)}
-              className="mt-3 w-full text-white/30 text-sm hover:text-white/50 transition-colors"
+              className="mt-4 w-full text-white/25 text-sm hover:text-white/40 transition-colors"
             >
               ← Voltar
             </button>
@@ -413,82 +444,32 @@ export default function DiagnosticoGrowth() {
   );
 }
 
-// ── Componentes auxiliares ─────────────────────────────────────────────────────
-function Card({ titulo, subtitulo, children }: { titulo: string; subtitulo: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-2xl font-bold text-white mb-1">{titulo}</h2>
-        <p className="text-white/40 text-sm">{subtitulo}</p>
-      </div>
-      <div className="space-y-4">{children}</div>
-    </div>
-  );
-}
-
-function Input({ label, value, onChange, placeholder, type = "text" }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder: string; type?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-white/60 text-sm">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/20 text-sm focus:outline-none focus:border-purple-500 transition-colors"
-      />
-    </div>
-  );
-}
-
-function Textarea({ label, value, onChange, placeholder }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-white/60 text-sm">{label}</label>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        rows={3}
-        className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/20 text-sm focus:outline-none focus:border-purple-500 transition-colors resize-none"
-      />
-    </div>
-  );
-}
-
-// ── Tela de resultado ──────────────────────────────────────────────────────────
-function ResultadoDiagnostico({ diagnostico: d, nome }: { diagnostico: Diagnostico; nome: string }) {
+// ── Resultado ──────────────────────────────────────────────────────────────────
+function ResultadoDiagnostico({ diagnostico: d }: { diagnostico: Diagnostico }) {
   const scoreColor =
     d.score_growth >= 70 ? "text-green-400" :
     d.score_growth >= 40 ? "text-yellow-400" : "text-red-400";
 
-  const impactoBadge = (impacto: string) => {
-    if (impacto === "alto") return "bg-green-500/10 text-green-400 border-green-500/20";
-    if (impacto === "médio") return "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
-    return "bg-white/5 text-white/40 border-white/10";
-  };
+  const impactoBadge = (i: string) =>
+    i === "alto" ? "bg-green-500/10 text-green-400 border-green-500/20" :
+    i === "médio" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
+    "bg-white/5 text-white/40 border-white/10";
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] pb-20">
-      {/* Header resultado */}
       <div className="bg-gradient-to-b from-purple-950/40 to-transparent pt-12 pb-8 px-4 text-center">
         <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-full px-4 py-1.5 mb-4">
           <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-          <span className="text-green-300 text-xs font-medium">Diagnóstico gerado com sucesso</span>
+          <span className="text-green-300 text-xs font-medium">Diagnóstico pronto</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">{d.titulo_diagnostico}</h1>
         <p className="text-white/50 text-sm max-w-md mx-auto">{d.resumo_executivo}</p>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 space-y-6">
-
+      <div className="max-w-2xl mx-auto px-4 space-y-5">
         {/* Score */}
         <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 flex items-center gap-6">
-          <div className="text-center">
+          <div className="text-center shrink-0">
             <div className={`text-5xl font-black ${scoreColor}`}>{d.score_growth}</div>
             <div className="text-white/30 text-xs mt-1">Growth Score</div>
           </div>
@@ -503,14 +484,14 @@ function ResultadoDiagnostico({ diagnostico: d, nome }: { diagnostico: Diagnosti
               />
             </div>
             <p className="text-white/40 text-xs mt-2">
-              {d.score_growth >= 70 ? "Negócio bem estruturado — foco em escalar" :
-               d.score_growth >= 40 ? "Base sólida — oportunidades de otimização claras" :
+              {d.score_growth >= 70 ? "Bem estruturado — foco em escalar" :
+               d.score_growth >= 40 ? "Base sólida — gaps claros para otimizar" :
                "Momento de estruturar antes de escalar"}
             </p>
           </div>
         </div>
 
-        {/* Alerta crítico */}
+        {/* Alerta */}
         {d.alerta_critico && (
           <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-5 flex gap-4">
             <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
@@ -521,31 +502,24 @@ function ResultadoDiagnostico({ diagnostico: d, nome }: { diagnostico: Diagnosti
           </div>
         )}
 
-        {/* Principais alavancas */}
+        {/* Alavancas */}
         {d.principais_alavancas?.length > 0 && (
           <section>
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-5 h-5 text-purple-400" />
-              <h2 className="text-white font-bold text-lg">Principais alavancas de crescimento</h2>
+              <h2 className="text-white font-bold">Principais alavancas</h2>
             </div>
             <div className="space-y-3">
               {d.principais_alavancas.map((a, i) => (
                 <div key={i} className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5">
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <h3 className="text-white font-semibold text-sm">{a.titulo}</h3>
-                    <div className="flex gap-2 shrink-0">
-                      <span className={`text-xs px-2 py-0.5 rounded-full border ${impactoBadge(a.impacto)}`}>
-                        {a.impacto}
-                      </span>
-                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 ${impactoBadge(a.impacto)}`}>{a.impacto}</span>
                   </div>
                   <p className="text-white/50 text-sm mb-3">{a.descricao}</p>
                   <div className="flex items-start gap-2 bg-purple-600/10 rounded-xl p-3">
                     <ChevronRight className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="text-purple-300 text-xs font-medium">Como começar: </span>
-                      <span className="text-white/60 text-xs">{a.como_comecar}</span>
-                    </div>
+                    <p className="text-white/60 text-xs"><span className="text-purple-300 font-medium">Como começar: </span>{a.como_comecar}</p>
                   </div>
                   <div className="flex items-center gap-1.5 mt-2">
                     <Clock className="w-3.5 h-3.5 text-white/20" />
@@ -560,9 +534,9 @@ function ResultadoDiagnostico({ diagnostico: d, nome }: { diagnostico: Diagnosti
         {/* Plano 30 dias */}
         {d.plano_30_dias?.length > 0 && (
           <section>
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-3">
               <Target className="w-5 h-5 text-pink-400" />
-              <h2 className="text-white font-bold text-lg">Plano de ação — 30 dias</h2>
+              <h2 className="text-white font-bold">Plano 30 dias</h2>
             </div>
             <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl overflow-hidden">
               {d.plano_30_dias.map((acao, i) => (
@@ -577,17 +551,17 @@ function ResultadoDiagnostico({ diagnostico: d, nome }: { diagnostico: Diagnosti
           </section>
         )}
 
-        {/* Canais recomendados */}
+        {/* Canais */}
         {d.canais_recomendados?.length > 0 && (
           <section>
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-3">
               <Megaphone className="w-5 h-5 text-blue-400" />
-              <h2 className="text-white font-bold text-lg">Canais recomendados para o seu nicho</h2>
+              <h2 className="text-white font-bold">Canais recomendados</h2>
             </div>
             <div className="space-y-3">
               {d.canais_recomendados.map((c, i) => (
                 <div key={i} className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-1">
                     <BarChart3 className="w-4 h-4 text-blue-400" />
                     <span className="text-white font-semibold text-sm">{c.canal}</span>
                   </div>
@@ -602,9 +576,9 @@ function ResultadoDiagnostico({ diagnostico: d, nome }: { diagnostico: Diagnosti
         {/* Próximos passos */}
         {d.proximos_passos?.length > 0 && (
           <section>
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-3">
               <Lightbulb className="w-5 h-5 text-yellow-400" />
-              <h2 className="text-white font-bold text-lg">Seus próximos passos</h2>
+              <h2 className="text-white font-bold">Próximos passos</h2>
             </div>
             <div className="space-y-2">
               {d.proximos_passos.map((p, i) => (
@@ -619,7 +593,7 @@ function ResultadoDiagnostico({ diagnostico: d, nome }: { diagnostico: Diagnosti
           </section>
         )}
 
-        {/* Frase motivacional */}
+        {/* Frase */}
         {d.frase_motivacional && (
           <div className="bg-gradient-to-r from-purple-600/10 to-pink-600/10 border border-purple-600/20 rounded-2xl p-6 text-center">
             <Star className="w-6 h-6 text-purple-400 mx-auto mb-3" />
@@ -627,21 +601,17 @@ function ResultadoDiagnostico({ diagnostico: d, nome }: { diagnostico: Diagnosti
           </div>
         )}
 
-        {/* CTA final */}
+        {/* CTA */}
         <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 text-center">
           <p className="text-white font-bold text-lg mb-2">Quer implementar isso com suporte?</p>
-          <p className="text-white/40 text-sm mb-5">
-            O Erizon automatiza seu marketing, centraliza seus dados e acelera a execução do seu plano de growth.
-          </p>
+          <p className="text-white/40 text-sm mb-5">O Erizon automatiza seu marketing e acelera a execução do plano.</p>
           <a
             href="/signup"
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold rounded-2xl px-8 py-4 transition-all"
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-2xl px-8 py-4 transition-all"
           >
-            <Zap className="w-4 h-4" />
-            Começar no Erizon — grátis
+            <Zap className="w-4 h-4" /> Começar no Erizon — grátis
           </a>
         </div>
-
       </div>
     </div>
   );
