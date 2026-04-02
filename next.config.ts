@@ -20,6 +20,11 @@ const nextConfig: NextConfig = {
         has: [{ type: "host", value: "onboarding.erizonai.com.br" }],
         destination: "/lp/diagnostico",
       },
+      {
+        source: "/",
+        has: [{ type: "host", value: "ads.erizonai.com.br" }],
+        destination: "/lp/gestores",
+      },
     ];
   },
   async redirects() {

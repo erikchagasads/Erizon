@@ -21,6 +21,7 @@ const ERIZON_HOSTS = [
   "erizonai.com.br",
   "www.erizonai.com.br",
   "onboarding.erizonai.com.br",
+  "ads.erizonai.com.br",
   "erizon.vercel.app",
   "localhost",
   "127.0.0.1",
