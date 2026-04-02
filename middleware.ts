@@ -31,9 +31,21 @@ function isErizonHost(host: string) {
   return ERIZON_HOSTS.some(h => host === h || host.startsWith(h + ":"));
 }
 
+const SUBDOMAIN_REWRITES: Record<string, string> = {
+  "onboarding.erizonai.com.br": "/lp/diagnostico",
+  "ads.erizonai.com.br": "/lp/gestores",
+};
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const host = request.headers.get("host") ?? "";
+
+  // ── Rewrite por subdomínio ─────────────────────────────────────────────────
+  if (pathname === "/" && SUBDOMAIN_REWRITES[host]) {
+    const url = request.nextUrl.clone();
+    url.pathname = SUBDOMAIN_REWRITES[host];
+    return NextResponse.rewrite(url);
+  }
 
   let response = NextResponse.next({ request: { headers: request.headers } });
 
