@@ -353,7 +353,7 @@ export default function GestoresPage() {
         </div>
 
         <a
-          href={`https://wa.me/5511999999999?text=${encodeURIComponent(`Olá! Fiz o diagnóstico da Erizon e quero saber mais.`)}`}
+          href={`https://wa.me/5519992078842?text=${encodeURIComponent(`Olá! Fiz o diagnóstico da Erizon e quero saber mais.`)}`}
           target="_blank"
           rel="noopener noreferrer"
           className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-2xl py-4 transition-all shadow-xl shadow-purple-900/30"
