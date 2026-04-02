@@ -270,7 +270,7 @@ export default function DiagnosticoPage() {
             Enviar diagnóstico <ArrowRight className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setPasso(PASSOS.length - 1) || setTela("form")}
+            onClick={() => { setPasso(PASSOS.length - 1); setTela("form"); }}
             className="w-full text-white/25 text-sm hover:text-white/40 transition-colors"
           >
             ← Voltar
