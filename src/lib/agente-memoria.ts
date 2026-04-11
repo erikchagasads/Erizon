@@ -1,7 +1,5 @@
 // src/lib/agente-memoria.ts
-// Helper compartilhado — busca e formata memória de cliente para injetar nos agentes
-// Uso: const ctx = await buildContextoCliente(supabase, userId, clienteId)
-//      Adicione ctx ao system prompt do agente
+// CORRIGIDO: busca por workspace_id (era user_id — nunca encontrava os dados)
 
 import { createServerClient } from "@supabase/ssr";
 
@@ -28,6 +26,18 @@ interface MemoriaCliente {
   total_feedbacks?: number;
 }
 
+// ── Resolve workspaceId a partir do userId ────────────────────────────────────
+
+async function resolveWorkspaceId(supabase: Supabase, userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+  return data?.workspace_id ?? null;
+}
+
 // ── Busca memória do cliente ──────────────────────────────────────────────────
 
 export async function buscarMemoriaCliente(
@@ -36,10 +46,13 @@ export async function buscarMemoriaCliente(
   clienteId: string
 ): Promise<MemoriaCliente | null> {
   try {
+    const workspaceId = await resolveWorkspaceId(supabase, userId);
+    if (!workspaceId) return null;
+
     const { data } = await supabase
       .from("agente_memoria_cliente")
       .select("*")
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .eq("cliente_id", clienteId)
       .maybeSingle();
     return data ?? null;
@@ -55,12 +68,10 @@ export function buildContextoCliente(mem: MemoriaCliente | null, agente: string)
 
   const linhas: string[] = ["", "── MEMÓRIA DO CLIENTE ──"];
 
-  // Perfil básico
   if (mem.nicho)        linhas.push(`Nicho: ${mem.nicho}`);
   if (mem.descricao)    linhas.push(`Negócio: ${mem.descricao}`);
   if (mem.publico_alvo) linhas.push(`Público-alvo: ${mem.publico_alvo}`);
 
-  // Benchmarks históricos
   const benchmarks: string[] = [];
   if (mem.cpl_alvo)      benchmarks.push(`CPL alvo: R$${mem.cpl_alvo}`);
   if (mem.cpl_historico) benchmarks.push(`CPL histórico: R$${mem.cpl_historico}`);
@@ -68,7 +79,6 @@ export function buildContextoCliente(mem: MemoriaCliente | null, agente: string)
   if (mem.ticket_medio)  benchmarks.push(`Ticket médio: R$${mem.ticket_medio}`);
   if (benchmarks.length) linhas.push(`Benchmarks: ${benchmarks.join(" | ")}`);
 
-  // Aprendizados específicos por agente
   if (agente === "copywriter") {
     const aprovadas = (mem.copies_aprovadas ?? []) as Array<Record<string, string>>;
     if (aprovadas.length > 0) {

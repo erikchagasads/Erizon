@@ -1,18 +1,22 @@
+// src/app/api/cron/profit-dna/route.ts
+// CORRIGIDO: trocado POST por GET — Vercel Cron só chama GET
+
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { ProfitDNAService } from "@/services/profit-dna-service";
 
-// POST /api/cron/profit-dna — roda semanalmente via Vercel Cron
-export async function POST(req: NextRequest) {
-  const secret = req.headers.get("x-cron-secret");
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    const auth = req.headers.get("authorization");
+    if (auth !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   const db = createServerSupabase();
   const svc = new ProfitDNAService();
 
-  // Busca todos os workspaces ativos
   const { data: workspaces } = await db.from("workspaces").select("id");
   if (!workspaces?.length) return NextResponse.json({ ok: true, computed: 0 });
 

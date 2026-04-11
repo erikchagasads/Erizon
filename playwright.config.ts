@@ -1,23 +1,15 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: "./e2e",
-  retries: process.env.CI ? 1 : 0,
-  reporter: [["html", { open: "never" }], ["list"]],
+  testDir: './e2e/specs',
   use: {
-    baseURL: "http://localhost:3000",
-    screenshot: "only-on-failure",
-    video: "off",
+    baseURL: 'http://localhost:3000',
+    storageState: 'storageState.json',
+    headless: true,
+    trace: 'on-first-retry',
+    video: 'retain-on-failure',
+    screenshot: 'only-on-failure',
   },
-  projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
-  ],
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:3000",
-    reuseExistingServer: true,
-  },
+  retries: 1,
+  reporter: [['html', { open: 'never' }]],
 });

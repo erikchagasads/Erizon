@@ -1,12 +1,16 @@
 "use client";
 
+// src/app/onboarding/page.tsx
+// CORRIGIDO: adicionado Passo 2.5 — seleção de nicho que salva em workspaces.niche
+// Isso alimenta o Network Intelligence com dados reais por segmento
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import {
   CheckCircle2, Loader2, AlertCircle,
   Zap, DollarSign, Users, ArrowRight,
-  ChevronRight, Sparkles, TrendingUp,
+  ChevronRight, Sparkles, TrendingUp, Building2,
 } from "lucide-react";
 import ErizonLogo from "@/components/ErizonLogo";
 
@@ -16,6 +20,21 @@ const supabase = createBrowserClient(
 );
 
 const CORES = ["#6366f1","#8b5cf6","#ec4899","#f59e0b","#10b981","#3b82f6","#ef4444","#14b8a6"];
+
+const NICHOS = [
+  { valor: "imobiliario",   label: "Imobiliário",      emoji: "🏠" },
+  { valor: "arquitetura",   label: "Arquitetura",      emoji: "🏛️" },
+  { valor: "estetica",      label: "Estética & Beleza", emoji: "💅" },
+  { valor: "ecommerce",     label: "E-commerce",       emoji: "🛒" },
+  { valor: "educacao",      label: "Educação",         emoji: "📚" },
+  { valor: "saude",         label: "Saúde & Clínicas", emoji: "🏥" },
+  { valor: "advocacia",     label: "Advocacia",        emoji: "⚖️" },
+  { valor: "consultoria",   label: "Consultoria",      emoji: "💼" },
+  { valor: "gastronomia",   label: "Gastronomia",      emoji: "🍽️" },
+  { valor: "tecnologia",    label: "Tecnologia / SaaS",emoji: "💻" },
+  { valor: "moda",          label: "Moda & Vestuário", emoji: "👗" },
+  { valor: "geral",         label: "Outro / Geral",    emoji: "🌐" },
+];
 
 // ── Progress bar ───────────────────────────────────────────────────────────────
 function ProgressBar({ passo, total }: { passo: number; total: number }) {
@@ -33,7 +52,7 @@ function ProgressBar({ passo, total }: { passo: number; total: number }) {
   );
 }
 
-// ── Passo 1: Boas-vindas ───────────────────────────────────────────────────────
+// ── Passo 1: Boas-vindas + primeiro cliente ────────────────────────────────────
 function Passo1({ onNext }: { onNext: (nomeCliente: string, cor: string) => void }) {
   const [nome, setNome] = useState("");
   const [cor, setCor]   = useState(CORES[0]);
@@ -139,7 +158,7 @@ function Passo2({ onNext }: { onNext: () => void }) {
     const t = parseFloat(ticket);
     const c = parseFloat(conv) / 100;
     if (!t || t <= 0)   { setErro("Informe um ticket médio válido."); return; }
-    if (c <= 0 || c > 1){ setErro("Taxa deve ser entre 0 e 100%."); return; }
+    if (c <= 0 || c > 1){ setErro("Taxa deve ser entre 0 e 100%.");  return; }
 
     setLoading(true);
     setErro("");
@@ -193,7 +212,6 @@ function Passo2({ onNext }: { onNext: () => void }) {
         </div>
       </div>
 
-      {/* CPL ideal — momento WOW */}
       {cplIdeal !== null && (
         <div className="p-4 bg-emerald-500/[0.05] border border-emerald-500/15 rounded-2xl">
           <div className="flex items-center gap-2 mb-1">
@@ -227,13 +245,113 @@ function Passo2({ onNext }: { onNext: () => void }) {
   );
 }
 
+// ── Passo 2.5 (novo): Seleção de nicho ────────────────────────────────────────
+// Salva em workspaces.niche para alimentar o Network Intelligence
+function Passo2b({ onNext }: { onNext: () => void }) {
+  const [nicho, setNicho]   = useState("");
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro]       = useState("");
+
+  async function salvarEAvancar() {
+    if (!nicho) { setErro("Selecione o nicho principal dos seus clientes."); return; }
+
+    setLoading(true);
+    setErro("");
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setErro("Sessão expirada."); setLoading(false); return; }
+
+      // Busca o workspace do usuário
+      const { data: wsMember } = await supabase
+        .from("workspace_members")
+        .select("workspace_id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (!wsMember?.workspace_id) {
+        setErro("Workspace não encontrado. Tente recarregar a página.");
+        setLoading(false);
+        return;
+      }
+
+      // Atualiza o niche no workspace
+      const { error } = await supabase
+        .from("workspaces")
+        .update({ niche: nicho })
+        .eq("id", wsMember.workspace_id);
+
+      if (error) { setErro("Erro ao salvar: " + error.message); setLoading(false); return; }
+
+      onNext();
+    } catch {
+      setErro("Erro de conexão.");
+    }
+
+    setLoading(false);
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-[22px] font-bold text-white mb-1">Qual é o seu nicho principal?</h2>
+        <p className="text-[14px] text-white/40 leading-relaxed">
+          Isso permite ao Erizon comparar suas campanhas com benchmarks reais do seu mercado.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {NICHOS.map(n => (
+          <button
+            key={n.valor}
+            onClick={() => { setNicho(n.valor); setErro(""); }}
+            className={`flex items-center gap-2.5 px-3.5 py-3 rounded-xl border text-left transition-all ${
+              nicho === n.valor
+                ? "border-purple-500/50 bg-purple-500/[0.08] text-white"
+                : "border-white/[0.07] bg-white/[0.02] text-white/40 hover:border-white/[0.12] hover:text-white/60"
+            }`}
+          >
+            <span className="text-[16px]">{n.emoji}</span>
+            <span className="text-[12px] font-medium leading-tight">{n.label}</span>
+            {nicho === n.valor && (
+              <CheckCircle2 size={12} className="text-purple-400 ml-auto shrink-0" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {erro && (
+        <div className="flex items-center gap-2 p-3 bg-red-500/[0.06] border border-red-500/15 rounded-xl">
+          <AlertCircle size={13} className="text-red-400 shrink-0" />
+          <p className="text-[12px] text-red-400">{erro}</p>
+        </div>
+      )}
+
+      <button
+        onClick={salvarEAvancar}
+        disabled={loading || !nicho}
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-[14px] font-semibold text-white transition-all disabled:opacity-40"
+      >
+        {loading
+          ? <><Loader2 size={15} className="animate-spin" /> Salvando...</>
+          : <><ArrowRight size={15} /> Continuar</>}
+      </button>
+
+      <p className="text-[11px] text-white/20 text-center">
+        Você pode alterar isso depois em Configurações
+      </p>
+    </div>
+  );
+}
+
 // ── Passo 3: Meta Ads (pode pular) ────────────────────────────────────────────
 function Passo3({ onNext, onPular }: { onNext: () => void; onPular: () => void }) {
-  const [token, setToken]       = useState("");
+  const [token, setToken]         = useState("");
   const [accountId, setAccountId] = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [validado, setValidado] = useState(false);
-  const [erro, setErro]         = useState("");
+  const [loading, setLoading]     = useState(false);
+  const [validado, setValidado]   = useState(false);
+  const [erro, setErro]           = useState("");
 
   async function conectar() {
     if (!token.trim()) { setErro("Cole o token de acesso."); return; }
@@ -278,53 +396,39 @@ function Passo3({ onNext, onPular }: { onNext: () => void; onPular: () => void }
       <div>
         <h2 className="text-[22px] font-bold text-white mb-1">Conectar Meta Ads</h2>
         <p className="text-[14px] text-white/40 leading-relaxed">
-          Isso permite o Erizon ler suas campanhas e calcular os scores em tempo real.
+          Conecte sua conta para o Erizon começar a monitorar suas campanhas automaticamente.
         </p>
-      </div>
-
-      {/* Guia rápido */}
-      <div className="p-4 bg-white/[0.03] border border-white/[0.06] rounded-2xl space-y-3">
-        <p className="text-[11px] text-white/40 font-semibold uppercase tracking-wider">Como gerar o token</p>
-        {[
-          "Acesse business.facebook.com → Configurações",
-          "Usuários do sistema → Adicionar usuário administrador",
-          "Gerar token → selecionar a conta de anúncios",
-          "Copie o token e cole abaixo",
-        ].map((s, i) => (
-          <div key={i} className="flex items-start gap-3">
-            <div className="w-5 h-5 rounded-full bg-purple-500/15 border border-purple-500/25 flex items-center justify-center shrink-0 mt-0.5">
-              <span className="text-[10px] font-bold text-purple-400">{i + 1}</span>
-            </div>
-            <p className="text-[12px] text-white/40">{s}</p>
-          </div>
-        ))}
       </div>
 
       <div className="space-y-3">
         <div>
-          <label className="text-[11px] text-white/35 block mb-1.5">Token de acesso *</label>
+          <label className="text-[11px] text-white/35 block mb-1.5">Token de acesso</label>
           <input
-            type="password"
-            placeholder="EAAxxxxxxxxxx..."
+            autoFocus
             value={token}
             onChange={e => { setToken(e.target.value); setErro(""); }}
+            placeholder="EAAxxxxxxx..."
             className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-[13px] text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 focus:bg-white/[0.06] transition-all font-mono"
           />
         </div>
+
         <div>
-          <label className="text-[11px] text-white/35 block mb-1.5">
-            Account ID <span className="text-white/15">(opcional)</span>
-          </label>
+          <label className="text-[11px] text-white/35 block mb-1.5">ID da conta de anúncios</label>
           <input
-            type="text"
-            placeholder="act_xxxxxxxxxx"
             value={accountId}
-            onChange={e => setAccountId(e.target.value)}
+            onChange={e => { setAccountId(e.target.value); setErro(""); }}
+            placeholder="act_123456789"
             className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-[13px] text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 focus:bg-white/[0.06] transition-all font-mono"
           />
-          <p className="text-[10px] text-white/20 mt-1">Ads Manager → URL da página (act_123456)</p>
         </div>
       </div>
+
+      {validado && (
+        <div className="flex items-center gap-2 p-3 bg-emerald-500/[0.06] border border-emerald-500/15 rounded-xl">
+          <CheckCircle2 size={13} className="text-emerald-400" />
+          <p className="text-[12px] text-emerald-400">Meta Ads conectado com sucesso!</p>
+        </div>
+      )}
 
       {erro && (
         <div className="flex items-center gap-2 p-3 bg-red-500/[0.06] border border-red-500/15 rounded-xl">
@@ -333,57 +437,50 @@ function Passo3({ onNext, onPular }: { onNext: () => void; onPular: () => void }
         </div>
       )}
 
-      {validado && (
-        <div className="flex items-center gap-2 p-3 bg-emerald-500/[0.06] border border-emerald-500/15 rounded-xl">
-          <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
-          <p className="text-[12px] text-emerald-400">Meta Ads conectado! Carregando seu cockpit...</p>
-        </div>
-      )}
-
       <button
         onClick={conectar}
         disabled={loading || validado}
         className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-[14px] font-semibold text-white transition-all disabled:opacity-40"
       >
-        {loading   ? <><Loader2 size={15} className="animate-spin" /> Validando...</> :
-         validado  ? <><CheckCircle2 size={15} /> Conectado!</> :
-                     <><Zap size={15} /> Conectar Meta Ads</>}
+        {loading
+          ? <><Loader2 size={15} className="animate-spin" /> Validando...</>
+          : validado
+          ? <><CheckCircle2 size={15} /> Conectado!</>
+          : <><Zap size={15} /> Conectar Meta Ads</>}
       </button>
 
       <button
         onClick={onPular}
-        className="w-full text-[12px] text-white/25 hover:text-white/50 transition-colors py-1 text-center"
+        className="w-full text-[12px] text-white/20 hover:text-white/40 transition-colors py-1 text-center"
       >
-        Fazer isso depois → entrar no cockpit agora
+        Pular por agora — conectar depois em Configurações
       </button>
     </div>
   );
 }
 
-// ── Passo 4: Ativando ─────────────────────────────────────────────────────────
+// ── Passo 4: Tela de conclusão ─────────────────────────────────────────────────
 function Passo4({ nomeCliente }: { nomeCliente: string }) {
   return (
-    <div className="text-center space-y-6 py-4">
-      <div className="relative mx-auto w-16 h-16">
-        <div className="absolute inset-0 rounded-2xl bg-purple-500/10 border border-purple-500/20 animate-pulse" />
-        <div className="relative w-full h-full rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center">
-          <Sparkles size={24} className="text-purple-400" />
-        </div>
+    <div className="space-y-6 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
+        <Sparkles size={24} className="text-emerald-400" />
       </div>
 
       <div>
         <h2 className="text-[22px] font-bold text-white mb-2">Tudo pronto!</h2>
         <p className="text-[14px] text-white/40 leading-relaxed">
-          {nomeCliente ? `${nomeCliente} já está no seu cockpit.` : "Seu cockpit está pronto."}<br />
-          Abrindo o Erizon...
+          {nomeCliente ? `${nomeCliente} já está configurado.` : "Sua conta está configurada."}{" "}
+          O Erizon começa a trabalhar agora.
         </p>
       </div>
 
       <div className="flex flex-col gap-2 text-left p-4 bg-white/[0.03] border border-white/[0.05] rounded-2xl">
         {[
-          { icon: Zap, texto: "Score de campanha em tempo real", ok: true },
-          { icon: TrendingUp, texto: "CPL ideal calculado", ok: true },
-          { icon: Users, texto: `Primeiro cliente criado`, ok: true },
+          { icon: Zap,         texto: "Score de campanha em tempo real", ok: true },
+          { icon: TrendingUp,  texto: "CPL ideal calculado",             ok: true },
+          { icon: Users,       texto: "Primeiro cliente criado",         ok: true },
+          { icon: Building2,   texto: "Nicho configurado",               ok: true },
         ].map(({ icon: Icon, texto, ok }) => (
           <div key={texto} className="flex items-center gap-3">
             <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${ok ? "bg-emerald-500/15" : "bg-white/[0.04]"}`}>
@@ -400,16 +497,15 @@ function Passo4({ nomeCliente }: { nomeCliente: string }) {
 
 // ── Page principal ─────────────────────────────────────────────────────────────
 export default function OnboardingPage() {
-  const [passo, setPasso]           = useState(1);
+  const [passo, setPasso]             = useState(1);
   const [nomeCliente, setNomeCliente] = useState("");
   const router = useRouter();
 
-  const TOTAL = 3; // 3 barras de progresso (passo 4 é tela de conclusão)
+  const TOTAL = 4; // agora são 4 passos (adicionado passo de nicho)
 
   function irPara(n: number) { setPasso(n); }
 
   async function concluir() {
-    // Marca onboarding como completo
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase.from("user_configs").upsert({
@@ -417,7 +513,7 @@ export default function OnboardingPage() {
         onboarding_completo: true,
       }, { onConflict: "user_id" });
     }
-    setPasso(4);
+    setPasso(5);
     setTimeout(() => router.push("/pulse"), 2200);
   }
 
@@ -445,14 +541,15 @@ export default function OnboardingPage() {
             <Passo1
               onNext={(nome, cor) => {
                 setNomeCliente(nome);
-                void cor; // cor já foi usada internamente
+                void cor;
                 irPara(2);
               }}
             />
           )}
-          {passo === 2 && <Passo2 onNext={() => irPara(3)} />}
-          {passo === 3 && <Passo3 onNext={concluir} onPular={concluir} />}
-          {passo === 4 && <Passo4 nomeCliente={nomeCliente} />}
+          {passo === 2 && <Passo2   onNext={() => irPara(3)} />}
+          {passo === 3 && <Passo2b  onNext={() => irPara(4)} />}
+          {passo === 4 && <Passo3   onNext={concluir} onPular={concluir} />}
+          {passo === 5 && <Passo4   nomeCliente={nomeCliente} />}
         </div>
 
         {/* Voltar */}

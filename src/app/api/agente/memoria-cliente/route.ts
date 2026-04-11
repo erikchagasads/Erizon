@@ -1,42 +1,54 @@
 // src/app/api/agente/memoria-cliente/route.ts
+// CORRIGIDO: padronizado para workspace_id (era user_id — inconsistente com ProfitDNAService)
 // GET   — retorna perfil de memória de um cliente
 // PATCH — atualiza campos do perfil (nicho, CPL histórico, etc.)
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createServerSupabase } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/auth/require-auth";
 
-async function getSupabase() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll(); },
-        setAll(values) { values.forEach(({ name, value, options }) => { try { cookieStore.set(name, value, options); } catch {} }); },
-      },
-    }
-  );
-  const { data: { user } } = await supabase.auth.getUser();
-  return { supabase, user };
+async function resolveWorkspaceId(token: string): Promise<string | null> {
+  const db = createServerSupabase();
+  const { data: { user } } = await db.auth.getUser(token);
+  if (!user) return null;
+
+  const { data } = await db
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  return data?.workspace_id ?? null;
+}
+
+function extractToken(req: NextRequest): string | null {
+  const auth = req.headers.get("authorization") ?? "";
+  return auth.startsWith("Bearer ") ? auth.slice(7) : null;
 }
 
 // ── GET — busca perfil do cliente ─────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   try {
-    const { supabase, user } = await getSupabase();
-    if (!user) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+    const token = extractToken(req);
+    if (!token) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+
+    const workspaceId = await resolveWorkspaceId(token);
+    if (!workspaceId) return NextResponse.json({ error: "Workspace não encontrado." }, { status: 404 });
+
+    const auth = await requireAuth(req, workspaceId);
+    if (auth.ok === false) return NextResponse.json({ error: auth.error }, { status: auth.status ?? 401 });
 
     const { searchParams } = req.nextUrl;
     const cliente_id = searchParams.get("cliente_id");
     if (!cliente_id) return NextResponse.json({ error: "cliente_id obrigatório." }, { status: 400 });
 
-    const { data: mem } = await supabase
+    const db = createServerSupabase();
+    const { data: mem } = await db
       .from("agente_memoria_cliente")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
       .eq("cliente_id", cliente_id)
       .maybeSingle();
 
@@ -52,8 +64,14 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { supabase, user } = await getSupabase();
-    if (!user) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+    const token = extractToken(req);
+    if (!token) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+
+    const workspaceId = await resolveWorkspaceId(token);
+    if (!workspaceId) return NextResponse.json({ error: "Workspace não encontrado." }, { status: 404 });
+
+    const auth = await requireAuth(req, workspaceId);
+    if (auth.ok === false) return NextResponse.json({ error: auth.error }, { status: auth.status ?? 401 });
 
     const body = await req.json();
     const { cliente_id, ...updates } = body;
@@ -76,22 +94,25 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Nenhum campo válido para atualizar." }, { status: 400 });
     }
 
-    // Upsert — cria se não existir
-    const { data: existe } = await supabase
+    const db = createServerSupabase();
+
+    const { data: existe } = await db
       .from("agente_memoria_cliente")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
       .eq("cliente_id", cliente_id)
       .maybeSingle();
 
     if (existe) {
-      await supabase.from("agente_memoria_cliente")
+      await db
+        .from("agente_memoria_cliente")
         .update(payload)
-        .eq("user_id", user.id)
+        .eq("workspace_id", workspaceId)
         .eq("cliente_id", cliente_id);
     } else {
-      await supabase.from("agente_memoria_cliente")
-        .insert({ user_id: user.id, cliente_id, ...payload });
+      await db
+        .from("agente_memoria_cliente")
+        .insert({ workspace_id: workspaceId, cliente_id, ...payload });
     }
 
     return NextResponse.json({ ok: true });
