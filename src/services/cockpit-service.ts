@@ -1,20 +1,23 @@
 // ── Cockpit Service ───────────────────────────────────────────────────────────
-// Orquestra geração de decisões, aprovação e execução via Meta Ads API
+// Orquestra geração de decisões, aprovação e execução via Meta Ads API.
+// v2: integra TrainingDataService para coleta automática de dados de fine-tuning.
 
 import { SupabaseClient } from "@supabase/supabase-js";
 import { DecisionRepository } from "@/repositories/supabase/decision-repository";
 import { generateDecisions } from "@/core/decision-generator";
+import { TrainingDataService } from "@/services/training-data-service";
 import type { PendingDecision, AutopilotConfig, CockpitState, CockpitMode } from "@/types/erizon-cockpit";
 import type { EngineResult } from "@/app/lib/engine/pulseEngine";
 
 export class CockpitService {
   private repo: DecisionRepository;
+  private training: TrainingDataService;
 
   constructor(private db: SupabaseClient) {
     this.repo = new DecisionRepository(db);
+    this.training = new TrainingDataService(db);
   }
 
-  /** Gera novas decisões a partir dos dados do engine, evitando duplicatas */
   async refreshDecisions(workspaceId: string, engine: EngineResult): Promise<void> {
     await this.repo.expireOld();
     const existing = await this.repo.getExistingPairs(workspaceId);
@@ -22,7 +25,6 @@ export class CockpitService {
     await this.repo.insertMany(newDecisions);
   }
 
-  /** Retorna estado completo do cockpit */
   async getState(workspaceId: string): Promise<CockpitState> {
     const [pending, config] = await Promise.all([
       this.repo.getPending(workspaceId),
@@ -30,7 +32,6 @@ export class CockpitService {
     ]);
 
     const total_impact_brl = pending.reduce((s, d) => s + (d.estimated_impact_brl ?? 0), 0);
-
     const counts = pending.reduce(
       (acc, d) => { acc[d.action_type] = (acc[d.action_type] ?? 0) + 1; return acc; },
       {} as Record<string, number>
@@ -44,7 +45,6 @@ export class CockpitService {
     return { mode, pending, config, total_impact_brl, counts };
   }
 
-  /** Aprova e (opcionalmente) executa uma decisão via Meta Ads */
   async approve(
     decisionId: string,
     userId: string,
@@ -52,30 +52,31 @@ export class CockpitService {
     overrideValue?: number
   ): Promise<{ decision: PendingDecision; executed: boolean; error?: string }> {
     const { data: row } = await this.db
-      .from("pending_decisions")
-      .select("*")
-      .eq("id", decisionId)
-      .single();
+      .from("pending_decisions").select("*").eq("id", decisionId).single();
 
     if (!row) throw new Error("Decisão não encontrada");
     if (row.status !== "pending") throw new Error(`Decisão já está com status: ${row.status}`);
 
-    // Marca como aprovada primeiro
     const decision = await this.repo.updateStatus(decisionId, "approved", userId);
 
-    // Se não tem payload de API, só aprova (é um alerta)
     if (!row.meta_payload || row.action_type === "alert") {
+      // Registra como exemplo de treino: decisão aprovada sem execução automática
+      await this.training.recordFromDecision({
+        workspaceId: row.workspace_id,
+        decisionId,
+        campaignId: row.campaign_id ?? "",
+        actionType: row.action_type,
+        rationale: row.rationale,
+        campaignContext: row.meta_payload ?? {},
+        executionSuccess: false,
+      }).catch(() => {});
+
       return { decision, executed: false };
     }
 
-    // Tenta executar via Meta Ads
     try {
       const payload = { ...row.meta_payload };
-
-      // Permite override de budget
-      if (overrideValue && payload.action === "UPDATE_BUDGET") {
-        payload.newBudget = overrideValue;
-      }
+      if (overrideValue && payload.action === "UPDATE_BUDGET") payload.newBudget = overrideValue;
 
       const metaRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/meta-actions`, {
         method: "POST",
@@ -83,7 +84,7 @@ export class CockpitService {
           "Content-Type": "application/json",
           "x-cockpit-token": process.env.CRON_SECRET ?? "",
         },
-        body: JSON.stringify({ ...payload, accessToken }),
+        body: JSON.stringify({ ...payload, accessToken, decisionId, workspaceId: row.workspace_id }),
       });
 
       const result = await metaRes.json();
@@ -91,19 +92,49 @@ export class CockpitService {
       if (!metaRes.ok) throw new Error(result.error ?? "Erro na API Meta");
 
       await this.repo.updateStatus(decisionId, "executed", userId, result);
+
+      // ── Coleta exemplo de treino: aprovação + execução bem-sucedida ──────────
+      await this.training.recordFromDecision({
+        workspaceId: row.workspace_id,
+        decisionId,
+        campaignId: row.campaign_id ?? "",
+        actionType: row.action_type,
+        rationale: row.rationale,
+        campaignContext: row.meta_payload ?? {},
+        executionSuccess: true,
+      }).catch(() => {});
+
       return { decision: { ...decision, status: "executed" }, executed: true };
 
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : "Erro desconhecido";
-      // Mantém aprovada mesmo se execução falhou — gestor pode retry manual
       await this.repo.updateStatus(decisionId, "approved", userId, { error: errMsg });
       return { decision, executed: false, error: errMsg };
     }
   }
 
-  /** Rejeita uma decisão */
   async reject(decisionId: string, userId: string): Promise<PendingDecision> {
-    return this.repo.updateStatus(decisionId, "rejected", userId);
+    const { data: row } = await this.db
+      .from("pending_decisions").select("workspace_id, action_type, rationale, campaign_id, meta_payload").eq("id", decisionId).maybeSingle();
+
+    const result = await this.repo.updateStatus(decisionId, "rejected", userId);
+
+    // Rejeições também são dados de treino valiosos — o modelo aprende o que NÃO fazer
+    // Não registramos como exemplo positivo, mas podemos usar futuramente para DPO
+    if (row) {
+      await this.db.from("training_rejections").insert({
+        workspace_id: row.workspace_id,
+        decision_id: decisionId,
+        action_type: row.action_type,
+        rationale: row.rationale,
+        campaign_id: row.campaign_id,
+        context: row.meta_payload,
+        rejected_by: userId,
+        created_at: new Date().toISOString(),
+      }).then(() => {}).catch(() => {});
+    }
+
+    return result;
   }
 
   async getConfig(workspaceId: string): Promise<AutopilotConfig | null> {

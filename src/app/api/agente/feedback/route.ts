@@ -3,6 +3,8 @@
 // GET  — retorna estatísticas de feedback por agente/cliente
 
 import { NextRequest, NextResponse } from "next/server";
+import { TrainingDataService } from "@/services/training-data-service";
+
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -73,6 +75,19 @@ export async function POST(req: NextRequest) {
     // 3. Se tem cliente_id, atualizar memória do cliente
     if (cliente_id && contexto) {
       await atualizarMemoriaCliente(supabase, user.id, cliente_id, agente, avaliacao, motivo, contexto);
+    }
+
+    
+    // ── Coleta exemplo de treino a partir do feedback do agente ───────────────
+    if (contexto?.mensagem_usuario && contexto?.resposta_agente) {
+      const training = new TrainingDataService(supabase);
+      await training.recordFromAgenteFeedback({
+        workspaceId: contexto?.workspace_id ?? user.id,
+        userMessage: String(contexto.mensagem_usuario ?? ""),
+        agentResponse: String(contexto.resposta_agente ?? ""),
+        feedback: avaliacao === "positivo" ? "positive" : avaliacao === "editado" ? "edited" : "negative",
+        editedResponse: contexto?.resposta_editada ? String(contexto.resposta_editada) : undefined,
+      }).catch(() => {});
     }
 
     return NextResponse.json({ ok: true });

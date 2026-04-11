@@ -9,7 +9,7 @@ import {
   BrainCircuit, Sparkles, Settings, LogOut,
   ShieldAlert, Bot, FileText, Layers,
   Cpu, Globe, GitBranch, Instagram, Activity, Kanban, BookOpen,
-} from "lucide-react";
+, Gift, Key} from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 
@@ -65,6 +65,8 @@ const NAV: NavEntry[] = [
 
   // ── Conta ──────────────────────────────────────────────
   { href: "/blog",     icon: BookOpen,  label: "Blog"          },
+  { href: "/referral", label: "Indicações", icon: Gift },
+  { href: "/api-keys", label: "API Keys", icon: Key },
   { href: "/settings", icon: Settings, label: "Configurações" },
 ];
 
