@@ -220,12 +220,16 @@ export default function DecisionFeedPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase.from("metricas_ads").select("*")
-        .eq("user_id", user.id).in("status", ["ATIVO", "ACTIVE", "ATIVA"])
-        .order("gasto_total", { ascending: false });
-      setCampanhas((data ?? []) as Campanha[]);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase.from("metricas_ads").select("*")
+          .eq("user_id", user.id).in("status", ["ATIVO", "ACTIVE", "ATIVA"])
+          .order("gasto_total", { ascending: false });
+        setCampanhas((data ?? []) as Campanha[]);
+      } catch {
+        setCampanhas([]);
+      }
       setLoading(false);
     }
     load();
@@ -239,7 +243,7 @@ export default function DecisionFeedPage() {
     <>
       <Sidebar />
       <div className="md:ml-[60px] pb-20 md:pb-0 min-h-screen bg-[#040406] text-white">
-        <div className="max-w-4xl mx-auto px-6 py-8">
+        <div className="max-w-4xl mx-auto px-4 py-6 md:px-6 md:py-8">
 
           <div className="mb-8">
             <p className="text-[11px] text-fuchsia-400 font-semibold uppercase tracking-wider mb-1">Decision Engine</p>
@@ -252,7 +256,7 @@ export default function DecisionFeedPage() {
           {!loading ? (
             <div className="space-y-5">
               {decisoes.length > 0 && (
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {[
                     { label: "Críticas", count: criticas, color: "text-red-400" },
                     { label: "Altas",    count: altas,    color: "text-amber-400" },
@@ -291,7 +295,7 @@ export default function DecisionFeedPage() {
                       <div key={i} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
                         <div className={`h-0.5 ${style.bar}`} />
                         <div className="p-5">
-                          <div className="flex items-start justify-between gap-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 {TIPO_ICON[d.tipo]}

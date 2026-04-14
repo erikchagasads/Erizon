@@ -947,7 +947,7 @@ export default function DadosPage() {
   return (
     <div className="flex min-h-screen bg-gradient-to-b from-[#0a0a0a] via-[#0b0b0d] to-[#0a0a0a] text-white">
       <Sidebar />
-      <main className="flex-1 ml-0 md:ml-24 px-5 md:px-10 xl:px-14 py-10 max-w-[1400px] mx-auto w-full">
+      <main className="flex-1 ml-0 md:ml-24 px-4 py-6 md:px-8 md:py-8 xl:px-14 max-w-[1400px] mx-auto w-full">
 
         {/* HEADER */}
         <header className="flex flex-col sm:flex-row sm:items-start justify-between gap-5 mb-8 pb-7 border-b border-white/[0.04]">
@@ -1049,7 +1049,7 @@ export default function DadosPage() {
               return (
                 <div>
                   {/* Overview strip */}
-                  <div className="grid grid-cols-4 gap-3 mb-6">
+                  <div className="grid grid-cols-2 gap-3 mb-6 lg:grid-cols-4">
                     {[
                       { label: "Investimento", value: `R$${totalInvest.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}` },
                       { label: "Leads", value: totalLeads.toLocaleString("pt-BR") },
@@ -1187,7 +1187,7 @@ export default function DadosPage() {
                 )}
 
                 {contaSaude && (
-                  <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-2 xl:grid-cols-4">
                     <OverviewCard label="Investimento total" value={`R$ ${contaSaude.totalInvest.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} sub="período selecionado" icon={DollarSign} />
                     <OverviewCard label="Total de leads" value={contaSaude.totalResultado.toLocaleString("pt-BR")} sub={`em ${contaSaude.total} campanha${contaSaude.total !== 1 ? "s" : ""}`} icon={Users} highlight />
                     <OverviewCard label="CPL médio" value={contaSaude.cplMedio > 0 ? `R$ ${contaSaude.cplMedio.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"} sub="custo por resultado" icon={TrendingUp} />

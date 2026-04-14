@@ -22,7 +22,15 @@ const MetaActionBodySchema = z.object({
   decisionId: z.string().optional(),
 });
 
-type MetaActionBody = z.infer<typeof MetaActionBodySchema>;
+type MetaActionBody = {
+  campaignId: string;
+  adsetId?: string;
+  action: "PAUSE" | "RESUME" | "UPDATE_BUDGET" | "SCALE_BUDGET" | "REDUCE_BUDGET";
+  value?: number;
+  pct?: number;
+  workspaceId?: string;
+  decisionId?: string;
+};
 
 async function callMeta(
   objectId: string,

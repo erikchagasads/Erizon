@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
+import { trackProductEvent } from "@/lib/product-events";
 import {
   CheckCircle2, Loader2, AlertCircle,
   Zap, DollarSign, Users, ArrowRight,
@@ -162,8 +163,9 @@ function Passo2({ onNext }: { onNext: () => void }) {
 
     setLoading(true);
     setErro("");
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setErro("Sessão expirada."); setLoading(false); return; }
+    const auth = await supabase.auth.getUser().catch(() => null);
+    const user = auth?.data.user;
+    if (!user) { setErro("Sessao indisponivel no momento."); setLoading(false); return; }
 
     const { error } = await supabase.from("user_configs").upsert({
       user_id:             user.id,
@@ -259,8 +261,9 @@ function Passo2b({ onNext }: { onNext: () => void }) {
     setErro("");
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setErro("Sessão expirada."); setLoading(false); return; }
+      const auth = await supabase.auth.getUser().catch(() => null);
+      const user = auth?.data.user;
+      if (!user) { setErro("Sessao indisponivel no momento."); setLoading(false); return; }
 
       // Busca o workspace do usuário
       const { data: wsMember } = await supabase
@@ -374,14 +377,21 @@ function Passo3({ onNext, onPular }: { onNext: () => void; onPular: () => void }
         return;
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setErro("Sessão expirada."); setLoading(false); return; }
+      const auth = await supabase.auth.getUser().catch(() => null);
+      const user = auth?.data.user;
+      if (!user) { setErro("Sessao indisponivel no momento."); setLoading(false); return; }
 
       await supabase.from("user_settings").upsert({
         user_id:            user.id,
         meta_access_token:  token.trim(),
         meta_ad_account_id: accountId.trim() || null,
       }, { onConflict: "user_id" });
+
+      await fetch("/api/ads-sync").catch(() => null);
+      void trackProductEvent("meta_connected_onboarding", "onboarding", {
+        account_id: !!accountId.trim(),
+      });
+      void trackProductEvent("first_sync_requested", "onboarding");
 
       setValidado(true);
       setTimeout(onNext, 900);
@@ -506,15 +516,20 @@ export default function OnboardingPage() {
   function irPara(n: number) { setPasso(n); }
 
   async function concluir() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from("user_configs").upsert({
-        user_id:             user.id,
-        onboarding_completo: true,
-      }, { onConflict: "user_id" });
-    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("user_configs").upsert({
+          user_id:             user.id,
+          onboarding_completo: true,
+        }, { onConflict: "user_id" });
+      }
+    } catch {}
+    void trackProductEvent("onboarding_completed", "onboarding", {
+      has_cliente: !!nomeCliente,
+    });
     setPasso(5);
-    setTimeout(() => router.push("/pulse"), 2200);
+    setTimeout(() => router.push("/pulse?tour=1"), 2200);
   }
 
   return (

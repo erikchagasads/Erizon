@@ -9,7 +9,8 @@ import {
   BrainCircuit, Sparkles, Settings, LogOut,
   ShieldAlert, Bot, FileText, Layers,
   Cpu, Globe, GitBranch, Instagram, Activity, Kanban, BookOpen,
-, Gift, Key} from "lucide-react";
+  Gift, Key,
+} from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 

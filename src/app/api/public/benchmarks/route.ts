@@ -115,7 +115,9 @@ export async function GET(req: NextRequest) {
   });
 
   // Log async
-  supabaseAdmin.from("api_key_requests").insert({ key_hash: keyHash, endpoint: "/api/public/benchmarks", params: { niche, metric, period }, status_code: 200, created_at: new Date().toISOString() }).then(() => {}).catch(() => {});
+  void supabaseAdmin
+    .from("api_key_requests")
+    .insert({ key_hash: keyHash, endpoint: "/api/public/benchmarks", params: { niche, metric, period }, status_code: 200, created_at: new Date().toISOString() });
 
   return NextResponse.json({
     ok: true, query: { niche, metric, period, platform, percentile },

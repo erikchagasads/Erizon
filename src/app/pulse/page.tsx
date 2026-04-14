@@ -15,18 +15,20 @@
  */
 
 import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import {
   Zap, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
   TrendingUp, TrendingDown, Bot, ShieldCheck,
   Clock, BarChart2, RefreshCw, Settings,
   Activity, Sparkles, PieChart, Target,
-  Star, Eye, TriangleAlert, Link2, Database,
+  Star, Eye, TriangleAlert, Link2, Database, Bell, Smartphone,
 } from "lucide-react";
 import type { CampanhaProcessada } from "@/app/lib/engine/pulseEngine";
 import Sidebar from "@/components/Sidebar";
 import { SkeletonPage } from "@/components/ops/AppShell";
 import { BudgetOptimizer } from "@/components/BudgetOptimizer";
+import { DailyDigest } from "@/components/DailyDigest";
 import {
   processarCampanhas, resolverConfig,
   type CampanhaRaw, type EngineResult, type UserEngineConfig,
@@ -321,6 +323,87 @@ function FinCard({ label, value, sub, up }: { label: string; value: string; sub?
   );
 }
 
+function FirstWowTour({
+  visible,
+  onDismiss,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+}) {
+  if (!visible) return null;
+
+  return (
+    <div className="rounded-[24px] border border-fuchsia-500/20 bg-[linear-gradient(135deg,rgba(168,85,247,0.14),rgba(59,130,246,0.08))] p-5 md:p-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="max-w-[680px]">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="rounded-full border border-fuchsia-400/20 bg-fuchsia-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-fuchsia-300">
+              Primeiro Uau
+            </span>
+            <span className="text-[10px] text-white/30">Tour rapido do cockpit</span>
+          </div>
+          <h2 className="text-[18px] font-black text-white md:text-[20px]">
+            Seu proximo passo e aprovar a primeira decisao real.
+          </h2>
+          <p className="mt-2 text-[12px] leading-relaxed text-white/55 md:text-[13px]">
+            O Daily Digest ja organiza o que importa. Agora feche o loop: sincronize as campanhas,
+            ative um canal de aviso e valide a primeira acao sugerida pelo cockpit.
+          </p>
+        </div>
+
+        <button
+          onClick={onDismiss}
+          className="self-start rounded-xl border border-white/[0.08] px-3 py-2 text-[11px] font-semibold text-white/45 transition-all hover:border-white/15 hover:text-white/75"
+        >
+          Entendi
+        </button>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {[
+          {
+            title: "1. Ler o digest",
+            text: "Comece por esta home. Ela te mostra risco, progresso e acoes pendentes em menos de 1 minuto.",
+            icon: Sparkles,
+            href: "#daily-digest",
+            cta: "Ver resumo",
+          },
+          {
+            title: "2. Ativar avisos",
+            text: "Push do navegador e WhatsApp fazem o Erizon te chamar de volta sem depender do Telegram.",
+            icon: Bell,
+            href: "/settings/notificacoes",
+            cta: "Configurar canais",
+          },
+          {
+            title: "3. Tomar a primeira decisao",
+            text: "Depois do sync, aprove ou ignore a primeira recomendacao e transforme onboarding em valor real.",
+            icon: Smartphone,
+            href: "/decision-feed",
+            cta: "Abrir fila",
+          },
+        ].map(({ title, text, icon: Icon, href, cta }) => (
+          <a
+            key={title}
+            href={href}
+            className="rounded-[18px] border border-white/[0.08] bg-black/20 p-4 transition-all hover:border-white/15 hover:bg-white/[0.03]"
+          >
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04]">
+              <Icon size={15} className="text-fuchsia-300" />
+            </div>
+            <p className="text-[13px] font-bold text-white">{title}</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-white/40">{text}</p>
+            <div className="mt-4 inline-flex items-center gap-1.5 text-[11px] font-semibold text-fuchsia-300">
+              {cta}
+              <ChevronRight size={12} />
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Campaign Row ─────────────────────────────────────────────────────────────
 function CampaignRow({ c }: { c: CampanhaProcessada }) {
   const isAtivo = ["ATIVO","ACTIVE","ATIVA"].includes((c.status ?? "").toUpperCase());
@@ -400,6 +483,7 @@ function CampaignRow({ c }: { c: CampanhaProcessada }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function PulseCockpit() {
   useSessionGuard();
+  const searchParams = useSearchParams();
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -423,11 +507,26 @@ export default function PulseCockpit() {
   const [showBudget,  setShowBudget]  = useState(false);
   const [predAlerts,  setPredAlerts]  = useState<{alert_type:string;campaign_name:string;confidence:number;preventive_action:string}[]>([]);
   const [showAllCamp, setShowAllCamp] = useState(false);
+  const [showTour,    setShowTour]    = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const shouldOpenTour = searchParams.get("tour") === "1";
+    const dismissed = window.localStorage.getItem("erizon_first_wow_tour") === "done";
+    setShowTour(shouldOpenTour && !dismissed);
+  }, [searchParams]);
 
   // ── Toast helper ───────────────────────────────────────────────────────────
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3500);
+  }
+
+  function dismissTour() {
+    setShowTour(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("erizon_first_wow_tour", "done");
+    }
   }
 
   // ── Load engine + decisions ────────────────────────────────────────────────
@@ -677,11 +776,11 @@ export default function PulseCockpit() {
       <Sidebar />
 
       <main className="md:ml-[60px] pb-20 md:pb-0 flex-1 overflow-y-auto">
-        <div className="max-w-[960px] mx-auto px-6 py-6 space-y-5">
+        <div className="max-w-[960px] mx-auto px-4 py-6 md:px-6 space-y-5">
 
           {/* ─── ZONA 1: Status Bar ─────────────────────────────────────────── */}
-          <div className={`rounded-[24px] border ${m.border} ${m.bg} ${m.glow} px-6 py-4`}>
-            <div className="flex items-center justify-between">
+          <div className={`rounded-[24px] border ${m.border} ${m.bg} ${m.glow} px-4 py-4 md:px-6`}>
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-4">
                 {/* Saudação */}
                 <div>
@@ -705,7 +804,7 @@ export default function PulseCockpit() {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setShowBudget(true)}
                   className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-semibold text-fuchsia-400/70
@@ -756,6 +855,12 @@ export default function PulseCockpit() {
                 </p>
               </div>
             )}
+          </div>
+
+          <FirstWowTour visible={showTour} onDismiss={dismissTour} />
+
+          <div id="daily-digest">
+            <DailyDigest />
           </div>
 
           {/* ─── ZONA 2: Command Center ──────────────────────────────────────── */}
@@ -969,7 +1074,7 @@ export default function PulseCockpit() {
           )}
 
           {/* ─── Links para outros módulos ───────────────────────────────────── */}
-          <div className="grid grid-cols-3 gap-3 pb-6">
+          <div className="grid grid-cols-1 gap-3 pb-6 md:grid-cols-3">
             {[
               { href: "/analytics",      icon: BarChart2,   label: "Analytics",    sub: "Métricas detalhadas" },
               { href: "/decision-feed",  icon: Zap,         label: "Decision Feed", sub: "Feed de sinais"      },

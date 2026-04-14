@@ -736,14 +736,14 @@ function ClienteCard({ c, onEdit, onDelete, onVincular }: {
                 : <p className="text-[10px] text-amber-500/50 mt-0.5">Sem Meta Account ID</p>}
             </div>
           </div>
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
             <button onClick={onEdit} className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/[0.05] transition-all"><Pencil size={12} /></button>
             <button onClick={onDelete} className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/[0.06] transition-all"><Trash2 size={12} /></button>
           </div>
         </div>
 
         {/* Métricas resumo */}
-        <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="grid grid-cols-2 gap-2 mb-4 sm:grid-cols-3">
           {[
             { icon: BarChart3, label: "Ativas", value: String(c.campanhas_ativas ?? 0) },
             { icon: DollarSign, label: "Investido", value: fmtBRL0(c.gasto_total ?? 0) },
@@ -901,14 +901,14 @@ export default function ClientesPage() {
     <>
       <Sidebar />
       <div className="md:ml-[60px] pb-20 md:pb-0 min-h-screen bg-[#040406] text-white">
-        <div className="max-w-5xl mx-auto px-6 py-8">
-          <div className="flex items-center justify-between mb-8">
+        <div className="max-w-5xl mx-auto px-4 py-6 md:px-6 md:py-8">
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[11px] text-purple-400 font-semibold uppercase tracking-wider mb-1">Clientes</p>
               <h1 className="text-2xl font-bold text-white">Gestão de Clientes</h1>
               <p className="text-sm text-white/40 mt-1">Cadastre clientes e vincule as campanhas de cada um.</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button onClick={carregar} className="p-2 rounded-xl border border-white/[0.06] text-white/30 hover:text-white transition-all"><RefreshCw size={14} /></button>
               <button onClick={() => setModalImport(true)}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 text-sm font-semibold hover:bg-emerald-500/15 transition-all">

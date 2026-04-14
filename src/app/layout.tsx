@@ -4,6 +4,7 @@ import type { Metadata } from 'next'
 import CookieBanner from '@/components/CookieBanner'
 import { Toaster } from '@/components/Toast'
 import AgenteProvider from '@/components/AgenteProvider'
+import { PushBootstrap } from '@/components/PushBootstrap'
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -143,6 +144,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <CookieBanner />
         <Toaster />
+        <PushBootstrap />
         <AgenteProvider />  {/* ← Agente IA flutuante em todas as pages */}
       </body>
     </html>

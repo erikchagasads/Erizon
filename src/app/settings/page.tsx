@@ -82,7 +82,7 @@ export default function SettingsPage() {
   return (
     <div className="flex min-h-screen bg-[#060609] text-white">
       <Sidebar/>
-      <main className="md:ml-[60px] pb-20 md:pb-0 flex-1 px-8 py-8 max-w-3xl">
+      <main className="md:ml-[60px] pb-20 md:pb-0 flex-1 max-w-3xl w-full px-4 py-6 md:px-8 md:py-8">
 
         <div className="mb-8">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/25 mb-1">Erizon</p>
@@ -97,7 +97,7 @@ export default function SettingsPage() {
               <button
                 key={item.href}
                 onClick={() => router.push(item.href)}
-                className={`w-full flex items-center gap-5 px-5 py-4 rounded-2xl border ${item.border} ${item.bg} hover:opacity-90 transition-all text-left group`}
+                className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl border ${item.border} ${item.bg} hover:opacity-90 transition-all text-left group md:gap-5 md:px-5`}
               >
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-white/[0.04] border border-white/[0.06] shrink-0`}>
                   <Icon size={16} className={item.cor}/>

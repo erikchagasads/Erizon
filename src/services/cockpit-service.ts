@@ -131,7 +131,7 @@ export class CockpitService {
         context: row.meta_payload,
         rejected_by: userId,
         created_at: new Date().toISOString(),
-      }).then(() => {}).catch(() => {});
+      });
     }
 
     return result;
