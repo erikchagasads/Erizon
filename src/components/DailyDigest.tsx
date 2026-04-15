@@ -45,6 +45,53 @@ interface DailyDigestData {
     roas: { my: number | null; benchmark: number | null; status: "winning" | "attention" | "neutral" };
     insight: string | null;
   } | null;
+  learning: {
+    approvedCount: number;
+    rejectedCount: number;
+    measuredCount: number;
+    accuracyPct: number;
+    confidenceScore: number;
+    retrainingTriggers: number;
+    topWinningActions: string[];
+    topRejectedActions: string[];
+    memoryLine: string;
+  };
+  business: {
+    spend30d: number;
+    closedRevenue30d: number;
+    pipelineValue: number;
+    weightedPipelineValue: number;
+    conversionRate: number;
+    ticketMedio: number;
+    roiMultiple: number | null;
+    summary: string;
+  };
+  collective: {
+    niche: string | null;
+    peers: number;
+    position: string;
+    marketTrend: string | null;
+    topPattern: string | null;
+    trendNote: string | null;
+    insight: string;
+  };
+  forecast: {
+    campaignName: string | null;
+    score: number | null;
+    confidenceLabel: string;
+    estimatedLeads7d: number | null;
+    estimatedRevenue7d: number | null;
+    estimatedCplRange: [number, number] | null;
+    estimatedRoas: number | null;
+    recommendation: string | null;
+    createdAt: string | null;
+  } | null;
+  dna: {
+    bestFormats: string[];
+    keyLearnings: string[];
+    goldenAudience: string | null;
+    confidenceScore: number;
+  } | null;
   progress: {
     wastedBudgetRecoveredBrl: number;
     revenueOpportunityBrl: number;
@@ -185,6 +232,41 @@ export function DailyDigest() {
           <StatCard label="CPL medio" value={data.period.current.avgCpl ? `R$ ${fmtBRL(data.period.current.avgCpl)}` : "-"} change={data.period.changes.avgCpl} tone="warn" />
         </div>
 
+        <div className="grid gap-4 xl:grid-cols-3">
+          <div className="rounded-[24px] border border-cyan-500/20 bg-cyan-500/[0.06] p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/85">loop de aprendizado</p>
+            <p className="mt-3 text-[26px] font-black text-white">{data.learning.confidenceScore}/100</p>
+            <p className="mt-1 text-[12px] text-white/65">
+              {data.learning.measuredCount} outcomes medidos · {data.learning.accuracyPct}% de acerto recente
+            </p>
+            <p className="mt-3 text-[12px] leading-relaxed text-white/62">{data.learning.memoryLine}</p>
+          </div>
+
+          <div className="rounded-[24px] border border-emerald-500/20 bg-emerald-500/[0.06] p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200/85">visao financeira real</p>
+            <p className="mt-3 text-[26px] font-black text-white">R$ {fmtBRL(data.business.closedRevenue30d)}</p>
+            <p className="mt-1 text-[12px] text-white/65">
+              pipeline ponderado de R$ {fmtBRL(data.business.weightedPipelineValue)}
+            </p>
+            <p className="mt-3 text-[12px] leading-relaxed text-white/62">{data.business.summary}</p>
+          </div>
+
+          <div className="rounded-[24px] border border-amber-500/20 bg-amber-500/[0.06] p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-100/85">previsao pre-publicacao</p>
+            <p className="mt-3 text-[26px] font-black text-white">
+              {data.forecast?.estimatedLeads7d ? `${data.forecast.estimatedLeads7d} leads` : "Sem forecast"}
+            </p>
+            <p className="mt-1 text-[12px] text-white/65">
+              {data.forecast?.estimatedRevenue7d
+                ? `potencial de R$ ${fmtBRL(data.forecast.estimatedRevenue7d)} em 7 dias`
+                : "rode um preflight para prever leads, CPL e receita antes de publicar"}
+            </p>
+            {data.forecast?.recommendation && (
+              <p className="mt-3 text-[12px] leading-relaxed text-white/62">{data.forecast.recommendation}</p>
+            )}
+          </div>
+        </div>
+
         <div className="grid gap-4 xl:grid-cols-[1.3fr_0.9fr]">
           <div className="grid gap-4">
             <div className="rounded-[24px] border border-white/[0.08] bg-white/[0.025] p-4 md:p-5">
@@ -285,6 +367,22 @@ export function DailyDigest() {
                       </div>
                     </div>
                     {benchmarkLabel && <p className="mt-3 text-[12px] leading-relaxed text-white/60">{benchmarkLabel}</p>}
+                    <div className="mt-3 rounded-[18px] border border-white/[0.08] bg-black/20 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/25">rede entre gestores</p>
+                      <p className="mt-2 text-[18px] font-black text-white">
+                        {data.collective.niche ? `${data.collective.niche} · ${data.collective.position}` : data.collective.position}
+                      </p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-white/55">
+                        {data.collective.peers > 0
+                          ? `${data.collective.peers} operacoes anonimizadas ajudam a compor esse espelho.`
+                          : "Assim que mais operacoes entrarem no recorte, a rede ganha mais precisao."}
+                      </p>
+                      {data.collective.topPattern && (
+                        <p className="mt-2 text-[11px] leading-relaxed text-amber-200/85">
+                          O que os melhores estao fazendo: {data.collective.topPattern}
+                        </p>
+                      )}
+                    </div>
                   </>
                 ) : (
                   <p className="mt-3 text-[12px] leading-relaxed text-white/45">
@@ -315,6 +413,19 @@ export function DailyDigest() {
                       <p className="mt-2 text-[21px] font-black text-white">{data.progress.habitScore}/100</p>
                     </div>
                   </div>
+                  {data.dna && (
+                    <div className="rounded-[18px] border border-cyan-500/15 bg-cyan-500/[0.05] p-4">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-200/80">memoria estrategica por nicho</p>
+                      <p className="mt-2 text-[14px] font-bold text-white">
+                        {data.dna.goldenAudience || "Padroes ja acumulados para o proximo ciclo"}
+                      </p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-white/55">
+                        {data.dna.keyLearnings.length > 0
+                          ? data.dna.keyLearnings.join(" · ")
+                          : "Cada campanha aprovada agora fortalece os proximos briefs, criativos e segmentacoes."}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -332,6 +443,28 @@ export function DailyDigest() {
                     {insight}
                   </div>
                 ))}
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-white/[0.08] bg-white/[0.025] p-5">
+              <div className="flex items-center gap-2 text-white/35">
+                <Sparkles size={14} />
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em]">memoria e previsao</p>
+              </div>
+              <div className="mt-4 space-y-3">
+                <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-[12px] leading-relaxed text-white/62">
+                  {data.learning.approvedCount} decisoes aprovadas e {data.learning.rejectedCount} rejeitadas ja alimentam a proxima recomendacao do cockpit.
+                </div>
+                <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-[12px] leading-relaxed text-white/62">
+                  {data.forecast?.estimatedCplRange
+                    ? `Se voce publicar agora, o CPL previsto fica entre R$ ${fmtBRL(data.forecast.estimatedCplRange[0])} e R$ ${fmtBRL(data.forecast.estimatedCplRange[1])}.`
+                    : "Sem preflight recente suficiente para abrir faixa de CPL prevista."}
+                </div>
+                <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-[12px] leading-relaxed text-white/62">
+                  {data.business.roiMultiple
+                    ? `Hoje o trafego ja esta conectado ao negocio: retorno de ${data.business.roiMultiple.toFixed(2)}x sobre o investimento fechado.`
+                    : "Conforme mais propostas e fechamentos entrarem no CRM, o ROI deixa de ser suposicao e vira prova viva."}
+                </div>
               </div>
             </div>
 

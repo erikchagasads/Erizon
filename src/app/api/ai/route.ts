@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { buildStrategicContext } from "@/lib/strategic-context";
+import { strategicIntelligenceService } from "@/services/strategic-intelligence-service";
 import Groq from "groq-sdk";
 
 export const dynamic = "force-dynamic";
@@ -146,11 +148,23 @@ export async function POST(req: Request) {
 
     // Buscar memória do cliente se informado
     const { getContextoCliente } = await import("@/lib/agente-memoria");
-    const memoriaCliente = await getContextoCliente(supabase, user.id, cliente_id, "geral");
+    const workspaceId = await strategicIntelligenceService.resolveWorkspaceId(user.id);
+    const [memoriaCliente, workspaceSnapshot, clientSnapshot] = await Promise.all([
+      getContextoCliente(supabase, user.id, cliente_id, "geral"),
+      strategicIntelligenceService.getWorkspaceSnapshot({ workspaceId, userId: user.id }),
+      cliente_id
+        ? strategicIntelligenceService.getClientSnapshot({ clientId: cliente_id, userId: user.id, workspaceId })
+        : Promise.resolve(null),
+    ]);
+    const strategicContext = buildStrategicContext({
+      workspace: workspaceSnapshot,
+      client: clientSnapshot,
+      agent: "agente",
+    });
 
     const systemPrompt = category
-      ? `${SISTEMA_ERIZON}\n\nCONTEXTO ATUAL: ${category}${memoriaCliente}`
-      : `${SISTEMA_ERIZON}${memoriaCliente}`;
+      ? `${SISTEMA_ERIZON}\n\nCONTEXTO ATUAL: ${category}${memoriaCliente}${strategicContext}`
+      : `${SISTEMA_ERIZON}${memoriaCliente}${strategicContext}`;
 
     // Chama Groq
     const completion = await groq.chat.completions.create({

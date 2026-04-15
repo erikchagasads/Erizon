@@ -67,6 +67,42 @@ interface PortalData {
     strong_campaigns: number;
     needs_attention: number;
   };
+  live_roi?: {
+    todaySpend: number;
+    previousSpend: number;
+    todayLeads: number;
+    previousLeads: number;
+    todayRevenue: number;
+    previousRevenue: number;
+    leadsChange: number;
+    revenueChange: number;
+    summary: string;
+  };
+  business?: {
+    spend30d: number;
+    closedRevenue30d: number;
+    pipelineValue: number;
+    weightedPipelineValue: number;
+    conversionRate: number;
+    ticketMedio: number;
+    roiMultiple: number | null;
+    summary: string;
+  };
+  collective?: {
+    niche: string | null;
+    peers: number;
+    position: string;
+    marketTrend: string | null;
+    topPattern: string | null;
+    trendNote: string | null;
+    insight: string;
+  };
+  dna?: {
+    bestFormats: string[];
+    keyLearnings: string[];
+    goldenAudience: string | null;
+    confidenceScore: number;
+  } | null;
   benchmarks?: {
     cpl_median: number | null;
     roas_median: number | null;
@@ -176,6 +212,42 @@ function PortalPublicoInner() {
               </div>
             )}
 
+            {data.live_roi && (
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.08] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/80">roi ao vivo</p>
+                  <p className="mt-2 text-[24px] font-black text-white">
+                    {data.live_roi.todayLeads} leads hoje
+                  </p>
+                  <p className="mt-1 text-[11px] text-white/55">
+                    {data.live_roi.leadsChange > 0 ? "+" : ""}
+                    {data.live_roi.leadsChange}% vs mesma janela da semana passada
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.08] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/80">investimento de hoje</p>
+                  <p className="mt-2 text-[24px] font-black text-white">{fmtBRL(data.live_roi.todaySpend)}</p>
+                  <p className="mt-1 text-[11px] text-white/55">
+                    semana passada: {fmtBRL(data.live_roi.previousSpend)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.08] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-amber-100/80">faturamento fechado</p>
+                  <p className="mt-2 text-[24px] font-black text-white">{fmtBRL(data.live_roi.todayRevenue)}</p>
+                  <p className="mt-1 text-[11px] text-white/55">
+                    {data.live_roi.revenueChange > 0 ? "+" : ""}
+                    {data.live_roi.revenueChange}% vs mesma janela anterior
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {data.live_roi && (
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                <p className="text-[12px] leading-relaxed text-white/70">{data.live_roi.summary}</p>
+              </div>
+            )}
+
             {crmToken && (
               <a
                 href={`/crm/cliente/${crmToken}`}
@@ -241,6 +313,28 @@ function PortalPublicoInner() {
               </div>
             )}
 
+            {data.business && (
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">vendas fechadas 30d</p>
+                  <p className="mt-2 text-[23px] font-black text-white">{fmtBRL(data.business.closedRevenue30d)}</p>
+                  <p className="mt-1 text-[11px] text-white/45">resultado real vindo do CRM</p>
+                </div>
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">pipeline ponderado</p>
+                  <p className="mt-2 text-[23px] font-black text-white">{fmtBRL(data.business.weightedPipelineValue)}</p>
+                  <p className="mt-1 text-[11px] text-white/45">valor com peso por estagio</p>
+                </div>
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">retorno do trafego</p>
+                  <p className="mt-2 text-[23px] font-black text-white">
+                    {data.business.roiMultiple ? `${data.business.roiMultiple.toFixed(2)}x` : "-"}
+                  </p>
+                  <p className="mt-1 text-[11px] text-white/45">receita fechada sobre investimento</p>
+                </div>
+              </div>
+            )}
+
             {(data.momentum || data.benchmarks) && (
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.05] p-4">
@@ -263,6 +357,36 @@ function PortalPublicoInner() {
                     {data.benchmarks?.roas_median
                       ? `ROAS mediano ${data.benchmarks.roas_median.toFixed(2)}x nas janelas anteriores.`
                       : "Quanto mais historico voce acumula, mais preciso fica o espelho de evolucao."}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {(data.collective || data.dna) && (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-amber-500/15 bg-amber-500/[0.05] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-amber-100/80">mercado em tempo real</p>
+                  <p className="mt-2 text-[20px] font-black text-white">
+                    {data.collective?.niche ? `${data.collective.niche} · ${data.collective.position}` : "Comparativo da rede"}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-white/60">
+                    {data.collective?.insight ?? "Conforme o nicho acumula dados, o portal mostra onde sua operacao esta contra o mercado."}
+                  </p>
+                  {data.collective?.topPattern && (
+                    <p className="mt-2 text-[11px] leading-relaxed text-amber-100/80">
+                      O que os melhores estao fazendo agora: {data.collective.topPattern}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/[0.05] p-4">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/80">memoria estrategica</p>
+                  <p className="mt-2 text-[20px] font-black text-white">
+                    {data.dna?.goldenAudience || "Aprendizados do que mais converte"}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-white/60">
+                    {data.dna?.keyLearnings?.length
+                      ? data.dna.keyLearnings.join(" · ")
+                      : "A cada campanha o portal fica mais preciso para mostrar o que funciona no seu nicho."}
                   </p>
                 </div>
               </div>

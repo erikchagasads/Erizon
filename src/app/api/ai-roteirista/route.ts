@@ -3,6 +3,8 @@ import { Groq } from "groq-sdk";
 import { checkRateLimit, rateLimitHeaders, RATE_LIMIT_PRESETS } from "@/lib/rate-limiter";
 import { requireAuth } from "@/lib/auth-guard";
 import { getContextoCliente } from "@/lib/agente-memoria";
+import { buildStrategicContext } from "@/lib/strategic-context";
+import { strategicIntelligenceService } from "@/services/strategic-intelligence-service";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -213,17 +215,33 @@ async function handleFluxoStudio(body: Record<string, unknown>, userId?: string)
 
   // Buscar memoria do cliente
   let memoriaCliente = "";
-  if (userId && cliente_id) {
+  let strategicContext = "";
+  if (userId) {
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
     );
-    memoriaCliente = await getContextoCliente(supabase, userId, cliente_id, "roteirista");
+    const workspaceId = await strategicIntelligenceService.resolveWorkspaceId(userId);
+    const [memoria, workspaceSnapshot, clientSnapshot] = await Promise.all([
+      getContextoCliente(supabase, userId, cliente_id, "roteirista"),
+      strategicIntelligenceService.getWorkspaceSnapshot({ workspaceId, userId }),
+      cliente_id
+        ? strategicIntelligenceService.getClientSnapshot({ clientId: cliente_id, userId, workspaceId })
+        : Promise.resolve(null),
+    ]);
+    memoriaCliente = memoria;
+    strategicContext = buildStrategicContext({
+      workspace: workspaceSnapshot,
+      client: clientSnapshot,
+      agent: "roteirista",
+    });
   }
 
-  const ctxFinal = [mensagemUsuario, contexto, memoriaCliente].filter(Boolean).join("\n\nCONTEXTO ADICIONAL:\n");
+  const ctxFinal = [mensagemUsuario, contexto, memoriaCliente, strategicContext]
+    .filter(Boolean)
+    .join("\n\nCONTEXTO ADICIONAL:\n");
   const skillFn = SKILLS[tipoRoteiro] ?? SKILLS.vsl_curto;
   const prompt = skillFn(ctxFinal);
 

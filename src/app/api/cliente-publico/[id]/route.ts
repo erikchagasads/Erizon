@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { strategicIntelligenceService } from "@/services/strategic-intelligence-service";
 
 const sum = (values: Array<number | null | undefined>) =>
   values.reduce((total, value) => total + (Number(value) || 0), 0);
@@ -28,7 +29,7 @@ export async function GET(
 
     const { data: cliente, error: clienteErr } = await supabase
       .from("clientes")
-      .select("id, nome, nome_cliente, cor, ativo, ultima_atualizacao, crm_token")
+      .select("id, nome, nome_cliente, cor, ativo, ultima_atualizacao, crm_token, user_id, ticket_medio")
       .eq("id", clienteId)
       .eq("ativo", true)
       .maybeSingle();
@@ -45,7 +46,9 @@ export async function GET(
     const previousStart = new Date(previousEnd);
     previousStart.setDate(previousEnd.getDate() - 29);
 
-    const [adsRes, currentSnapshotsRes, previousSnapshotsRes, profitDnaRes] = await Promise.all([
+    const workspaceId = await strategicIntelligenceService.resolveWorkspaceId(cliente.user_id);
+
+    const [adsRes, currentSnapshotsRes, previousSnapshotsRes, profitDnaRes, strategic] = await Promise.all([
       supabase
         .from("metricas_ads")
         .select("nome_campanha, status, gasto_total, contatos, impressoes, cliques, ctr")
@@ -71,6 +74,11 @@ export async function GET(
         .order("computed_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      strategicIntelligenceService.getClientSnapshot({
+        clientId: clienteId,
+        userId: cliente.user_id,
+        workspaceId,
+      }),
     ]);
 
     const campanhas = (adsRes.data ?? []).map((campanha) => {
@@ -188,6 +196,10 @@ export async function GET(
         strong_campaigns: strongCampaigns,
         needs_attention: needsAttention,
       },
+      live_roi: strategic.liveRoi,
+      business: strategic.business,
+      collective: strategic.collective,
+      dna: strategic.dna,
       benchmarks: {
         cpl_median: profitDnaRes.data?.cpl_median ?? null,
         roas_median: profitDnaRes.data?.roas_median ?? null,

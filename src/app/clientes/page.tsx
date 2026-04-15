@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
 import { SkeletonPage } from "@/components/ops/AppShell";
+import { StrategicMoatPanel } from "@/components/StrategicMoatPanel";
 import { useSessionGuard } from "@/app/hooks/useSessionGuard";
 import {
   Plus, X, Loader2, Check, AlertTriangle, Users,
@@ -922,7 +923,8 @@ export default function ClientesPage() {
           </div>
 
           {/* Banner de instruções */}
-          <div className="rounded-2xl border border-blue-500/15 bg-blue-500/[0.04] p-5 mb-6">
+            <StrategicMoatPanel />
+            <div className="rounded-2xl border border-blue-500/15 bg-blue-500/[0.04] p-5 mb-6">
             <p className="text-[11px] text-blue-400 font-semibold uppercase tracking-wider mb-3">Fluxo de uso</p>
             <div className="flex items-start gap-6 flex-wrap">
               {[

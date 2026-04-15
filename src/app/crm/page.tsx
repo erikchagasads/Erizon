@@ -8,6 +8,7 @@ import {
   Phone, Mail, StickyNote, ArrowRight,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
+import { StrategicMoatPanel } from "@/components/StrategicMoatPanel";
 
 type Estagio = "novo" | "contato" | "proposta" | "fechado" | "perdido";
 
@@ -468,6 +469,10 @@ export default function CRMGestorPage() {
               Novo lead
             </button>
           </div>
+        </div>
+
+        <div className="px-8 pt-5">
+          <StrategicMoatPanel />
         </div>
 
         {/* Abas */}

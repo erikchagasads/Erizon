@@ -1,6 +1,8 @@
 // src/app/api/agente/route.ts
 import { getContextoCliente } from "@/lib/agente-memoria";
+import { buildStrategicContext } from "@/lib/strategic-context";
 import { logEvent, logError } from "@/lib/observability/logger";
+import { strategicIntelligenceService } from "@/services/strategic-intelligence-service";
 // Erizon AI: suporte completo à plataforma + análise de métricas + copiloto de decisão
 // Powered by Groq (llama-3.3-70b-versatile)
 
@@ -581,19 +583,30 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Mensagens inválidas." }), { status: 400 });
   }
 
-  const [{ data: memoria }, clienteResult, memoriaCliente] = await Promise.all([
+  const workspaceId = await strategicIntelligenceService.resolveWorkspaceId(user.id);
+  const [{ data: memoria }, clienteResult, memoriaCliente, workspaceSnapshot, clientSnapshot] = await Promise.all([
     supabase.from("agente_memoria").select("*").eq("user_id", user.id).maybeSingle(),
     cliente_id
       ? supabase.from("clientes").select("nome, nome_cliente").eq("id", cliente_id).maybeSingle()
       : Promise.resolve({ data: null }),
     getContextoCliente(supabase, user.id, cliente_id, "agente"),
+    strategicIntelligenceService.getWorkspaceSnapshot({ workspaceId, userId: user.id }),
+    cliente_id
+      ? strategicIntelligenceService.getClientSnapshot({ clientId: cliente_id, userId: user.id, workspaceId })
+      : Promise.resolve(null),
   ]);
 
   const clienteNome = clienteResult.data
     ? (clienteResult.data.nome_cliente ?? clienteResult.data.nome)
     : undefined;
 
-  const systemPrompt = buildSystem(memoria as Record<string, unknown> | null, clienteNome) + memoriaCliente;
+  const strategicContext = buildStrategicContext({
+    workspace: workspaceSnapshot,
+    client: clientSnapshot,
+    agent: "agente",
+  });
+  const systemPrompt =
+    buildSystem(memoria as Record<string, unknown> | null, clienteNome) + memoriaCliente + strategicContext;
   const ultimaMensagem = messages[messages.length - 1]?.content ?? "";
   const usarTools = precisaDeDados(ultimaMensagem);
 

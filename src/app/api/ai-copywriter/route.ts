@@ -2,6 +2,8 @@ import { NextResponse, NextRequest } from "next/server";
 import { Groq } from "groq-sdk";
 import { requireAuth } from "@/lib/auth-guard";
 import { getContextoCliente } from "@/lib/agente-memoria";
+import { buildStrategicContext } from "@/lib/strategic-context";
+import { strategicIntelligenceService } from "@/services/strategic-intelligence-service";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { checkRateLimit, rateLimitHeaders, RATE_LIMIT_PRESETS } from "@/lib/rate-limiter";
@@ -183,9 +185,23 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
     );
-    const memoriaCliente = await getContextoCliente(supabase, auth.user.id, cliente_id, "copywriter");
+    const workspaceId = await strategicIntelligenceService.resolveWorkspaceId(auth.user.id);
+    const [memoriaCliente, workspaceSnapshot, clientSnapshot] = await Promise.all([
+      getContextoCliente(supabase, auth.user.id, cliente_id, "copywriter"),
+      strategicIntelligenceService.getWorkspaceSnapshot({ workspaceId, userId: auth.user.id }),
+      cliente_id
+        ? strategicIntelligenceService.getClientSnapshot({ clientId: cliente_id, userId: auth.user.id, workspaceId })
+        : Promise.resolve(null),
+    ]);
+    const strategicContext = buildStrategicContext({
+      workspace: workspaceSnapshot,
+      client: clientSnapshot,
+      agent: "copywriter",
+    });
 
-    const ctxFinal = [mensagemUsuario, contexto, memoriaCliente].filter(Boolean).join("\n\nCONTEXTO ADICIONAL:\n");
+    const ctxFinal = [mensagemUsuario, contexto, memoriaCliente, strategicContext]
+      .filter(Boolean)
+      .join("\n\nCONTEXTO ADICIONAL:\n");
     const skillFn = SKILLS[tipoCopy] ?? SKILLS.headline;
     const prompt = skillFn(ctxFinal);
 

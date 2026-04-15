@@ -4,6 +4,8 @@ import { z, validationError } from "@/lib/validate";
 import { requireAuth } from "@/lib/auth-guard";
 import { checkRateLimit, rateLimitHeaders, RATE_LIMIT_PRESETS } from "@/lib/rate-limiter";
 import { getContextoCliente } from "@/lib/agente-memoria";
+import { buildStrategicContext } from "@/lib/strategic-context";
+import { strategicIntelligenceService } from "@/services/strategic-intelligence-service";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -52,7 +54,19 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
     );
-    const memoriaCliente = await getContextoCliente(supabase, auth.user.id, cliente_id, "analista");
+    const workspaceId = await strategicIntelligenceService.resolveWorkspaceId(auth.user.id);
+    const [memoriaCliente, workspaceSnapshot, clientSnapshot] = await Promise.all([
+      getContextoCliente(supabase, auth.user.id, cliente_id, "analista"),
+      strategicIntelligenceService.getWorkspaceSnapshot({ workspaceId, userId: auth.user.id }),
+      cliente_id
+        ? strategicIntelligenceService.getClientSnapshot({ clientId: cliente_id, userId: auth.user.id, workspaceId })
+        : Promise.resolve(null),
+    ]);
+    const strategicContext = buildStrategicContext({
+      workspace: workspaceSnapshot,
+      client: clientSnapshot,
+      agent: "analista",
+    });
     const listaCampanhas = Array.isArray(metrics) ? metrics : metrics ? [metrics] : [];
 
     if (listaCampanhas.length === 0) {
@@ -98,7 +112,7 @@ ${
 
 ${resumoCampanhas}
 
-${contexto ? `\nCONTEXTO ADICIONAL:\n${contexto}` : ""}${memoriaCliente}
+${contexto ? `\nCONTEXTO ADICIONAL:\n${contexto}` : ""}${memoriaCliente}${strategicContext}
 
 ── BENCHMARKS DO MERCADO BRASILEIRO ──
 CPL:

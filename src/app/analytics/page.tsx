@@ -30,6 +30,7 @@ import PainelDecisoes from "@/components/dados/PainelDecisoes";
 import FunnelPanel from "@/components/dados/FunnelPanel";
 import PainelHistoricoMetricas from "@/components/dados/PainelHistorico";
 import { PlataformaSelector, GeralView } from "@/components/dados/PlataformaSelector";
+import { StrategicMoatPanel } from "@/components/StrategicMoatPanel";
 import type { PlataformaId } from "@/app/analytics/types";
 import { useHistorico } from "@/app/hooks/useHistorico";
 import { useCliente } from "@/app/hooks/useCliente";
@@ -998,6 +999,7 @@ export default function DadosPage() {
           <>
             {/* ── Seletor de plataformas ─────────────────────────────────── */}
             <PlataformaSelector ativa={plataformaAtiva} onChange={setPlataformaAtiva} />
+            <StrategicMoatPanel />
 
             {/* ── Vista Geral ────────────────────────────────────────────── */}
             {plataformaAtiva === "geral" ? (

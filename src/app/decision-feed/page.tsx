@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
+import { StrategicMoatPanel } from "@/components/StrategicMoatPanel";
 
 import { getSupabase } from "@/lib/supabase";
 import { TrendingUp, AlertTriangle, Pause, ArrowUpRight, Eye, ChevronDown, ChevronUp, ShieldCheck, Zap } from "lucide-react";
@@ -252,6 +253,8 @@ export default function DecisionFeedPage() {
               Decisões prioritárias com guia de execução — o que fazer, quando e como.
             </p>
           </div>
+
+          <StrategicMoatPanel />
 
           {!loading ? (
             <div className="space-y-5">

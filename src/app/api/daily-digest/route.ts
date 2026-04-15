@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { strategicIntelligenceService } from "@/services/strategic-intelligence-service";
 
 type SnapshotRow = {
   spend: number | null;
@@ -116,7 +117,7 @@ export async function GET() {
     const previousEndStr = previousEnd.toISOString().slice(0, 10);
     const todayStr = today.toISOString().slice(0, 10);
 
-    const [currentMetricsRes, previousMetricsRes, pendingDecisionsRes, alertsRes, topCampaignRes, workspaceRes, benchmarkRes] =
+    const [currentMetricsRes, previousMetricsRes, pendingDecisionsRes, alertsRes, topCampaignRes, workspaceRes, benchmarkRes, strategic] =
       await Promise.all([
         supabase
           .from("campaign_snapshots_daily")
@@ -158,6 +159,7 @@ export async function GET() {
           .select("niche, cpl_p50, roas_p50, trend_note")
           .order("computed_at", { ascending: false })
           .limit(1),
+        strategicIntelligenceService.getWorkspaceSnapshot({ workspaceId, userId: user.id }),
       ]);
 
     const currentMetrics = (currentMetricsRes.data ?? []) as SnapshotRow[];
@@ -255,6 +257,11 @@ export async function GET() {
       currentLeads > 0 ? `captou ${currentLeads} leads` : null,
     ].filter(Boolean);
 
+    const collectiveInsight =
+      strategic.collective.topPattern
+        ? `${strategic.collective.insight} Padrao em alta na rede: ${strategic.collective.topPattern}.`
+        : strategic.collective.insight;
+
     const insights = [
       revenueChange > 8
         ? `Receita ${revenueChange}% acima da semana anterior. Seu ritmo de crescimento esta acelerando.`
@@ -264,7 +271,8 @@ export async function GET() {
       spendChange < 0 && revenueChange >= 0
         ? "Voce gastou menos sem derrubar resultado. Isso e sinal de operacao mais eficiente."
         : "O investimento segue puxando o resultado. Priorize o que mais move ROAS e CPL.",
-      benchmark?.insight ?? "Defina o nicho do workspace para comparar sua conta com o mercado dentro da home.",
+      benchmark?.insight ?? collectiveInsight,
+      strategic.learning.memoryLine,
     ];
 
     const actions = [
@@ -279,6 +287,9 @@ export async function GET() {
         : benchmark?.roas.status === "winning"
           ? "Seu ROAS esta acima do mercado. Proteja os vencedores e escale so o que mantem margem."
           : "Seu benchmark esta equilibrado. O maior ganho agora vem da velocidade de execucao.",
+      strategic.forecast?.estimatedLeads7d
+        ? `Antes de publicar, seu ultimo preflight ja projeta ${strategic.forecast.estimatedLeads7d} leads em 7 dias com ${strategic.forecast.confidenceLabel}.`
+        : "Sem previsao recente salva. Rode o preflight antes da proxima campanha para enxergar impacto antes de gastar.",
     ];
 
     return NextResponse.json({
@@ -324,6 +335,14 @@ export async function GET() {
       },
       topCampaign,
       benchmark,
+      learning: strategic.learning,
+      business: strategic.business,
+      collective: {
+        ...strategic.collective,
+        insight: collectiveInsight,
+      },
+      forecast: strategic.forecast,
+      dna: strategic.dna,
       progress: {
         wastedBudgetRecoveredBrl,
         revenueOpportunityBrl,

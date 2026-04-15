@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth-guard";
 import { runPreflight, type PreflightInput } from "@/core/preflight-engine";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { strategicIntelligenceService } from "@/services/strategic-intelligence-service";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -52,6 +53,33 @@ export async function POST(req: NextRequest) {
 
   // Roda engine
   const result = runPreflight(body);
+  const strategic = await strategicIntelligenceService.getWorkspaceSnapshot({
+    workspaceId,
+    userId: auth.user.id,
+  });
+  const weeklyBudget = Number(body.orcamentoDiario ?? 0) * 7;
+  const estimatedLeadsMin =
+    weeklyBudget > 0 && result.estimatedCplMax
+      ? Math.floor(weeklyBudget / result.estimatedCplMax)
+      : null;
+  const estimatedLeadsMax =
+    weeklyBudget > 0 && result.estimatedCplMin
+      ? Math.floor(weeklyBudget / result.estimatedCplMin)
+      : null;
+  const estimatedLeads7d =
+    estimatedLeadsMin !== null && estimatedLeadsMax !== null
+      ? Math.round((estimatedLeadsMin + estimatedLeadsMax) / 2)
+      : body.metaLeads ?? null;
+  const estimatedRevenue7d =
+    estimatedLeads7d && strategic.business.ticketMedio > 0 && strategic.business.conversionRate > 0
+      ? Math.round(estimatedLeads7d * (strategic.business.conversionRate / 100) * strategic.business.ticketMedio)
+      : null;
+  const confidenceLabel =
+    result.score >= 85
+      ? "alta confianca"
+      : result.score >= 70
+        ? "confianca moderada"
+        : "precisa de validacao";
 
   // Salva no banco
   try {
@@ -68,5 +96,17 @@ export async function POST(req: NextRequest) {
     });
   } catch { /* não bloqueia se falhar */ }
 
-  return NextResponse.json({ ok: true, result });
+  return NextResponse.json({
+    ok: true,
+    result,
+    forecast: {
+      estimatedLeads7d,
+      estimatedRevenue7d,
+      confidenceLabel,
+      conversionRate: strategic.business.conversionRate,
+      ticketMedio: strategic.business.ticketMedio,
+      networkInsight: strategic.collective.insight,
+      memoryLine: strategic.learning.memoryLine,
+    },
+  });
 }
