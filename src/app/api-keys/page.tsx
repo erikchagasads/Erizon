@@ -1,10 +1,7 @@
-// src/app/api-keys/page.tsx
-// Gerenciamento de API Keys para a Benchmark API pública.
-
 "use client";
 
 import { useEffect, useState } from "react";
-import { Key, Plus, Trash2, Copy, CheckCheck, ExternalLink, Activity } from "lucide-react";
+import { Activity, CheckCheck, Copy, ExternalLink, Key, Plus, Trash2 } from "lucide-react";
 
 interface ApiKey {
   id: string;
@@ -23,53 +20,105 @@ interface KeyStats {
   active_keys: number;
 }
 
+const API_KEYS_ENDPOINT = "/api/settings/api-key-management";
+
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [stats, setStats] = useState<KeyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => { loadKeys(); }, []);
+  useEffect(() => {
+    void loadKeys();
+  }, []);
 
   async function loadKeys() {
     setLoading(true);
+    setError(null);
+
     const [keysRes, statsRes] = await Promise.all([
-      fetch("/api/settings/api-keys"),
+      fetch(API_KEYS_ENDPOINT),
       fetch("/api/training-data/export?format=stats"),
     ]);
-    if (keysRes.ok) setKeys(await keysRes.json());
-    if (statsRes.ok) {
-      const s = await statsRes.json();
-      setStats({ total_requests: s.total ?? 0, requests_today: 0, active_keys: keys.length });
+
+    let nextKeys: ApiKey[] = [];
+
+    if (keysRes.ok) {
+      nextKeys = await keysRes.json();
+      setKeys(nextKeys);
+    } else {
+      const payload = await keysRes.json().catch(() => ({}));
+      setError(payload.error ?? "Nao foi possivel carregar as API keys.");
+      setKeys([]);
     }
+
+    if (statsRes.ok) {
+      const payload = await statsRes.json();
+      setStats({
+        total_requests: payload.total ?? 0,
+        requests_today: payload.today ?? 0,
+        active_keys: nextKeys.filter((key) => key.active).length,
+      });
+    } else {
+      setStats({
+        total_requests: 0,
+        requests_today: 0,
+        active_keys: nextKeys.filter((key) => key.active).length,
+      });
+    }
+
     setLoading(false);
   }
 
   async function createKey() {
     if (!newKeyName.trim()) return;
+
     setCreating(true);
-    const res = await fetch("/api/settings/api-keys", {
+    setError(null);
+
+    const res = await fetch(API_KEYS_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newKeyName.trim(), plan: "free" }),
     });
-    const data = await res.json();
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      setError(data.error ?? "Nao foi possivel criar a API key.");
+      setCreating(false);
+      return;
+    }
+
     if (data.key) {
       setNewKeyValue(data.key);
       setNewKeyName("");
       setShowCreate(false);
       await loadKeys();
+    } else {
+      setError("A resposta da API nao trouxe a key criada.");
     }
+
     setCreating(false);
   }
 
   async function revokeKey(id: string) {
-    if (!confirm("Revogar esta key? Ela deixará de funcionar imediatamente.")) return;
-    await fetch(`/api/settings/api-keys/${id}`, { method: "DELETE" });
+    if (!confirm("Revogar esta key? Ela deixara de funcionar imediatamente.")) return;
+
+    setError(null);
+
+    const res = await fetch(`${API_KEYS_ENDPOINT}/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Nao foi possivel revogar a key.");
+      return;
+    }
+
     await loadKeys();
   }
 
@@ -86,40 +135,50 @@ export default function ApiKeysPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10 space-y-8">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+    <div className="mx-auto max-w-3xl space-y-8 px-4 py-10">
+      <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Key className="w-5 h-5 text-violet-400" />
+            <Key className="h-5 w-5 text-violet-400" />
             <h1 className="text-xl font-medium text-white">API Keys</h1>
           </div>
           <p className="text-sm text-zinc-400">
             Acesse a{" "}
-            <a href="https://docs.erizonai.com.br/api/benchmarks" target="_blank" className="text-violet-400 hover:underline inline-flex items-center gap-1">
-              Benchmark API <ExternalLink className="w-3 h-3" />
+            <a
+              href="/docs/api/benchmarks"
+              target="_blank"
+              className="inline-flex items-center gap-1 text-violet-400 hover:underline"
+            >
+              Benchmark API <ExternalLink className="h-3 w-3" />
             </a>{" "}
-            externamente com autenticação por key.
+            externamente com autenticacao por key.
           </p>
         </div>
+
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm rounded-lg transition-colors"
+          className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-sm text-white transition-colors hover:bg-violet-500"
         >
-          <Plus className="w-4 h-4" /> Nova key
+          <Plus className="h-4 w-4" />
+          Nova key
         </button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      {error && (
+        <div className="rounded-xl border border-red-900/60 bg-red-950/50 px-4 py-3 text-sm text-red-200">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[
-          { label: "Keys ativas", value: keys.filter(k => k.active).length, icon: Key },
+          { label: "Keys ativas", value: keys.filter((key) => key.active).length, icon: Key },
           { label: "Total de requests", value: stats?.total_requests ?? 0, icon: Activity },
-          { label: "Exemplos treino exportáveis", value: "—", icon: Activity },
+          { label: "Exemplos treino exportaveis", value: "-", icon: Activity },
         ].map(({ label, value, icon: Icon }) => (
-          <div key={label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-            <div className="flex items-center gap-2 text-zinc-500 mb-1">
-              <Icon className="w-3.5 h-3.5" />
+          <div key={label} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <div className="mb-1 flex items-center gap-2 text-zinc-500">
+              <Icon className="h-3.5 w-3.5" />
               <span className="text-xs uppercase tracking-wide">{label}</span>
             </div>
             <p className="text-xl font-medium text-white">{value}</p>
@@ -127,78 +186,106 @@ export default function ApiKeysPage() {
         ))}
       </div>
 
-      {/* Modal criar key */}
       {showCreate && (
-        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 space-y-4">
+        <div className="space-y-4 rounded-xl border border-zinc-700 bg-zinc-900 p-5">
           <p className="text-sm font-medium text-white">Nova API Key</p>
           <input
             type="text"
-            placeholder="Nome da key (ex: integração n8n)"
+            placeholder="Nome da key (ex: integracao n8n)"
             value={newKeyName}
-            onChange={e => setNewKeyName(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && createKey()}
-            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
+            onChange={(event) => setNewKeyName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void createKey();
+            }}
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
           />
           <div className="flex gap-2">
-            <button onClick={createKey} disabled={creating || !newKeyName.trim()}
-              className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm rounded-lg transition-colors">
+            <button
+              onClick={() => void createKey()}
+              disabled={creating || !newKeyName.trim()}
+              className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+            >
               {creating ? "Criando..." : "Criar"}
             </button>
-            <button onClick={() => setShowCreate(false)}
-              className="px-4 py-2 border border-zinc-700 text-zinc-400 text-sm rounded-lg hover:bg-zinc-800 transition-colors">
+            <button
+              onClick={() => setShowCreate(false)}
+              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-400 transition-colors hover:bg-zinc-800"
+            >
               Cancelar
             </button>
           </div>
         </div>
       )}
 
-      {/* Key recém-criada — mostrar uma única vez */}
       {newKeyValue && (
-        <div className="bg-emerald-950 border border-emerald-800 rounded-xl p-5 space-y-3">
-          <p className="text-sm font-medium text-emerald-400">✅ Key criada — salve agora, não será exibida novamente</p>
+        <div className="space-y-3 rounded-xl border border-emerald-800 bg-emerald-950 p-5">
+          <p className="text-sm font-medium text-emerald-400">
+            Key criada. Salve agora, ela nao sera exibida novamente.
+          </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-300 break-all font-mono">
+            <code className="flex-1 break-all rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-300">
               {newKeyValue}
             </code>
-            <button onClick={() => copyKey(newKeyValue)}
-              className="shrink-0 px-3 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-sm rounded-lg transition-colors flex items-center gap-1">
-              {copied ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            <button
+              onClick={() => void copyKey(newKeyValue)}
+              className="flex shrink-0 items-center gap-1 rounded-lg bg-emerald-700 px-3 py-2 text-sm text-white transition-colors hover:bg-emerald-600"
+            >
+              {copied ? <CheckCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             </button>
           </div>
-          <button onClick={() => setNewKeyValue(null)} className="text-xs text-zinc-500 hover:text-zinc-400">
+          <button
+            onClick={() => setNewKeyValue(null)}
+            className="text-xs text-zinc-500 transition-colors hover:text-zinc-400"
+          >
             Confirmar que salvei
           </button>
         </div>
       )}
 
-      {/* Lista de keys */}
       {loading ? (
-        <div className="text-sm text-zinc-500 text-center py-8">Carregando...</div>
+        <div className="py-8 text-center text-sm text-zinc-500">Carregando...</div>
       ) : keys.length === 0 ? (
-        <div className="text-sm text-zinc-500 text-center py-12 border border-dashed border-zinc-800 rounded-xl">
+        <div className="rounded-xl border border-dashed border-zinc-800 py-12 text-center text-sm text-zinc-500">
           Nenhuma API key criada ainda.
         </div>
       ) : (
         <div className="space-y-2">
-          {keys.map(key => (
-            <div key={key.id} className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-4">
-              <div className="flex-1 min-w-0">
+          {keys.map((key) => (
+            <div
+              key={key.id}
+              className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3"
+            >
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-white truncate">{key.name}</p>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${planColor[key.plan] ?? "text-zinc-400 bg-zinc-800"}`}>
+                  <p className="truncate text-sm font-medium text-white">{key.name}</p>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${planColor[key.plan] ?? "bg-zinc-800 text-zinc-400"}`}
+                  >
                     {key.plan}
                   </span>
-                  {!key.active && <span className="text-xs px-2 py-0.5 rounded-full text-red-400 bg-red-900/30">revogada</span>}
+                  {!key.active && (
+                    <span className="rounded-full bg-red-900/30 px-2 py-0.5 text-xs text-red-400">
+                      revogada
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs text-zinc-500 font-mono mt-0.5">{key.key_prefix}••••••••</p>
+                <p className="mt-0.5 font-mono text-xs text-zinc-500">{key.key_prefix}........</p>
               </div>
-              <div className="text-right shrink-0">
-                <p className="text-xs text-zinc-500">{key.last_used_at ? `Último uso: ${new Date(key.last_used_at).toLocaleDateString("pt-BR")}` : "Nunca usada"}</p>
+
+              <div className="shrink-0 text-right">
+                <p className="text-xs text-zinc-500">
+                  {key.last_used_at
+                    ? `Ultimo uso: ${new Date(key.last_used_at).toLocaleDateString("pt-BR")}`
+                    : "Nunca usada"}
+                </p>
               </div>
+
               {key.active && (
-                <button onClick={() => revokeKey(key.id)}
-                  className="shrink-0 p-1.5 text-zinc-600 hover:text-red-400 transition-colors">
-                  <Trash2 className="w-4 h-4" />
+                <button
+                  onClick={() => void revokeKey(key.id)}
+                  className="shrink-0 p-1.5 text-zinc-600 transition-colors hover:text-red-400"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </button>
               )}
             </div>
@@ -206,17 +293,19 @@ export default function ApiKeysPage() {
         </div>
       )}
 
-      {/* Docs */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-2">
+      <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
         <p className="text-sm font-medium text-white">Exemplo de uso</p>
-        <pre className="bg-zinc-950 rounded-lg p-4 text-xs text-zinc-400 overflow-x-auto">{`curl https://app.erizonai.com.br/api/public/benchmarks \\
+        <pre className="overflow-x-auto rounded-lg bg-zinc-950 p-4 text-xs text-zinc-400">{`curl https://app.erizonai.com.br/api/public/benchmarks \\
   -H "x-erizon-key: SUA_KEY_AQUI" \\
   -G -d "niche=ecommerce" \\
   -d "metric=cpl" \\
   -d "period=30d"`}</pre>
-        <a href="https://docs.erizonai.com.br/api/benchmarks" target="_blank"
-          className="text-xs text-violet-400 hover:underline inline-flex items-center gap-1">
-          Ver documentação completa <ExternalLink className="w-3 h-3" />
+        <a
+          href="/docs/api/benchmarks"
+          target="_blank"
+          className="inline-flex items-center gap-1 text-xs text-violet-400 hover:underline"
+        >
+          Ver documentacao completa <ExternalLink className="h-3 w-3" />
         </a>
       </div>
     </div>
