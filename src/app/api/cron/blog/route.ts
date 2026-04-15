@@ -16,6 +16,8 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
+const CURRENT_BLOG_YEAR = 2026;
+
 // ── Banco de pautas rotativas ─────────────────────────────────────────────────
 
 const PAUTAS_EDUCACIONAIS = [
@@ -31,20 +33,20 @@ const PAUTAS_EDUCACIONAIS = [
   { titulo: "Health Score de conta: como avaliar a saúde das suas campanhas", categoria: "Métricas" },
   { titulo: "Saturação de criativo: sinais de alerta e como agir antes do colapso", categoria: "Criativos" },
   { titulo: "Como criar relatórios de performance que impressionam clientes", categoria: "Gestão" },
-  { titulo: "Budget diário vs. vitalício: qual funciona melhor no Meta Ads 2025", categoria: "Estratégia" },
+  { titulo: `Budget diário vs. vitalício: qual funciona melhor no Meta Ads ${CURRENT_BLOG_YEAR}`, categoria: "Estratégia" },
   { titulo: "Por que seu ROAS está caindo mesmo com o mesmo criativo", categoria: "Métricas" },
-  { titulo: "Lookalike audiences em 2025: ainda vale a pena no Brasil?", categoria: "Estratégia" },
+  { titulo: `Lookalike audiences em ${CURRENT_BLOG_YEAR}: ainda vale a pena no Brasil?`, categoria: "Estratégia" },
 ];
 
 const PAUTAS_NOTICIAS = [
-  { titulo: "O que mudou no algoritmo do Meta Ads em 2025 e como se adaptar", categoria: "Notícias" },
+  { titulo: `O que mudou no algoritmo do Meta Ads em ${CURRENT_BLOG_YEAR} e como se adaptar`, categoria: "Notícias" },
   { titulo: "Advantage+ do Meta: o que os gestores precisam saber agora", categoria: "Notícias" },
   { titulo: "IA no tráfego pago: como as ferramentas estão mudando a gestão de campanhas", categoria: "Tendências" },
-  { titulo: "Mercado de tráfego pago no Brasil: números e tendências para 2025", categoria: "Tendências" },
+  { titulo: `Mercado de tráfego pago no Brasil: números e tendências para ${CURRENT_BLOG_YEAR}`, categoria: "Tendências" },
   { titulo: "O crescimento das agências de performance no Brasil e o que está por trás", categoria: "Tendências" },
   { titulo: "Privacidade de dados e o futuro do targeting no Meta Ads", categoria: "Tendências" },
   { titulo: "Como a IA generativa está transformando a criação de criativos para anúncios", categoria: "Tendências" },
-  { titulo: "Campanhas de performance no Instagram vs. Facebook: onde está o resultado em 2025", categoria: "Estratégia" },
+  { titulo: `Campanhas de performance no Instagram vs. Facebook: onde está o resultado em ${CURRENT_BLOG_YEAR}`, categoria: "Estratégia" },
 ];
 
 function slugify(text: string): string {
@@ -62,6 +64,10 @@ function calcReadTime(content: string): string {
   const words = content.split(/\s+/).length;
   const minutes = Math.ceil(words / 200);
   return `${minutes} min`;
+}
+
+function hasStaleYearMentions(value: string) {
+  return /\b2024\b|\b2025\b/.test(value);
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -107,6 +113,9 @@ Escreva artigos de blog que rankam no Google e são úteis para gestores de trá
 REGRAS:
 - Escreva em português BR fluente e profissional
 - Tom direto, educativo, com exemplos práticos do mercado brasileiro
+- Contextualize tudo no ano atual: ${CURRENT_BLOG_YEAR}
+- Não use 2024 nem 2025 como se fossem dados atuais
+- Só cite anos anteriores se for comparação histórica explícita e rotulada como histórica
 - Use H2 (##) e H3 (###) para estruturar o conteúdo
 - Inclua dados, números e benchmarks reais quando possível
 - Entre 800-1200 palavras de conteúdo real
@@ -123,7 +132,7 @@ FORMATO DE RESPOSTA — retorne APENAS JSON válido:
         },
         {
           role: "user",
-          content: `Escreva um artigo completo sobre: "${pauta.titulo}"\nCategoria: ${pauta.categoria}`,
+          content: `Escreva um artigo completo sobre: "${pauta.titulo}"\nCategoria: ${pauta.categoria}\nAno de referência obrigatório: ${CURRENT_BLOG_YEAR}`,
         },
       ],
     });
@@ -170,6 +179,17 @@ FORMATO DE RESPOSTA — retorne APENAS JSON válido:
     }
 
     const slug = `${slugify(artigo.title)}-${hoje_str}`;
+
+    if (
+      hasStaleYearMentions(artigo.title ?? "") ||
+      hasStaleYearMentions(artigo.description ?? "") ||
+      hasStaleYearMentions(artigo.content ?? "")
+    ) {
+      return NextResponse.json(
+        { error: `Artigo rejeitado por conter referência desatualizada a 2024/2025. Gere novamente com contexto ${CURRENT_BLOG_YEAR}.` },
+        { status: 422 }
+      );
+    }
 
     // Salvar no Supabase
     const { error } = await supabase.from("blog_posts").insert({

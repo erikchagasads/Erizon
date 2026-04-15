@@ -110,7 +110,7 @@ function RelatorioView({ rel }: { rel: Relatorio }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-white">{rel.titulo}</h2>
-          <p className="text-[11px] text-white/30 mt-0.5">Gerado em {rel.dataGeracao}</p>
+          <p className="text-[11px] text-white/30 mt-0.5">Gerado em {rel.dataGeracao} · score, CPL e ROAS abaixo são derivados da base sincronizada</p>
         </div>
         <button
           onClick={handlePrint}
@@ -124,11 +124,11 @@ function RelatorioView({ rel }: { rel: Relatorio }) {
       {/* Totais */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <SummaryCard icon={BarChart3}   label="Campanhas" value={String(rel.totais.campanhas)} />
-        <SummaryCard icon={DollarSign}  label="Investimento" value={fmtBRL(rel.totais.investimento)} />
-        <SummaryCard icon={Target}      label="Total leads" value={fmtNum(rel.totais.leads)} />
-        <SummaryCard icon={TrendingUp}  label="CPL médio" value={rel.totais.cplMedio > 0 ? fmtBRL(rel.totais.cplMedio) : "—"} />
-        <SummaryCard icon={TrendingUp}  label="ROAS médio" value={fmtX(rel.totais.roasMedio)} />
-        <SummaryCard icon={DollarSign}  label="Receita estimada" value={fmtBRL(rel.totais.receita)} />
+        <SummaryCard icon={DollarSign}  label="Investimento" value={fmtBRL(rel.totais.investimento)} sub="base sincronizada do cliente" />
+        <SummaryCard icon={Target}      label="Total resultados" value={fmtNum(rel.totais.leads)} sub="contatos importados" />
+        <SummaryCard icon={TrendingUp}  label="CPL derivado" value={rel.totais.cplMedio > 0 ? fmtBRL(rel.totais.cplMedio) : "—"} sub="custo por resultado" />
+        <SummaryCard icon={TrendingUp}  label="ROAS derivado" value={fmtX(rel.totais.roasMedio)} sub="sobre receita estimada" />
+        <SummaryCard icon={DollarSign}  label="Receita estimada" value={fmtBRL(rel.totais.receita)} sub="não é faturamento real" />
       </div>
 
       {/* Destaques */}

@@ -5,7 +5,6 @@ import { strategicIntelligenceService } from "@/services/strategic-intelligence-
 
 type SnapshotRow = {
   spend: number | null;
-  revenue: number | null;
   leads: number | null;
   cpl: number | null;
   roas: number | null;
@@ -121,13 +120,13 @@ export async function GET() {
       await Promise.all([
         supabase
           .from("campaign_snapshots_daily")
-          .select("spend, revenue, leads, cpl, roas, campaign_id")
+          .select("spend, leads, cpl, roas, campaign_id")
           .eq("workspace_id", workspaceId)
           .gte("snapshot_date", currentStartStr)
           .lte("snapshot_date", todayStr),
         supabase
           .from("campaign_snapshots_daily")
-          .select("spend, revenue, leads, cpl, roas, campaign_id")
+          .select("spend, leads, cpl, roas, campaign_id")
           .eq("workspace_id", workspaceId)
           .gte("snapshot_date", previousStartStr)
           .lte("snapshot_date", previousEndStr),
@@ -145,9 +144,11 @@ export async function GET() {
           .limit(5),
         supabase
           .from("metricas_ads")
-          .select("campaign_name, revenue_value, roas_value")
+          .select("campaign_name, contatos, gasto_total, ctr")
           .eq("user_id", user.id)
-          .order("roas_value", { ascending: false })
+          .gt("contatos", 0)
+          .order("contatos", { ascending: false })
+          .order("gasto_total", { ascending: true })
           .limit(1),
         supabase
           .from("workspaces")
@@ -155,9 +156,9 @@ export async function GET() {
           .eq("id", workspaceId)
           .maybeSingle(),
         supabase
-          .from("network_benchmarks")
-          .select("niche, cpl_p50, roas_p50, trend_note")
-          .order("computed_at", { ascending: false })
+          .from("network_weekly_insights")
+          .select("nicho, cpl_p50, roas_p50, trend_note, n_workspaces")
+          .order("semana_inicio", { ascending: false })
           .limit(1),
         strategicIntelligenceService.getWorkspaceSnapshot({ workspaceId, userId: user.id }),
       ]);
@@ -169,20 +170,21 @@ export async function GET() {
     const topCampaign = topCampaignRes.data?.[0] ?? null;
 
     const currentSpend = sum(currentMetrics.map((row) => row.spend));
-    const currentRevenue = sum(currentMetrics.map((row) => row.revenue));
     const currentLeads = sum(currentMetrics.map((row) => row.leads));
     const currentCampaigns = new Set(currentMetrics.map((row) => row.campaign_id).filter(Boolean)).size;
     const currentAvgCpl = average(currentMetrics.map((row) => row.cpl));
     const currentAvgRoas = average(currentMetrics.map((row) => row.roas));
 
     const previousSpend = sum(previousMetrics.map((row) => row.spend));
-    const previousRevenue = sum(previousMetrics.map((row) => row.revenue));
     const previousLeads = sum(previousMetrics.map((row) => row.leads));
     const previousAvgCpl = average(previousMetrics.map((row) => row.cpl));
     const previousAvgRoas = average(previousMetrics.map((row) => row.roas));
 
+    const currentRevenue = 0;
+    const previousRevenue = 0;
+
     const spendChange = pctChange(currentSpend, previousSpend);
-    const revenueChange = pctChange(currentRevenue, previousRevenue);
+    const revenueChange = 0;
     const leadsChange = pctChange(currentLeads, previousLeads);
     const cplChange = pctChange(currentAvgCpl ?? 0, previousAvgCpl ?? 0);
     const roasChange = pctChange(currentAvgRoas ?? 0, previousAvgRoas ?? 0);
@@ -210,19 +212,19 @@ export async function GET() {
         40 +
           (pendingDecisions.length > 0 ? 12 : 0) +
           (currentCampaigns >= 3 ? 10 : 0) +
-          (currentRevenue > 0 ? 14 : 0) +
+          (strategic.business.closedRevenue30d > 0 ? 14 : 0) +
           (alertCampaigns.length === 0 ? 8 : 0) +
           (currentAvgRoas && currentAvgRoas >= 2 ? 10 : 0)
       )
     );
 
     const niche = workspaceRes.data?.niche ?? null;
-    const benchmarkRow = benchmarkRes.data?.find((row) => row.niche === niche) ?? benchmarkRes.data?.[0] ?? null;
+    const benchmarkRow = benchmarkRes.data?.find((row) => row.nicho === niche) ?? benchmarkRes.data?.[0] ?? null;
 
     const benchmark =
-      benchmarkRow || niche
+      benchmarkRow
         ? {
-            niche: normalizeNicheLabel(niche ?? benchmarkRow?.niche ?? null),
+            niche: normalizeNicheLabel(benchmarkRow.nicho ?? niche ?? null),
             cpl: {
               my: currentAvgCpl,
               benchmark: benchmarkRow?.cpl_p50 ?? null,
@@ -247,14 +249,16 @@ export async function GET() {
         ? `voce acordou com ${pendingDecisions.length} decis${pendingDecisions.length === 1 ? "ao" : "oes"} esperando acao`
         : alertCampaigns.length > 0
           ? `${alertCampaigns.length} campanhas pedem cuidado antes de escalar`
-          : revenueChange > 0
-            ? `sua operacao abriu mais forte que a semana passada`
+          : strategic.business.closedRevenue30d > 0
+            ? `o CRM ja mostra retorno real entrando na operacao`
             : "o cockpit esta limpo e pronto para a proxima decisao";
 
     const summaryParts = [
       `Nos ultimos 7 dias voce investiu R$ ${currentSpend.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`,
-      currentRevenue > 0 ? `gerou R$ ${currentRevenue.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}` : null,
       currentLeads > 0 ? `captou ${currentLeads} leads` : null,
+      strategic.business.closedRevenue30d > 0
+        ? `o CRM ja fechou R$ ${strategic.business.closedRevenue30d.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} em 30 dias`
+        : null,
     ].filter(Boolean);
 
     const collectiveInsight =
@@ -263,14 +267,12 @@ export async function GET() {
         : strategic.collective.insight;
 
     const insights = [
-      revenueChange > 8
-        ? `Receita ${revenueChange}% acima da semana anterior. Seu ritmo de crescimento esta acelerando.`
-        : revenueChange < -8
-          ? `Receita ${Math.abs(revenueChange)}% abaixo da semana anterior. Vale proteger as melhores campanhas hoje.`
-          : "Sua receita ficou estavel na janela semanal. O ganho agora depende da qualidade das proximas decisoes.",
+      strategic.business.closedRevenue30d > 0
+        ? `O CRM registra R$ ${strategic.business.closedRevenue30d.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} fechados em 30 dias. Agora a leitura de negocio ja saiu da suposicao.`
+        : "Sua janela semanal mostra operacao real de spend e leads. Receita fechada ainda depende do CRM estar mais completo.",
       spendChange < 0 && revenueChange >= 0
         ? "Voce gastou menos sem derrubar resultado. Isso e sinal de operacao mais eficiente."
-        : "O investimento segue puxando o resultado. Priorize o que mais move ROAS e CPL.",
+        : "O investimento segue puxando o resultado. Priorize o que mais move leads, CPL e execucao.",
       benchmark?.insight ?? collectiveInsight,
       strategic.learning.memoryLine,
     ];
@@ -316,7 +318,7 @@ export async function GET() {
         },
         changes: {
           spend: spendChange,
-          revenue: revenueChange,
+          revenue: 0,
           leads: leadsChange,
           avgCpl: cplChange,
           avgRoas: roasChange,
@@ -333,7 +335,14 @@ export async function GET() {
         criticalCount: urgentCount,
         pausedCampaigns: alertCampaigns,
       },
-      topCampaign,
+      topCampaign: topCampaign
+        ? {
+            campaign_name: topCampaign.campaign_name,
+            leads: Number(topCampaign.contatos ?? 0),
+            spend: Number(topCampaign.gasto_total ?? 0),
+            ctr: Number(topCampaign.ctr ?? 0),
+          }
+        : null,
       benchmark,
       learning: strategic.learning,
       business: strategic.business,
@@ -348,6 +357,12 @@ export async function GET() {
         revenueOpportunityBrl,
         efficiencyDelta: Math.round(((revenueChange || 0) - (spendChange || 0)) / 2),
         habitScore,
+      },
+      dataQuality: {
+        operationalWindow: "7d",
+        revenueSource: strategic.business.closedRevenue30d > 0 ? "crm" : "unavailable",
+        benchmarkSource: benchmark ? "network_weekly_insights" : "unavailable",
+        benchmarkPeers: Number(benchmarkRow?.n_workspaces ?? 0),
       },
       actions,
       insights,

@@ -49,9 +49,25 @@ export async function GET(req: NextRequest) {
     try {
       const cockpit = new CockpitService(supabase as unknown as SupabaseClient);
       const config = await cockpit.getConfig(workspaceId);
-      return NextResponse.json(config ?? defaultConfig(workspaceId));
-    } catch {
-      return NextResponse.json(defaultConfig(workspaceId));
+      if (!config) {
+        return NextResponse.json({
+          config: defaultConfig(workspaceId),
+          persisted: false,
+          source: "default",
+        });
+      }
+
+      return NextResponse.json({
+        config,
+        persisted: true,
+        source: "database",
+      });
+    } catch (dbErr) {
+      console.error("[cockpit/settings GET] DB not ready:", dbErr);
+      return NextResponse.json(
+        { error: "Configuração do cockpit indisponível no banco." },
+        { status: 503 }
+      );
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno";
@@ -71,11 +87,14 @@ export async function PUT(req: NextRequest) {
     try {
       const cockpit = new CockpitService(supabase as unknown as SupabaseClient);
       const config = await cockpit.updateConfig({ ...body, updated_by: user.id });
-      return NextResponse.json(config);
+      return NextResponse.json({ config, persisted: true, source: "database" });
     } catch (dbErr) {
       console.error("[cockpit/settings PUT] DB not ready:", dbErr);
       // Retorna o body como se tivesse salvo (tabela ainda não existe)
-      return NextResponse.json({ ...defaultConfig(body.workspace_id), ...body, updated_by: user.id });
+      return NextResponse.json(
+        { error: "Não foi possível persistir a configuração do cockpit." },
+        { status: 503 }
+      );
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno";

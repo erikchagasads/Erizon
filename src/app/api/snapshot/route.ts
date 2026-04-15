@@ -45,13 +45,19 @@ export async function POST(_req: NextRequest) {
     let receita_total    = 0;
     let total_leads      = 0;
     let total_impressoes = 0;
+    let campanhasSemReceitaReal = 0;
     let melhorCampanha: Record<string, unknown> | null = null;
 
     for (const c of campanhas) {
       const gasto      = Number(c.gasto_total)      || 0;
       const leads      = Number(c.contatos)         || 0;
       const impressoes = Number(c.impressoes)       || 0;
-      const receita    = Number(c.receita_estimada) || leads * 0.04 * 450;
+      const receitaRaw = Number(c.receita_estimada);
+      const receita    = Number.isFinite(receitaRaw) ? receitaRaw : 0;
+
+      if (!Number.isFinite(receitaRaw) || receitaRaw <= 0) {
+        campanhasSemReceitaReal += 1;
+      }
 
       gasto_total      += gasto;
       receita_total    += receita;
@@ -115,6 +121,8 @@ export async function POST(_req: NextRequest) {
       message: `Snapshot atualizado para ${hoje}`,
       criados: 1,
       data:    hoje,
+      receita_real_parcial: campanhasSemReceitaReal < campanhas.length,
+      campanhas_sem_receita_real: campanhasSemReceitaReal,
     });
 
   } catch (e: unknown) {

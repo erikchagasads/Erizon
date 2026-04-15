@@ -365,7 +365,7 @@ export function ContaHealthBar({ score, emRisco, total, gastoEmRisco, onFiltrarR
     <div className="p-6 rounded-2xl bg-[#0f0f11] border border-white/[0.05] mb-5">
       <div className="flex items-end justify-between mb-4 gap-4 flex-wrap">
         <div>
-          <p className="text-[11px] font-medium text-white/25 mb-2">Saúde da conta</p>
+          <p className="text-[11px] font-medium text-white/25 mb-2">Saúde derivada da conta</p>
           <div className="flex items-baseline gap-3">
             <span className={`text-4xl font-black tracking-tight font-mono ${textColor}`}>{score}</span>
             <span className="text-sm text-white/20">/100</span>
@@ -408,8 +408,8 @@ export function EmptyState({ periodo, filtrando, onLimpar }: { periodo: Periodo;
         </>
       ) : (
         <>
-          <p className="text-[14px] font-medium text-white/25 mb-1">Nenhuma campanha ativa {labels[periodo]}.</p>
-          <p className="text-[12px] text-white/15">Ajuste o período ou sincronize.</p>
+          <p className="text-[14px] font-medium text-white/25 mb-1">Nenhuma campanha ativa na janela {labels[periodo]}.</p>
+          <p className="text-[12px] text-white/15">Troque a janela ou sincronize novamente para atualizar os dados.</p>
         </>
       )}
     </div>

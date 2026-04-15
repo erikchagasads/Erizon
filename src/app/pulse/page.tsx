@@ -797,9 +797,12 @@ export default function PulseCockpit() {
                   </div>
                   <p className="text-[16px] font-black text-white">
                     {getSaudacao()}
-                    {engine ? ` · ROAS ${engine.roasGlobal.toFixed(2)}×` : ""}
+                    {engine ? ` · ROAS derivado ${engine.roasGlobal.toFixed(2)}×` : ""}
                   </p>
                   <p className="text-[11px] text-white/30 capitalize">{getDataFormatada()}</p>
+                  <p className="text-[10px] text-white/22">
+                    Dados sincronizados abaixo combinam leitura real de campanha com projeções da engine.
+                  </p>
                 </div>
               </div>
 
@@ -850,7 +853,7 @@ export default function PulseCockpit() {
               <div className="mt-3 pt-3 border-t border-white/[0.05] flex items-center gap-2">
                 <Sparkles size={11} className="text-fuchsia-400/60" />
                 <p className="text-[11px] text-white/40">
-                  Impacto potencial das decisões pendentes:
+                  Impacto potencial estimado das decisões pendentes:
                   <span className="text-fuchsia-400 font-bold ml-1">R${fmtBRL(totalImpact)}</span>
                 </p>
               </div>
@@ -888,11 +891,11 @@ export default function PulseCockpit() {
                   </div>
                   <p className="text-[14px] font-bold text-white/60 mb-1">Fila limpa</p>
                   <p className="text-[12px] text-white/25">
-                    Nenhuma decisão pendente. O engine está monitorando suas campanhas.
+                    Nenhuma decisão pendente. O engine está monitorando sua janela sincronizada de campanhas.
                   </p>
                   {engine && engine.totalGasto > 0 && (
                     <p className="text-[11px] text-white/20 mt-2">
-                      {engine.saudaveisCount} campanha{engine.saudaveisCount !== 1 ? "s" : ""} saudável{engine.saudaveisCount !== 1 ? "is" : ""} · ROAS {engine.roasGlobal.toFixed(2)}×
+                      {engine.saudaveisCount} campanha{engine.saudaveisCount !== 1 ? "s" : ""} saudável{engine.saudaveisCount !== 1 ? "is" : ""} · ROAS derivado {engine.roasGlobal.toFixed(2)}×
                     </p>
                   )}
                 </div>
@@ -923,30 +926,30 @@ export default function PulseCockpit() {
               {engine && (
                 <div className="space-y-2">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/25 px-1">
-                    Situação Atual
+                    Situação Atual Derivada
                   </p>
                   <FinCard
-                    label="Investido"
+                    label="Investido na janela"
                     value={`R$${fmtBRL(engine.totalGasto)}`}
-                    sub="últimos 30 dias"
+                    sub="janela sincronizada atual"
                   />
                   <FinCard
-                    label="ROAS Global"
+                    label="ROAS Global derivado"
                     value={`${engine.roasGlobal.toFixed(2)}×`}
-                    sub={`Margem ${(engine.margemGlobal * 100).toFixed(0)}%`}
+                    sub={`Margem derivada ${(engine.margemGlobal * 100).toFixed(0)}%`}
                     up={engine.roasGlobal >= 2.0 ? true : engine.roasGlobal < 1.0 ? false : null}
                   />
                   <FinCard
-                    label="Leads"
+                    label="Resultados"
                     value={`${engine.totalLeads}`}
-                    sub={engine.totalLeads > 0 ? `CPL R$${fmtBRL(engine.totalGasto / engine.totalLeads)}` : "Nenhum lead"}
+                    sub={engine.totalLeads > 0 ? `CPL derivado R$${fmtBRL(engine.totalGasto / engine.totalLeads)}` : "Nenhum resultado"}
                     up={engine.totalLeads > 0 ? true : false}
                   />
                   {engine.capitalEmRisco > 0 && (
                     <FinCard
-                      label="Capital em Risco"
+                      label="Capital em risco derivado"
                       value={`R$${fmtBRL(engine.capitalEmRisco)}`}
-                      sub={`${Math.round((engine.capitalEmRisco / engine.totalGasto) * 100)}% do budget`}
+                      sub={`${Math.round((engine.capitalEmRisco / engine.totalGasto) * 100)}% do budget da janela`}
                       up={false}
                     />
                   )}
@@ -988,10 +991,10 @@ export default function PulseCockpit() {
               {/* KPI bar */}
               <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-b border-white/[0.05]">
                 {[
-                  { label: "Investido", value: `R$${fmtBRL(engine.totalGasto)}`, color: "text-white/70" },
-                  { label: "ROAS Global", value: `${engine.roasGlobal.toFixed(2)}×`, color: engine.roasGlobal >= 2 ? "text-emerald-400" : engine.roasGlobal >= 1 ? "text-amber-400" : "text-red-400" },
-                  { label: "Leads", value: String(engine.totalLeads), color: "text-white/70" },
-                  { label: "CPL Médio", value: engine.totalLeads > 0 ? `R$${fmtBRL(engine.totalGasto / engine.totalLeads)}` : "—", color: "text-white/70" },
+                  { label: "Investido na janela", value: `R$${fmtBRL(engine.totalGasto)}`, color: "text-white/70" },
+                  { label: "ROAS derivado", value: `${engine.roasGlobal.toFixed(2)}×`, color: engine.roasGlobal >= 2 ? "text-emerald-400" : engine.roasGlobal >= 1 ? "text-amber-400" : "text-red-400" },
+                  { label: "Resultados", value: String(engine.totalLeads), color: "text-white/70" },
+                  { label: "CPL derivado", value: engine.totalLeads > 0 ? `R$${fmtBRL(engine.totalGasto / engine.totalLeads)}` : "—", color: "text-white/70" },
                 ].map(k => (
                   <div key={k.label} className="bg-white/[0.02] px-4 py-3 text-center">
                     <p className="text-[9px] text-white/20 uppercase tracking-wider mb-0.5">{k.label}</p>
@@ -1014,8 +1017,8 @@ export default function PulseCockpit() {
                 <div className="px-5 py-3 border-t border-white/[0.05] flex items-center gap-2 bg-red-500/[0.03]">
                   <TriangleAlert size={11} className="text-red-400 shrink-0" />
                   <p className="text-[11px] text-red-400/70">
-                    <span className="font-bold">R${fmtBRL(engine.capitalEmRisco)}</span> em capital de risco —
-                    {engine.gastoCritico > 0 && ` R$${fmtBRL(engine.gastoCritico)} em campanhas críticas`}
+                    <span className="font-bold">R${fmtBRL(engine.capitalEmRisco)}</span> em capital de risco derivado —
+                    {engine.gastoCritico > 0 && ` R$${fmtBRL(engine.gastoCritico)} em campanhas críticas da janela`}
                   </p>
                 </div>
               )}
@@ -1028,7 +1031,7 @@ export default function PulseCockpit() {
               <div className="flex items-center gap-2 px-5 py-3 border-b border-amber-500/10">
                 <Eye size={13} className="text-amber-400" />
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-400/70">
-                  Alertas Preditivos
+                  Alertas Preditivos da Engine
                 </p>
                 <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/20 text-amber-400 font-bold">
                   {predAlerts.length}

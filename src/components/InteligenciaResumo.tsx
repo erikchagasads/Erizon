@@ -146,7 +146,7 @@ export default function InteligenciaResumo({ health }: { health: HealthResult })
           <div className="text-left">
             <p className="text-[13px] font-bold text-white">Inteligência Erizon</p>
             <p className="text-[11px] text-white/25">
-              Radar estratégico · {health.enriched.length} campanhas · margem{" "}
+              Radar estratégico derivado · {health.enriched.length} campanhas · margem{" "}
               <span className={parseFloat(margemPct) >= 20 ? "text-emerald-400" : "text-amber-400"}>{margemPct}%</span>
             </p>
           </div>
@@ -162,7 +162,7 @@ export default function InteligenciaResumo({ health }: { health: HealthResult })
               <HealthRing score={health.score} />
               <div>
                 <p className={`text-xl font-black ${health.corLabel}`}>{health.label}</p>
-                <p className="text-[11px] text-white/25 mt-0.5">Health Score global</p>
+                <p className="text-[11px] text-white/25 mt-0.5">Health Score global derivado</p>
               </div>
             </div>
             <div className="h-px sm:h-12 sm:w-px bg-white/[0.06] w-full sm:w-auto shrink-0" />
@@ -191,7 +191,7 @@ export default function InteligenciaResumo({ health }: { health: HealthResult })
           {/* Projeções 7d */}
           {(health.lucroPerda7d > 10 || health.ganhoProjetado7d > 10) && (
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/20 mb-3">Projeção financeira · 7 dias</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/20 mb-3">Projeção financeira derivada · 7 dias</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {health.lucroPerda7d > 10 && (
                   <ProjecaoCard tipo="risco" receita={health.lucroPerda7d} lucro={health.lucroPerda7d * 0.3}
@@ -207,7 +207,7 @@ export default function InteligenciaResumo({ health }: { health: HealthResult })
 
           {/* Mini Scores */}
           <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04]">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/20 mb-4">Índices proprietários · média da conta</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/20 mb-4">Índices proprietários derivados · média da conta</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <MiniScoreBar label="Creative Efficiency" value={ceMedia}   icon={Zap}    descricao="Baseado em ROAS e CPL médio" />
               <MiniScoreBar label="Saturação Audiência"  value={satMedia}  icon={Gauge}  descricao="Baseado em frequência média" />

@@ -38,7 +38,7 @@ interface DailyDigestData {
     criticalCount: number;
     pausedCampaigns: Array<{ campaign_name: string; status: string }>;
   };
-  topCampaign: { campaign_name: string; roas_value: number; revenue_value: number } | null;
+  topCampaign: { campaign_name: string; leads: number; spend: number; ctr: number } | null;
   benchmark: {
     niche: string | null;
     cpl: { my: number | null; benchmark: number | null; status: "winning" | "attention" | "neutral" };
@@ -97,6 +97,12 @@ interface DailyDigestData {
     revenueOpportunityBrl: number;
     efficiencyDelta: number;
     habitScore: number;
+  };
+  dataQuality: {
+    operationalWindow: string;
+    revenueSource: "crm" | "unavailable";
+    benchmarkSource: "network_weekly_insights" | "unavailable";
+    benchmarkPeers: number;
   };
   actions: string[];
   insights: string[];
@@ -218,7 +224,7 @@ export function DailyDigest() {
               <p className="mt-2 text-[26px] font-black text-emerald-300">
                 R$ {fmtBRL(data.decisions.pendingImpactBrl || data.progress.revenueOpportunityBrl)}
               </p>
-              <p className="mt-1 text-[11px] text-white/45">potencial direto na fila de hoje</p>
+              <p className="mt-1 text-[11px] text-white/45">potencial estimado na fila de hoje</p>
             </div>
           </div>
         </div>
@@ -227,8 +233,8 @@ export function DailyDigest() {
       <div className="space-y-5 px-5 py-5 md:px-6">
         <div className="grid gap-3 md:grid-cols-4">
           <StatCard label="Investido" value={`R$ ${fmtBRL(data.period.current.spend)}`} change={data.period.changes.spend} />
-          <StatCard label="Receita" value={`R$ ${fmtBRL(data.period.current.revenue)}`} change={data.period.changes.revenue} tone="good" />
           <StatCard label="Leads" value={String(data.period.current.leads)} change={data.period.changes.leads} tone="good" />
+          <StatCard label="Campanhas" value={String(data.period.current.campaigns)} tone="neutral" />
           <StatCard label="CPL medio" value={data.period.current.avgCpl ? `R$ ${fmtBRL(data.period.current.avgCpl)}` : "-"} change={data.period.changes.avgCpl} tone="warn" />
         </div>
 
@@ -243,7 +249,7 @@ export function DailyDigest() {
           </div>
 
           <div className="rounded-[24px] border border-emerald-500/20 bg-emerald-500/[0.06] p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200/85">visao financeira real</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200/85">visao financeira de CRM</p>
             <p className="mt-3 text-[26px] font-black text-white">R$ {fmtBRL(data.business.closedRevenue30d)}</p>
             <p className="mt-1 text-[12px] text-white/65">
               pipeline ponderado de R$ {fmtBRL(data.business.weightedPipelineValue)}
@@ -327,7 +333,7 @@ export function DailyDigest() {
               <div className="rounded-[24px] border border-white/[0.08] bg-white/[0.025] p-5">
                 <div className="flex items-center gap-2 text-white/35">
                   <Target size={14} />
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em]">benchmark visivel</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em]">benchmark real da rede</p>
                 </div>
                 {data.benchmark ? (
                   <>
@@ -373,8 +379,8 @@ export function DailyDigest() {
                         {data.collective.niche ? `${data.collective.niche} · ${data.collective.position}` : data.collective.position}
                       </p>
                       <p className="mt-1 text-[11px] leading-relaxed text-white/55">
-                        {data.collective.peers > 0
-                          ? `${data.collective.peers} operacoes anonimizadas ajudam a compor esse espelho.`
+                        {data.dataQuality.benchmarkPeers > 0
+                          ? `${data.dataQuality.benchmarkPeers} operacoes anonimizadas ajudam a compor esse espelho semanal.`
                           : "Assim que mais operacoes entrarem no recorte, a rede ganha mais precisao."}
                       </p>
                       {data.collective.topPattern && (
@@ -386,7 +392,7 @@ export function DailyDigest() {
                   </>
                 ) : (
                   <p className="mt-3 text-[12px] leading-relaxed text-white/45">
-                    Complete o nicho do workspace para liberar o comparativo com o mercado dentro da home.
+                    A rede ainda nao tem amostra suficiente do seu nicho para abrir benchmark real nesta home.
                   </p>
                 )}
               </div>
@@ -399,7 +405,7 @@ export function DailyDigest() {
                 <p className="mt-3 text-[20px] font-black text-white">Seu progresso esta visivel</p>
                 <div className="mt-4 space-y-3">
                   <div className="rounded-[18px] border border-emerald-500/15 bg-emerald-500/[0.05] p-4">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-300/80">oportunidade de receita</p>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-300/80">oportunidade estimada</p>
                     <p className="mt-2 text-[24px] font-black text-white">R$ {fmtBRL(data.progress.revenueOpportunityBrl)}</p>
                     <p className="mt-1 text-[11px] text-white/55">valor estimado das melhores alavancas abertas agora</p>
                   </div>
@@ -409,7 +415,7 @@ export function DailyDigest() {
                       <p className="mt-2 text-[21px] font-black text-white">{fmtPct(data.progress.efficiencyDelta)}</p>
                     </div>
                     <div className="rounded-[18px] border border-white/[0.08] bg-black/20 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/25">habit score</p>
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/25">habit score deriv.</p>
                       <p className="mt-2 text-[21px] font-black text-white">{data.progress.habitScore}/100</p>
                     </div>
                   </div>
@@ -476,8 +482,9 @@ export function DailyDigest() {
                 </div>
                 <p className="mt-3 text-[18px] font-black text-white">{data.topCampaign.campaign_name}</p>
                 <p className="mt-2 text-[12px] text-white/60">
-                  ROAS {Number(data.topCampaign.roas_value).toFixed(2)}x
-                  {data.topCampaign.revenue_value > 0 ? ` · Receita R$ ${fmtBRL(data.topCampaign.revenue_value)}` : ""}
+                  {data.topCampaign.leads} leads
+                  {data.topCampaign.spend > 0 ? ` · Spend R$ ${fmtBRL(data.topCampaign.spend)}` : ""}
+                  {data.topCampaign.ctr > 0 ? ` · CTR ${data.topCampaign.ctr.toFixed(2)}%` : ""}
                 </p>
               </div>
             )}

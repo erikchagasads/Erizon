@@ -55,7 +55,7 @@ export default function BlocoDecisaoIA({
         </div>
         <div>
           <p className="text-[14px] font-bold text-white">Ação registrada com sucesso</p>
-          <p className="text-[12px] text-white/30 mt-0.5">Decisão logada · Health Score atualizado</p>
+          <p className="text-[12px] text-white/30 mt-0.5">Decisão logada · Health Score derivado atualizado</p>
         </div>
       </div>
     );

@@ -15,8 +15,8 @@ export function PreditivoScore({ preditivo }: { preditivo: ScorePreditivo7d }) {
     <div className={`p-5 rounded-[20px] border ${border} ${bg}`}>
       <div className="flex items-start justify-between mb-4">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/20 mb-1">Score preditivo 7d</p>
-          <p className="text-[10px] text-white/20">Se nada mudar nos próximos 7 dias</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/20 mb-1">Score projetado 7d</p>
+          <p className="text-[10px] text-white/20">Projeção derivada da engine se nada mudar nos próximos 7 dias</p>
         </div>
         <span className="text-[9px] text-white/20">{confianca}% confiança</span>
       </div>
@@ -32,7 +32,7 @@ export function PreditivoScore({ preditivo }: { preditivo: ScorePreditivo7d }) {
       </div>
       {drivers.length > 0 && (
         <div className="space-y-1">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-white/15 mb-2">Fatores da projeção</p>
+          <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-white/15 mb-2">Fatores da projeção derivada</p>
           {drivers.map((d, i) => (
             <div key={i} className="flex items-start gap-2">
               <div className="w-1 h-1 rounded-full bg-white/20 mt-1.5 shrink-0" />
@@ -57,7 +57,7 @@ export function RankingAcoes({ acoes }: { acoes: AcaoRankeada[] }) {
     <div className="p-5 rounded-[20px] bg-[#111113] border border-white/[0.06] mb-4">
       <div className="flex items-center gap-2 mb-4">
         <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center"><Target size={13} className="text-amber-400" /></div>
-        <div><p className="text-[12px] font-bold text-white">Ranking Estratégico</p><p className="text-[10px] text-white/25">Top {acoes.length} ações por impacto financeiro</p></div>
+        <div><p className="text-[12px] font-bold text-white">Ranking Estratégico</p><p className="text-[10px] text-white/25">Top {acoes.length} ações derivadas por impacto financeiro estimado</p></div>
       </div>
       <div className="space-y-3">
         {acoes.map((acao) => (

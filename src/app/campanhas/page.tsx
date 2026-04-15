@@ -73,6 +73,15 @@ const fmtBRL2 = (v: number) => `R$\u00a0${v.toLocaleString("pt-BR", { minimumFra
 const fmtNum  = (v: number) => v.toLocaleString("pt-BR");
 const fmtPct  = (v: number) => `${v.toFixed(2)}%`;
 const fmtX    = (v: number) => `${v.toFixed(2)}x`;
+const getPeriodoLabel = (periodo: Periodo) => {
+  switch (periodo) {
+    case "hoje": return "Hoje";
+    case "7d": return "7 dias";
+    case "30d": return "30 dias";
+    case "90d": return "90 dias";
+    default: return "Tudo";
+  }
+};
 
 function calcScore(gasto: number, leads: number, receita: number): number {
   if (gasto === 0) return 0;
@@ -504,9 +513,9 @@ function PainelAnaliseIndividual({ analise, onFechar }: {
 
   const metricas = [
     { label: "Investido",  value: fmtBRL(camp.gasto_total),                  color: "text-white/80" },
-    { label: "Leads",      value: camp.contatos > 0 ? fmtNum(camp.contatos) : "—", color: camp.contatos > 0 ? "text-sky-400" : "text-white/20" },
-    { label: "CPL",        value: cpl > 0 ? fmtBRL2(cpl) : "—",              color: cpl === 0 ? "text-white/20" : cpl < 30 ? "text-emerald-400" : cpl < 80 ? "text-white/70" : "text-red-400" },
-    { label: "ROAS",       value: roas > 0 ? fmtX(roas) : "—",               color: roas === 0 ? "text-white/20" : roas >= 3 ? "text-emerald-400" : roas >= 2 ? "text-white/70" : "text-amber-400" },
+    { label: "Resultados", value: camp.contatos > 0 ? fmtNum(camp.contatos) : "—", color: camp.contatos > 0 ? "text-sky-400" : "text-white/20" },
+    { label: "CPL derivado", value: cpl > 0 ? fmtBRL2(cpl) : "—",              color: cpl === 0 ? "text-white/20" : cpl < 30 ? "text-emerald-400" : cpl < 80 ? "text-white/70" : "text-red-400" },
+    { label: "ROAS derivado", value: roas > 0 ? fmtX(roas) : "—",               color: roas === 0 ? "text-white/20" : roas >= 3 ? "text-emerald-400" : roas >= 2 ? "text-white/70" : "text-amber-400" },
     { label: "CTR",        value: camp.ctr && camp.ctr > 0 ? fmtPct(camp.ctr) : "—", color: !camp.ctr || camp.ctr === 0 ? "text-white/20" : camp.ctr > 2 ? "text-emerald-400" : "text-white/60" },
     { label: "CPM",        value: camp.cpm && camp.cpm > 0 ? fmtBRL2(camp.cpm) : "—", color: "text-white/50" },
     { label: "Impressões", value: camp.impressoes && camp.impressoes > 0 ? fmtNum(camp.impressoes) : "—", color: "text-white/50" },
@@ -549,7 +558,7 @@ function PainelAnaliseIndividual({ analise, onFechar }: {
               </svg>
               <span className="absolute inset-0 flex items-center justify-center text-[13px] font-black text-white">{score}</span>
             </div>
-            <span className="text-[9px] text-white/20">score</span>
+            <span className="text-[9px] text-white/20">score derivado</span>
           </div>
 
           <button onClick={onFechar}
@@ -559,7 +568,7 @@ function PainelAnaliseIndividual({ analise, onFechar }: {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-        {/* Decisão IA */}
+        {/* Decisão derivada */}
         <div className={`mx-6 mt-5 p-4 rounded-2xl border ${borderDecisao} ${bgDecisao} shrink-0`}>
           <p className={`text-[12px] font-bold mb-1.5 ${corDecisao}`}>{titulo}</p>
           <p className="text-[11px] text-white/40 leading-relaxed mb-2">{descricao}</p>
@@ -571,7 +580,7 @@ function PainelAnaliseIndividual({ analise, onFechar }: {
 
         {/* Métricas grid */}
         <div className="px-6 mt-5 shrink-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/20 mb-3">Métricas detalhadas</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/20 mb-3">Métricas detalhadas da base sincronizada</p>
           <div className="grid grid-cols-2 gap-2">
             {metricas.map(m => (
               <div key={m.label} className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
@@ -582,20 +591,20 @@ function PainelAnaliseIndividual({ analise, onFechar }: {
           </div>
         </div>
 
-        {/* Análise de eficiência */}
+        {/* Análise de eficiência derivada */}
         {camp.gasto_total > 0 && (
           <div className="px-6 mt-5 shrink-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/20 mb-3">Eficiência</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/20 mb-3">Eficiência derivada</p>
             <div className="space-y-2">
               {[
                 {
-                  label: "Custo por lead",
+                  label: "Custo por resultado",
                   pct: cpl > 0 ? Math.min((30 / cpl) * 100, 100) : 0,
                   cor: cpl < 30 ? "#10b981" : cpl < 80 ? "#f59e0b" : "#ef4444",
                   meta: "Meta: < R$30",
                 },
                 {
-                  label: "ROAS",
+                  label: "ROAS derivado",
                   pct: Math.min((roas / 4) * 100, 100),
                   cor: roas >= 3 ? "#10b981" : roas >= 2 ? "#f59e0b" : "#ef4444",
                   meta: "Meta: 3×+",
@@ -832,6 +841,9 @@ export default function GerenciadorAnunciosPage() {
               <span className="text-[15px] font-bold text-white tracking-tight">Gerenciador de Anúncios</span>
               <span className="text-[10px] text-white/20 font-medium px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06]">ERIZON</span>
             </div>
+            <p className="hidden xl:block text-[11px] text-white/30">
+              Base atual: última sincronização real. A janela {getPeriodoLabel(periodo)} ainda organiza a leitura visual da tela.
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -867,12 +879,12 @@ export default function GerenciadorAnunciosPage() {
         <div className="shrink-0 grid grid-cols-7 border-b border-white/[0.05] divide-x divide-white/[0.04]">
           {[
             { label: "Campanhas",  value: String(totais.total),       sub: `${totais.ativas} ativas`, color: "text-white" },
-            { label: "Críticas",   value: String(totais.criticas),    sub: "score < 45",   color: totais.criticas > 0 ? "text-red-400" : "text-white/25" },
-            { label: "Investido",  value: fmtBRL(totais.invest),      sub: "total período", color: "text-white" },
-            { label: "Leads",      value: fmtNum(totais.leads),       sub: "total contatos",color: "text-sky-400" },
-            { label: "CPL médio",  value: totais.cpl > 0 ? fmtBRL2(totais.cpl) : "—", sub: "custo/lead", color: totais.cpl > 80 ? "text-red-400" : totais.cpl > 40 ? "text-amber-400" : "text-emerald-400" },
-            { label: "ROAS",       value: totais.roas > 0 ? fmtX(totais.roas) : "—", sub: "retorno",     color: totais.roas >= 3 ? "text-emerald-400" : totais.roas >= 2 ? "text-amber-400" : "text-red-400" },
-            { label: "Receita est.",value: fmtBRL(totais.receita),    sub: "estimada",     color: "text-purple-400" },
+            { label: "Críticas",   value: String(totais.criticas),    sub: "score derivado < 45",   color: totais.criticas > 0 ? "text-red-400" : "text-white/25" },
+            { label: "Investido",  value: fmtBRL(totais.invest),      sub: "base sincronizada", color: "text-white" },
+            { label: "Resultados", value: fmtNum(totais.leads),       sub: "contatos importados",color: "text-sky-400" },
+            { label: "CPL deriv.",  value: totais.cpl > 0 ? fmtBRL2(totais.cpl) : "—", sub: "custo por resultado", color: totais.cpl > 80 ? "text-red-400" : totais.cpl > 40 ? "text-amber-400" : "text-emerald-400" },
+            { label: "ROAS deriv.", value: totais.roas > 0 ? fmtX(totais.roas) : "—", sub: "sobre receita estimada",     color: totais.roas >= 3 ? "text-emerald-400" : totais.roas >= 2 ? "text-amber-400" : "text-red-400" },
+            { label: "Receita estim.",value: fmtBRL(totais.receita),    sub: "não é faturamento real",     color: "text-purple-400" },
           ].map(m => (
             <div key={m.label} className="px-5 py-4">
               <p className="text-[10px] font-medium text-white/25 tracking-wider uppercase mb-1.5">{m.label}</p>
@@ -964,7 +976,7 @@ export default function GerenciadorAnunciosPage() {
           ) : (
             <table className="w-full border-collapse" style={{ minWidth: 1100 }}>
               <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0f0f12] border-b border-white/[0.06]"><th className="w-10 px-4 py-3"><input type="checkbox" checked={selecionados.size === campanhasFiltradas.length && campanhasFiltradas.length > 0} onChange={toggleTodos} className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer"/></th><th className="w-2 px-0"/><th className="px-4 py-3 text-left w-[260px]"><ColHeader label="Campanha" campo="nome_campanha" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir}/></th><th className="px-4 py-3 text-left w-[140px]"><span className="text-[10px] font-semibold tracking-[0.12em] uppercase text-white/30">Cliente</span></th><th className="px-4 py-3 text-left w-[100px]"><ColHeader label="Status" campo="status" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir}/></th><th className="px-4 py-3 w-[80px]"><ColHeader label="Score" campo="score" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir}/></th><th className="px-4 py-3 text-right w-[120px]"><ColHeader label="Investido" campo="gasto_total" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir} align="right"/></th><th className="px-4 py-3 text-right w-[90px]"><ColHeader label="Leads" campo="contatos" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir} align="right"/></th><th className="px-4 py-3 text-right w-[110px]"><ColHeader label="CPL" campo="cpl" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir} align="right"/></th><th className="px-4 py-3 text-right w-[90px]"><ColHeader label="ROAS" campo="roas" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir} align="right"/></th><th className="px-4 py-3 text-right w-[80px]"><ColHeader label="CTR" campo="ctr" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir} align="right"/></th><th className="px-4 py-3 text-right w-[100px]"><span className="text-[10px] font-semibold tracking-[0.12em] uppercase text-white/30 float-right">CPM</span></th><th className="px-4 py-3 w-[80px]"/></tr>
+                <tr className="bg-[#0f0f12] border-b border-white/[0.06]"><th className="w-10 px-4 py-3"><input type="checkbox" checked={selecionados.size === campanhasFiltradas.length && campanhasFiltradas.length > 0} onChange={toggleTodos} className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer"/></th><th className="w-2 px-0"/><th className="px-4 py-3 text-left w-[260px]"><ColHeader label="Campanha" campo="nome_campanha" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir}/></th><th className="px-4 py-3 text-left w-[140px]"><span className="text-[10px] font-semibold tracking-[0.12em] uppercase text-white/30">Cliente</span></th><th className="px-4 py-3 text-left w-[100px]"><ColHeader label="Status" campo="status" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir}/></th><th className="px-4 py-3 w-[80px]"><ColHeader label="Score deriv." campo="score" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir}/></th><th className="px-4 py-3 text-right w-[120px]"><ColHeader label="Investido" campo="gasto_total" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir} align="right"/></th><th className="px-4 py-3 text-right w-[90px]"><ColHeader label="Resultados" campo="contatos" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir} align="right"/></th><th className="px-4 py-3 text-right w-[110px]"><ColHeader label="CPL deriv." campo="cpl" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir} align="right"/></th><th className="px-4 py-3 text-right w-[90px]"><ColHeader label="ROAS deriv." campo="roas" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir} align="right"/></th><th className="px-4 py-3 text-right w-[80px]"><ColHeader label="CTR" campo="ctr" ordenar={ordenar} setOrdenar={setOrdenar} dir={dir} setDir={setDir} align="right"/></th><th className="px-4 py-3 text-right w-[100px]"><span className="text-[10px] font-semibold tracking-[0.12em] uppercase text-white/30 float-right">CPM</span></th><th className="px-4 py-3 w-[80px]"/></tr>
               </thead>
 
               <tbody className="divide-y divide-white/[0.03]">

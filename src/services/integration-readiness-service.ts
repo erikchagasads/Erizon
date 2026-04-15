@@ -6,7 +6,7 @@ import { DataSourceKind, IntegrationReadiness } from "@/types/erizon";
 
 export class IntegrationReadinessService {
   constructor(
-    private readonly source: DataSourceKind = "mock",
+    private readonly source: DataSourceKind = getIntegrationEnvStatus().supabase ? "supabase" : "mock",
     private readonly mockRepository = new MockOperatingRepository(),
     private readonly supabaseRepository = new SupabaseOperatingRepository(),
   ) {}

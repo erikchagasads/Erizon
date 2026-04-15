@@ -10,6 +10,15 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+const BLOG_CURRENT_YEAR = 2026;
+
+function isFreshBlogPost(post: { title?: string; description?: string; publicado_em?: string | null }) {
+  const text = `${post.title ?? ""} ${post.description ?? ""}`;
+  const staleMention = /\b2024\b|\b2025\b/.test(text);
+  const publishedYear = post.publicado_em ? new Date(post.publicado_em).getFullYear() : 0;
+  return !staleMention && publishedYear >= BLOG_CURRENT_YEAR;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const limit    = Math.min(parseInt(searchParams.get("limit") ?? "10"), 50);
@@ -33,7 +42,7 @@ export async function GET(req: NextRequest) {
       // Incrementar views
       await supabase.from("blog_posts").update({ views: (data.views ?? 0) + 1 }).eq("slug", slug);
 
-      return NextResponse.json({ post: data });
+      return NextResponse.json({ post: data, fresh_2026: isFreshBlogPost(data) });
     }
 
     // Lista posts
@@ -50,7 +59,13 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    return NextResponse.json({ posts: data ?? [] });
+    const posts = data ?? [];
+    const freshPosts = posts.filter(isFreshBlogPost);
+
+    return NextResponse.json({
+      posts: freshPosts.length > 0 ? freshPosts : posts,
+      freshness_year: BLOG_CURRENT_YEAR,
+    });
 
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Erro inesperado";

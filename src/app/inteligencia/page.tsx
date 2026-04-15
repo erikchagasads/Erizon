@@ -36,14 +36,14 @@ function gerarBenchmarks(campanhas: Campanha[]): Benchmark[] {
     { label: "CTR médio", valor: ctrMedio > 0 ? `${ctrMedio.toFixed(2)}%` : "—",
       descricao: ctrMedio >= 2 ? "Acima da média de mercado (1.5%)" : ctrMedio >= 1 ? "Dentro da média de mercado" : "Abaixo da média — revisar criativos",
       tendencia: ctrMedio >= 1.5 ? "up" : ctrMedio >= 0.8 ? "neutral" : "down" },
-    { label: "CPL médio", valor: cplMedio > 0 ? fmtBRL(cplMedio) : "—",
+    { label: "CPL derivado", valor: cplMedio > 0 ? fmtBRL(cplMedio) : "—",
       descricao: cplMedio < 60 ? "Eficiente — abaixo de R$60" : cplMedio < 120 ? "Dentro da faixa aceitável" : "Elevado — acima de R$120",
       tendencia: cplMedio < 60 ? "up" : cplMedio < 120 ? "neutral" : "down" },
     { label: "CPM médio", valor: cpmMedio > 0 ? fmtBRL(cpmMedio) : "—",
       descricao: cpmMedio < 25 ? "Baixo custo de alcance" : cpmMedio < 50 ? "CPM dentro do esperado" : "Audiência saturada ou concorrência alta",
       tendencia: cpmMedio < 25 ? "up" : cpmMedio < 50 ? "neutral" : "down" },
-    { label: "ROAS médio", valor: roasMedio > 0 ? `${roasMedio.toFixed(2)}×` : "—",
-      descricao: roasMedio >= 3 ? "Excelente retorno sobre investimento" : roasMedio >= 2 ? "Retorno positivo e sustentável" : roasMedio >= 1 ? "Margem apertada — otimizar" : "Prejuízo — ação urgente",
+    { label: "ROAS derivado", valor: roasMedio > 0 ? `${roasMedio.toFixed(2)}×` : "—",
+      descricao: roasMedio >= 3 ? "Excelente retorno estimado sobre investimento" : roasMedio >= 2 ? "Retorno estimado positivo e sustentável" : roasMedio >= 1 ? "Margem estimada apertada — otimizar" : "Prejuízo estimado — ação urgente",
       tendencia: roasMedio >= 2 ? "up" : roasMedio >= 1 ? "neutral" : "down" },
   ];
 }
@@ -155,6 +155,9 @@ export default function InteligenciaPage() {
             <p className="text-sm text-white/40 mt-1">
               Benchmarks e padrões estratégicos extraídos das suas campanhas reais.
             </p>
+            <p className="text-[11px] text-white/25 mt-2">
+              Benchmarks de custo e retorno nesta tela são derivados da última base sincronizada.
+            </p>
           </div>
 
           {!loading ? (
@@ -162,8 +165,8 @@ export default function InteligenciaPage() {
               {/* Totais */}
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: "Total investido",    value: fmtBRL(totalInvestido),                                 sub: `${campanhas.length} campanhas` },
-                  { label: "Total de leads",      value: totalLeads.toLocaleString("pt-BR"),                   sub: totalLeads > 0 ? `CPL médio: ${fmtBRL(totalInvestido / totalLeads)}` : "—" },
+                  { label: "Total investido",    value: fmtBRL(totalInvestido),                                 sub: `${campanhas.length} campanhas sincronizadas` },
+                  { label: "Total de resultados", value: totalLeads.toLocaleString("pt-BR"),                   sub: totalLeads > 0 ? `CPL derivado: ${fmtBRL(totalInvestido / totalLeads)}` : "—" },
                   { label: "Total de impressões", value: totalImpressoes > 0 ? totalImpressoes.toLocaleString("pt-BR") : "—", sub: "alcance acumulado" },
                 ].map(s => (
                   <div key={s.label} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">

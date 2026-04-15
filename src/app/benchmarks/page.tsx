@@ -1,352 +1,309 @@
 "use client";
 
-// app/benchmarks/page.tsx — Benchmarks de Mercado
-// Compara CPM, CPC e CPL das campanhas do usuário com médias do mercado brasileiro por nicho.
-
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { getSupabase } from "@/lib/supabase";
-import { Loader2, TrendingUp, TrendingDown, Minus, BarChart2 } from "lucide-react";
+import { Loader2, TrendingDown, TrendingUp, Minus, BarChart2, Globe } from "lucide-react";
 import { RedeInteligencia } from "@/components/dados/RedeInteligencia";
-
-// ─── Benchmarks Meta Ads Brasil 2024-2025 por nicho ──────────────────────────
-const BENCHMARKS = {
-  imobiliario: {
-    label: "Imobiliário", emoji: "🏠",
-    cpm_min: 18, cpm_max: 45,
-    cpc_min: 1.5, cpc_max: 4.5,
-    cpl_min: 25, cpl_max: 90,
-    ctr_min: 0.8, ctr_max: 2.2,
-  },
-  ecommerce: {
-    label: "E-commerce", emoji: "🛒",
-    cpm_min: 12, cpm_max: 35,
-    cpc_min: 0.8, cpc_max: 2.5,
-    cpl_min: 8,  cpl_max: 35,
-    ctr_min: 1.0, ctr_max: 3.0,
-  },
-  saude: {
-    label: "Saúde & Estética", emoji: "💊",
-    cpm_min: 15, cpm_max: 40,
-    cpc_min: 1.2, cpc_max: 3.8,
-    cpl_min: 20, cpl_max: 75,
-    ctr_min: 0.9, ctr_max: 2.5,
-  },
-  educacao: {
-    label: "Educação & Cursos", emoji: "🎓",
-    cpm_min: 10, cpm_max: 30,
-    cpc_min: 0.7, cpc_max: 2.2,
-    cpl_min: 12, cpl_max: 50,
-    ctr_min: 1.2, ctr_max: 3.5,
-  },
-  financeiro: {
-    label: "Financeiro & Seguros", emoji: "💰",
-    cpm_min: 22, cpm_max: 60,
-    cpc_min: 2.0, cpc_max: 6.0,
-    cpl_min: 30, cpl_max: 120,
-    ctr_min: 0.6, ctr_max: 1.8,
-  },
-  alimentacao: {
-    label: "Alimentação & Delivery", emoji: "🍔",
-    cpm_min: 8,  cpm_max: 25,
-    cpc_min: 0.5, cpc_max: 1.8,
-    cpl_min: 5,  cpl_max: 25,
-    ctr_min: 1.5, ctr_max: 4.0,
-  },
-  automotivo: {
-    label: "Automotivo", emoji: "🚗",
-    cpm_min: 16, cpm_max: 42,
-    cpc_min: 1.4, cpc_max: 4.2,
-    cpl_min: 22, cpl_max: 85,
-    ctr_min: 0.7, ctr_max: 2.0,
-  },
-  tecnologia: {
-    label: "Tecnologia & SaaS", emoji: "💻",
-    cpm_min: 14, cpm_max: 38,
-    cpc_min: 1.0, cpc_max: 3.5,
-    cpl_min: 18, cpl_max: 70,
-    ctr_min: 0.9, ctr_max: 2.8,
-  },
-  varejo: {
-    label: "Varejo & Moda", emoji: "👗",
-    cpm_min: 10, cpm_max: 28,
-    cpc_min: 0.6, cpc_max: 2.0,
-    cpl_min: 7,  cpl_max: 30,
-    ctr_min: 1.3, ctr_max: 3.8,
-  },
-  turismo: {
-    label: "Turismo & Viagens", emoji: "✈️",
-    cpm_min: 13, cpm_max: 35,
-    cpc_min: 0.9, cpc_max: 3.0,
-    cpl_min: 15, cpl_max: 60,
-    ctr_min: 1.0, ctr_max: 3.2,
-  },
-  servicos: {
-    label: "Serviços Locais", emoji: "🔧",
-    cpm_min: 11, cpm_max: 32,
-    cpc_min: 0.8, cpc_max: 2.8,
-    cpl_min: 15, cpl_max: 65,
-    ctr_min: 0.8, ctr_max: 2.4,
-  },
-} as const;
-
-type NichoKey = keyof typeof BENCHMARKS;
-type Status = "abaixo" | "dentro" | "acima";
+import type { NicheInsight, WorkspacePosition } from "@/services/network-intelligence-service";
 
 interface Campanha {
   id: string;
   nome_campanha: string;
   gasto_total: number;
   contatos: number;
-  cpm: number;
-  cpc: number;
   ctr: number;
   impressoes: number;
+  status: string;
 }
 
-function avaliarCusto(valor: number, min: number, max: number): Status {
-  if (valor < min) return "abaixo";
-  if (valor > max) return "acima";
-  return "dentro";
+interface NetworkResponse {
+  ok: boolean;
+  position: WorkspacePosition | null;
+  nicheInsight: NicheInsight | null;
 }
 
-function avaliarCTR(valor: number, min: number, max: number): Status {
-  if (valor < min) return "abaixo";
-  if (valor > max) return "acima";
-  return "dentro";
-}
-
-const STATUS_CONFIG: Record<Status, { label: string; cor: string; bg: string }> = {
-  abaixo: { label: "abaixo da média", cor: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
-  dentro: { label: "dentro da média", cor: "text-white/50",    bg: "bg-white/[0.03] border-white/[0.07]"     },
-  acima:  { label: "acima da média",  cor: "text-red-400",     bg: "bg-red-500/10 border-red-500/20"         },
-};
+type Status = "winning" | "median" | "attention" | "unknown";
 
 const fmtBRL = (v: number) =>
   `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtPct = (v: number) => `${v.toFixed(2)}%`;
+const fmtX = (v: number) => `${v.toFixed(2)}x`;
+
+function avg(values: number[]) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function compareCost(value: number | null, p25: number | null, p75: number | null): Status {
+  if (value === null || p25 === null || p75 === null) return "unknown";
+  if (value <= p25) return "winning";
+  if (value >= p75) return "attention";
+  return "median";
+}
+
+function compareRate(value: number | null, p25: number | null, p75: number | null): Status {
+  if (value === null || p25 === null || p75 === null) return "unknown";
+  if (value >= p25) return "winning";
+  if (value <= p75) return "attention";
+  return "median";
+}
+
+const STATUS_CONFIG: Record<Status, { label: string; text: string; border: string }> = {
+  winning: {
+    label: "melhor que a rede",
+    text: "text-emerald-400",
+    border: "border-emerald-500/20 bg-emerald-500/10",
+  },
+  median: {
+    label: "na faixa da rede",
+    text: "text-white/50",
+    border: "border-white/[0.07] bg-white/[0.03]",
+  },
+  attention: {
+    label: "pede atenção",
+    text: "text-red-400",
+    border: "border-red-500/20 bg-red-500/10",
+  },
+  unknown: {
+    label: "sem referência suficiente",
+    text: "text-white/25",
+    border: "border-white/[0.05] bg-white/[0.02]",
+  },
+};
+
+function StatusIcon({ status, inverse = false }: { status: Status; inverse?: boolean }) {
+  if (status === "winning") {
+    return inverse ? <TrendingDown size={12} className="text-emerald-400" /> : <TrendingUp size={12} className="text-emerald-400" />;
+  }
+  if (status === "attention") {
+    return inverse ? <TrendingUp size={12} className="text-red-400" /> : <TrendingDown size={12} className="text-red-400" />;
+  }
+  return <Minus size={12} className="text-white/25" />;
+}
 
 export default function BenchmarksPage() {
   const supabase = useMemo(() => getSupabase(), []);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [nicho, setNicho]         = useState<NichoKey>("imobiliario");
+  const [network, setNetwork] = useState<NetworkResponse | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from("metricas_ads").select("*")
-        .eq("user_id", user.id)
-        .in("status", ["ATIVO", "ACTIVE", "ATIVA"]);
-      setCampanhas((data ?? []) as Campanha[]);
-      setLoading(false);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const [{ data }, networkRes] = await Promise.all([
+          supabase
+            .from("metricas_ads")
+            .select("id,nome_campanha,gasto_total,contatos,ctr,impressoes,status")
+            .eq("user_id", user.id)
+            .in("status", ["ATIVO", "ACTIVE", "ATIVA"]),
+          fetch("/api/intelligence/network").then((res) => res.json()).catch(() => null),
+        ]);
+
+        setCampanhas((data ?? []) as Campanha[]);
+        setNetwork(networkRes?.ok ? networkRes as NetworkResponse : null);
+      } finally {
+        setLoading(false);
+      }
     }
-    load();
+
+    void load();
   }, [supabase]);
 
-  const bench = BENCHMARKS[nicho];
-
   const minhas = useMemo(() => {
-    const ativas = campanhas.filter(c => c.gasto_total > 0 && c.impressoes > 0);
+    const ativas = campanhas.filter((c) => c.gasto_total > 0 && c.impressoes > 0);
     if (!ativas.length) return null;
-    const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
-    const comLead = ativas.filter(c => c.contatos > 0);
+
+    const comLead = ativas.filter((c) => c.contatos > 0);
+
     return {
-      cpm: avg(ativas.map(c => c.cpm ?? 0)),
-      cpc: avg(ativas.map(c => c.cpc ?? 0)),
-      cpl: comLead.length ? avg(comLead.map(c => c.gasto_total / c.contatos)) : 0,
-      ctr: avg(ativas.map(c => c.ctr ?? 0)),
       total: ativas.length,
+      cpl: comLead.length ? avg(comLead.map((c) => c.gasto_total / c.contatos)) : null,
+      ctr: avg(ativas.map((c) => Number(c.ctr ?? 0)).filter((v) => v > 0)),
     };
   }, [campanhas]);
 
-  const analises = useMemo(() => campanhas
-    .filter(c => c.gasto_total > 0 && c.impressoes > 0)
-    .map(c => {
-      const cpl = c.contatos > 0 ? c.gasto_total / c.contatos : null;
-      return {
-        ...c, cpl,
-        st_cpm: avaliarCusto(c.cpm, bench.cpm_min, bench.cpm_max),
-        st_cpc: avaliarCusto(c.cpc, bench.cpc_min, bench.cpc_max),
-        st_cpl: cpl !== null ? avaliarCusto(cpl, bench.cpl_min, bench.cpl_max) : null,
-        st_ctr: avaliarCTR(c.ctr, bench.ctr_min, bench.ctr_max),
-      };
-    }), [campanhas, bench]);
+  const insight = network?.nicheInsight ?? null;
+  const position = network?.position ?? null;
+
+  const cards = useMemo(() => {
+    if (!insight) return [];
+
+    return [
+      {
+        label: "CPL da rede",
+        value: insight.cplP50 ? fmtBRL(insight.cplP50) : "—",
+        sub: insight.cplP25 && insight.cplP75 ? `p25 ${fmtBRL(insight.cplP25)} · p75 ${fmtBRL(insight.cplP75)}` : "rede ainda sem quartis suficientes",
+        status: compareCost(minhas?.cpl ?? null, insight.cplP25, insight.cplP75),
+        inverse: true,
+      },
+      {
+        label: "ROAS da rede",
+        value: insight.roasP50 ? fmtX(insight.roasP50) : "—",
+        sub: insight.roasP25 && insight.roasP75 ? `top ${fmtX(insight.roasP25)} · base ${fmtX(insight.roasP75)}` : "rede ainda sem quartis suficientes",
+        status: compareRate(position?.suaRoas ?? null, insight.roasP25, insight.roasP75),
+        inverse: false,
+      },
+      {
+        label: "CTR da rede",
+        value: insight.ctrP50 ? fmtPct(insight.ctrP50) : "—",
+        sub: minhas?.ctr ? `sua média ${fmtPct(minhas.ctr)}` : "sem CTR suficiente no workspace",
+        status: insight.ctrP50 && minhas?.ctr
+          ? minhas.ctr >= insight.ctrP50 ? "winning" : "attention"
+          : "unknown",
+        inverse: false,
+      },
+    ];
+  }, [insight, minhas?.cpl, minhas?.ctr, position?.suaRoas]);
+
+  const campanhasComparadas = useMemo(() => {
+    if (!insight) return [];
+
+    return campanhas
+      .filter((c) => c.gasto_total > 0 && c.impressoes > 0)
+      .map((c) => {
+        const cpl = c.contatos > 0 ? c.gasto_total / c.contatos : null;
+        const ctr = Number(c.ctr ?? 0) || null;
+        const cplStatus = compareCost(cpl, insight.cplP25, insight.cplP75);
+        const ctrStatus = insight.ctrP50 && ctr
+          ? ctr >= insight.ctrP50 ? "winning" : "attention"
+          : "unknown";
+
+        return {
+          ...c,
+          cpl,
+          ctr,
+          cplStatus,
+          ctrStatus,
+        };
+      });
+  }, [campanhas, insight]);
 
   return (
     <>
       <Sidebar />
       <div className="md:ml-[60px] pb-20 md:pb-0 min-h-screen bg-[#040406] text-white">
         <div className="max-w-5xl mx-auto px-6 py-8">
-
-          {/* Header */}
           <div className="mb-8">
             <p className="text-[11px] text-fuchsia-400 font-semibold uppercase tracking-wider mb-1">Inteligência de Mercado</p>
-            <h1 className="text-2xl font-bold text-white">Benchmarks de Mercado</h1>
+            <h1 className="text-2xl font-bold text-white">Benchmarks da Rede</h1>
             <p className="text-sm text-white/40 mt-1">
-              Compare CPM, CPC, CPL e CTR das suas campanhas com as médias reais do mercado brasileiro.
+              Esta tela agora só usa benchmark vivo da rede Erizon. Se a rede ainda não tiver base suficiente, ela assume isso em vez de inventar mercado.
             </p>
           </div>
 
-          {/* Rede de Inteligência — posição real do workspace */}
           <div className="mb-6">
             <RedeInteligencia />
-          </div>
-
-          {/* Seletor de nicho */}
-          <div className="mb-6">
-            <p className="text-[11px] text-white/30 uppercase tracking-wider mb-3">Selecione o nicho</p>
-            <div className="flex flex-wrap gap-2">
-              {(Object.keys(BENCHMARKS) as NichoKey[]).map(key => (
-                <button
-                  key={key}
-                  onClick={() => setNicho(key)}
-                  className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-all ${
-                    nicho === key
-                      ? "bg-fuchsia-600/20 border-fuchsia-500/40 text-fuchsia-300"
-                      : "bg-white/[0.03] border-white/[0.08] text-white/50 hover:border-white/20 hover:text-white/70"
-                  }`}
-                >
-                  {BENCHMARKS[key].emoji} {BENCHMARKS[key].label}
-                </button>
-              ))}
-            </div>
           </div>
 
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 size={20} className="animate-spin text-fuchsia-400" />
             </div>
+          ) : !insight ? (
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8 text-center">
+              <Globe size={24} className="text-white/20 mx-auto mb-3" />
+              <p className="text-white/40 text-sm font-semibold">Benchmark real ainda indisponível</p>
+              <p className="text-white/25 text-[12px] mt-2 leading-relaxed">
+                A rede ainda não tem dados suficientes do seu nicho para gerar referência real. Quando houver base suficiente em `network_weekly_insights`, esta tela passa a comparar automaticamente.
+              </p>
+            </div>
           ) : (
             <div className="space-y-6">
-
-              {/* Referências do nicho */}
               <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <BarChart2 size={16} className="text-fuchsia-400" />
                   <p className="text-sm font-semibold text-white">
-                    Médias de mercado — {bench.emoji} {bench.label}
+                    Rede real do nicho
+                    <span className="text-white/35 font-normal ml-2 capitalize">· {insight.nicho}</span>
                   </p>
-                  <span className="text-[10px] text-white/20 ml-auto">Meta Ads Brasil 2024-2025</span>
+                  <span className="text-[10px] text-white/20 ml-auto">
+                    semana {new Date(insight.semanaInicio).toLocaleDateString("pt-BR")} · {insight.nWorkspaces} workspaces
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[
-                    { label: "CPM",  range: `${fmtBRL(bench.cpm_min)} – ${fmtBRL(bench.cpm_max)}`, dica: "Custo por mil impressões" },
-                    { label: "CPC",  range: `${fmtBRL(bench.cpc_min)} – ${fmtBRL(bench.cpc_max)}`, dica: "Custo por clique" },
-                    { label: "CPL",  range: `${fmtBRL(bench.cpl_min)} – ${fmtBRL(bench.cpl_max)}`, dica: "Custo por lead" },
-                    { label: "CTR",  range: `${fmtPct(bench.ctr_min)} – ${fmtPct(bench.ctr_max)}`, dica: "Taxa de clique esperada" },
-                  ].map(m => (
-                    <div key={m.label} className="rounded-xl bg-white/[0.03] border border-white/[0.05] p-4">
-                      <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">{m.label}</p>
-                      <p className="text-sm font-bold text-white">{m.range}</p>
-                      <p className="text-[10px] text-white/25 mt-1">{m.dica}</p>
-                    </div>
-                  ))}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {cards.map((card) => {
+                    const cfg = STATUS_CONFIG[card.status];
+                    return (
+                      <div key={card.label} className={`rounded-xl border p-4 ${cfg.border}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[10px] text-white/30 uppercase tracking-wider">{card.label}</p>
+                          <StatusIcon status={card.status} inverse={card.inverse} />
+                        </div>
+                        <p className={`text-base font-bold ${cfg.text}`}>{card.value}</p>
+                        <p className="text-[10px] text-white/20 mt-1">{card.sub}</p>
+                        <p className={`text-[10px] mt-2 ${cfg.text}`}>{cfg.label}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Suas médias vs mercado */}
-              {minhas ? (
-                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
-                  <p className="text-sm font-semibold text-white mb-4">
-                    Suas médias vs mercado
-                    <span className="text-[11px] text-white/30 font-normal ml-2">
-                      ({minhas.total} campanha{minhas.total !== 1 ? "s" : ""})
-                    </span>
-                  </p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {[
-                      { label: "CPM", valor: minhas.cpm, st: avaliarCusto(minhas.cpm, bench.cpm_min, bench.cpm_max), fmt: fmtBRL, inverso: true },
-                      { label: "CPC", valor: minhas.cpc, st: avaliarCusto(minhas.cpc, bench.cpc_min, bench.cpc_max), fmt: fmtBRL, inverso: true },
-                      { label: "CPL", valor: minhas.cpl, st: minhas.cpl > 0 ? avaliarCusto(minhas.cpl, bench.cpl_min, bench.cpl_max) : "dentro" as Status, fmt: fmtBRL, inverso: true },
-                      { label: "CTR", valor: minhas.ctr, st: avaliarCTR(minhas.ctr, bench.ctr_min, bench.ctr_max), fmt: fmtPct, inverso: false },
-                    ].map(m => {
-                      const cfg = STATUS_CONFIG[m.st];
-                      const isGood = m.inverso ? m.st === "abaixo" : m.st === "acima";
-                      const isBad  = m.inverso ? m.st === "acima"  : m.st === "abaixo";
-                      const Icon   = isGood ? TrendingDown : isBad ? TrendingUp : Minus;
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+                <p className="text-sm font-semibold text-white mb-2">Sua posição na rede</p>
+                <p className="text-[12px] text-white/50 leading-relaxed">
+                  {position?.insight ?? "A posição do workspace ainda não pôde ser calculada com segurança."}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                  <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
+                    <p className="text-[10px] text-white/25 uppercase tracking-wider mb-1">Seu CPL médio</p>
+                    <p className="text-[16px] font-bold text-white">{position?.suaCpl ? fmtBRL(position.suaCpl) : "—"}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
+                    <p className="text-[10px] text-white/25 uppercase tracking-wider mb-1">Seu ROAS médio</p>
+                    <p className="text-[16px] font-bold text-white">{position?.suaRoas ? fmtX(position.suaRoas) : "—"}</p>
+                  </div>
+                </div>
+              </div>
+
+              {campanhasComparadas.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-white mb-3">Campanhas vs rede real</p>
+                  <div className="space-y-3">
+                    {campanhasComparadas.map((c) => {
+                      const cplCfg = STATUS_CONFIG[c.cplStatus];
+                      const ctrCfg = STATUS_CONFIG[c.ctrStatus];
+
                       return (
-                        <div key={m.label} className={`rounded-xl border p-4 ${cfg.bg}`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-[10px] text-white/40 uppercase tracking-wider">{m.label}</p>
-                            <Icon size={12} className={isGood ? "text-emerald-400" : isBad ? "text-red-400" : "text-white/25"} />
+                        <div key={c.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                          <p className="text-sm font-medium text-white mb-3 truncate">{c.nome_campanha}</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className={`rounded-lg border p-3 ${cplCfg.border}`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-[9px] text-white/25 uppercase">CPL</p>
+                                <StatusIcon status={c.cplStatus} inverse />
+                              </div>
+                              <p className={`text-sm font-bold ${cplCfg.text}`}>{c.cpl ? fmtBRL(c.cpl) : "—"}</p>
+                              <p className={`text-[9px] mt-1 ${cplCfg.text}`}>{cplCfg.label}</p>
+                            </div>
+                            <div className={`rounded-lg border p-3 ${ctrCfg.border}`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-[9px] text-white/25 uppercase">CTR</p>
+                                <StatusIcon status={c.ctrStatus} />
+                              </div>
+                              <p className={`text-sm font-bold ${ctrCfg.text}`}>{c.ctr ? fmtPct(c.ctr) : "—"}</p>
+                              <p className={`text-[9px] mt-1 ${ctrCfg.text}`}>{ctrCfg.label}</p>
+                            </div>
                           </div>
-                          <p className={`text-base font-bold ${isGood ? "text-emerald-400" : isBad ? "text-red-400" : "text-white"}`}>
-                            {m.valor > 0 ? m.fmt(m.valor) : "—"}
-                          </p>
-                          <p className={`text-[10px] mt-1 ${cfg.cor}`}>{cfg.label}</p>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-              ) : (
-                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8 text-center">
-                  <p className="text-white/30 text-sm">
-                    Nenhuma campanha ativa. Sincronize em Analytics para ver sua posição no mercado.
-                  </p>
-                </div>
               )}
 
-              {/* Campanha a campanha */}
-              {analises.length > 0 && (
-                <div>
-                  <p className="text-sm font-semibold text-white mb-3">Análise por campanha</p>
-                  <div className="space-y-3">
-                    {analises.map(c => (
-                      <div key={c.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-                        <p className="text-sm font-medium text-white mb-3 truncate">{c.nome_campanha}</p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                          {[
-                            { label: "CPM", valor: c.cpm,  fmt: fmtBRL, st: c.st_cpm, inverso: true },
-                            { label: "CPC", valor: c.cpc,  fmt: fmtBRL, st: c.st_cpc, inverso: true },
-                            { label: "CPL", valor: c.cpl,  fmt: fmtBRL, st: c.st_cpl, inverso: true },
-                            { label: "CTR", valor: c.ctr,  fmt: fmtPct, st: c.st_ctr, inverso: false },
-                          ].map(m => {
-                            if (!m.st || !m.valor) {
-                              return (
-                                <div key={m.label} className="rounded-lg bg-white/[0.02] border border-white/[0.04] p-3">
-                                  <p className="text-[9px] text-white/20 uppercase mb-1">{m.label}</p>
-                                  <p className="text-sm text-white/15">—</p>
-                                </div>
-                              );
-                            }
-                            const st = m.st as Status;
-                            const cfg = STATUS_CONFIG[st];
-                            const isGood = m.inverso ? st === "abaixo" : st === "acima";
-                            const isBad  = m.inverso ? st === "acima"  : st === "abaixo";
-                            return (
-                              <div key={m.label} className={`rounded-lg border p-3 ${cfg.bg}`}>
-                                <p className="text-[9px] text-white/25 uppercase mb-1">{m.label}</p>
-                                <p className={`text-sm font-bold ${isGood ? "text-emerald-400" : isBad ? "text-red-400" : "text-white/60"}`}>
-                                  {m.fmt(m.valor as number)}
-                                </p>
-                                <p className={`text-[9px] mt-0.5 ${cfg.cor}`}>
-                                  {isGood ? "✓ eficiente" : isBad ? "↑ alto" : "ok"}
-                                </p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Legenda */}
               <div className="rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
-                <p className="text-[10px] text-white/20 uppercase tracking-wider mb-2">Como interpretar</p>
+                <p className="text-[10px] text-white/20 uppercase tracking-wider mb-2">Como interpretar agora</p>
                 <div className="space-y-1 text-[11px] text-white/30">
-                  <p><span className="text-emerald-400">CPM/CPC/CPL abaixo da média</span> → você paga menos que o mercado — boa eficiência</p>
-                  <p><span className="text-red-400">CPM/CPC/CPL acima da média</span> → custo elevado — revisar segmentação ou criativo</p>
-                  <p><span className="text-emerald-400">CTR acima da média</span> → anúncio relevante — público respondendo bem</p>
-                  <p className="text-white/15 pt-1">Benchmarks baseados em dados Meta Ads Brasil 2024-2025. Variam por sazonalidade, orçamento e qualidade criativa.</p>
+                  <p>Esta tela só compara sua operação com a rede anonimizada da própria Erizon.</p>
+                  <p>Quando a rede ainda não tem amostra suficiente, o benchmark fica indisponível em vez de cair para referência estática antiga.</p>
+                  <p>CPM e CPC ficaram de fora por enquanto porque a rede semanal atual ainda não publica essas medianas com confiança suficiente.</p>
                 </div>
               </div>
-
             </div>
           )}
         </div>

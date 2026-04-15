@@ -6,16 +6,23 @@ import { runAdsSyncWorker } from "@/workers/ads-sync";
 import { runAutopilotWorker } from "@/workers/autopilot-runner";
 import { runNetworkPatternAnalyzer } from "@/workers/network-pattern-analyzer";
 import { requireAuth } from "@/lib/auth-guard";
+import { getIntegrationEnvStatus } from "@/config/env";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (!auth.user) return auth.response;
 
-  const workspaceId = request.nextUrl.searchParams.get("workspaceId") ?? "ws-erizon";
-  const source = request.nextUrl.searchParams.get("source") === "supabase" ? "supabase" : "mock";
+  const env = getIntegrationEnvStatus();
+  if (!env.supabase) {
+    return NextResponse.json(
+      { error: "Supabase indisponível para montar a operação real." },
+      { status: 503 }
+    );
+  }
 
-  const service = new OperatingSystemService(source);
-  const readiness = new IntegrationReadinessService(source);
+  const workspaceId = request.nextUrl.searchParams.get("workspaceId") ?? auth.user.id;
+  const service = new OperatingSystemService("supabase");
+  const readiness = new IntegrationReadinessService("supabase");
 
   const [architecture, view, validation, governance, syncPreview, readinessSummary, adsSync, autopilot, network] =
     await Promise.all([

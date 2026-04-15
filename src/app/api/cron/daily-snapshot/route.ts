@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 
     const { data: campanhas } = await db
       .from("metricas_ads")
-      .select("meta_campaign_id, gasto_total, contatos, cliques, ctr, frequencia, receita_estimada, orcamento")
+      .select("meta_campaign_id, gasto_total, contatos, cliques, ctr, frequencia, orcamento")
       .eq("user_id", userId);
 
     if (!campanhas?.length) continue;
@@ -41,9 +41,11 @@ export async function POST(req: NextRequest) {
       const spend   = Number(c.gasto_total ?? 0);
       const leads   = Number(c.contatos ?? 0);
       const clicks  = Number(c.cliques ?? 0);
-      const revenue = Number(c.receita_estimada ?? 0);
+      // O motor preditivo usa somente sinais operacionais reais.
+      // Receita estimada nao entra mais como historico factual.
+      const revenue = 0;
       const cpl     = leads > 0 ? spend / leads : 0;
-      const roas    = spend > 0 ? revenue / spend : 0;
+      const roas    = 0;
       const ctr     = Number(c.ctr ?? 0);
       const freq    = Number(c.frequencia ?? 0);
 

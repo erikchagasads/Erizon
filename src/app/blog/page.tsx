@@ -35,6 +35,15 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Geral":       "bg-white/[0.06]  text-white/40   border-white/[0.08]",
 };
 
+const BLOG_CURRENT_YEAR = 2026;
+
+function isFreshPost(post: Pick<BlogPost, "title" | "description" | "publicado_em">) {
+  const text = `${post.title} ${post.description}`;
+  const staleMention = /\b2024\b|\b2025\b/.test(text);
+  const publishedYear = new Date(post.publicado_em).getFullYear();
+  return !staleMention && publishedYear >= BLOG_CURRENT_YEAR;
+}
+
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" });
 }
@@ -56,7 +65,9 @@ async function getPosts(): Promise<BlogPost[]> {
       .eq("published", true)
       .order("publicado_em", { ascending: false })
       .limit(30);
-    return (data ?? []) as BlogPost[];
+    const posts = (data ?? []) as BlogPost[];
+    const freshPosts = posts.filter(isFreshPost);
+    return freshPosts.length > 0 ? freshPosts : posts;
   } catch { return []; }
 }
 
@@ -105,7 +116,7 @@ export default async function BlogPage() {
         <div className="mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-400 font-medium mb-4">
             <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
-            Atualizado diariamente
+            Atualizado diariamente · foco {BLOG_CURRENT_YEAR}
           </div>
           <h1 className="text-[2.5rem] font-black text-white mb-3 leading-tight">
             Estratégias de tráfego pago<br />
@@ -113,6 +124,9 @@ export default async function BlogPage() {
           </h1>
           <p className="text-[15px] text-white/40 max-w-xl">
             Artigos práticos sobre Meta Ads, CPL, ROAS e gestão de campanhas para gestores de tráfego e agências brasileiras.
+          </p>
+          <p className="text-[11px] text-white/25 max-w-xl mt-3">
+            A vitrine principal prioriza artigos publicados em {BLOG_CURRENT_YEAR} e evita conteúdo com referência antiga no título ou descrição.
           </p>
         </div>
 

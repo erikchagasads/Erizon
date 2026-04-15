@@ -57,6 +57,12 @@ const PERIODOS: { id: Periodo; label: string }[] = [
   { id: "hoje", label: "Hoje" }, { id: "7d", label: "7 dias" },
   { id: "30d", label: "30 dias" }, { id: "mes", label: "Mês atual" },
 ];
+const DATE_PRESET_BY_PERIODO: Record<Periodo, string> = {
+  hoje: "today",
+  "7d": "last_7d",
+  "30d": "last_30d",
+  mes: "this_month",
+};
 const ORDENS: { id: OrdemMetrica; label: string }[] = [
   { id: "score", label: "Score" }, { id: "gasto", label: "Investimento" },
   { id: "leads", label: "Leads" }, { id: "cpl", label: "CPL" }, { id: "ctr", label: "CTR" },
@@ -147,7 +153,7 @@ function PainelTendencia({ tendencia }: { tendencia: TendenciaConta }) {
     <div className={`p-5 rounded-[20px] border ${cfg.border} ${cfg.bg} mb-4`}>
       <div className="flex items-start justify-between mb-4">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/20 mb-1">Tendência 7d vs 7d anterior</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/20 mb-1">Tendência derivada 7d vs 7d anterior</p>
           <div className="flex items-center gap-2">
             <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
             <span className={`text-[15px] font-black ${cfg.cor}`}>{cfg.label}</span>
@@ -328,7 +334,7 @@ function ModoCEODados({
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <div className="p-5 rounded-[20px] border border-white/[0.07] bg-white/[0.02]">
-          <p className="text-[9px] text-white/20 uppercase tracking-widest mb-2">Score Global (ponderado)</p>
+          <p className="text-[9px] text-white/20 uppercase tracking-widest mb-2">Score Global derivado</p>
           <div className="flex items-baseline gap-2 mb-1">
             <p className={`text-[36px] font-black font-mono leading-none ${scoreColor}`}>{scoreGlobal}</p>
             <span className="text-[14px] text-white/20">/100</span>
@@ -623,6 +629,10 @@ export default function DadosPage() {
   const { historico: historicoMetricas, diasDisponiveis, ultimoSnapshot, loading: histLoading } =
     useHistorico(userId, clienteAtual?.id);
 
+  const getPeriodoLabel = useCallback((target: Periodo) => {
+    return PERIODOS.find(p => p.id === target)?.label ?? target;
+  }, []);
+
   // ─── v8.2: buscarDados corrigido ─────────────────────────────────────────────
   // • Com cliente selecionado  → filtra só campanhas desse cliente
   // • Sem cliente selecionado  → retorna TODAS as campanhas do user (sem filtro extra)
@@ -652,26 +662,91 @@ export default function DadosPage() {
     };
   }, [supabase]);
 
+  const aplicarDados = useCallback((dados: {
+    campanhas: Campanha[];
+    decisoes: DecisaoHistorico[];
+    snapshots: SnapshotHistorico[];
+  }) => {
+    setCampanhas(dados.campanhas);
+    setDecisoes(dados.decisoes);
+    setSnapshots(dados.snapshots);
+    setDecisaoIgnorada(false);
+  }, []);
+
+  const sincronizarPeriodo = useCallback(async (
+    uid: string,
+    options?: {
+      clienteId?: string;
+      periodoAlvo?: Periodo;
+      showSuccess?: boolean;
+      captureSnapshot?: boolean;
+    }
+  ) => {
+    const periodoAlvo = options?.periodoAlvo ?? periodo;
+    const params = new URLSearchParams({
+      date_preset: DATE_PRESET_BY_PERIODO[periodoAlvo],
+    });
+
+    if (options?.clienteId) {
+      params.set("cliente_id", options.clienteId);
+    }
+
+    const res = await fetch(`/api/ads-sync?${params.toString()}`);
+    const text = await res.text();
+    const json = text ? JSON.parse(text) : {};
+
+    if (!res.ok) {
+      throw new Error(json.error || "Erro ao sincronizar.");
+    }
+
+    if (options?.captureSnapshot && periodoAlvo === "30d") {
+      fetch("/api/snapshot", { method: "POST" }).catch(() => {});
+    }
+
+    const dados = await buscarDados(uid, options?.clienteId);
+    aplicarDados(dados);
+
+    if (options?.showSuccess) {
+      const ativas = dados.campanhas.filter(c => STATUS_ATIVOS.has(c.status ?? "")).length;
+      setSuccess(
+        `${ativas} campanha${ativas !== 1 ? "s" : ""} ativa${ativas !== 1 ? "s" : ""} sincronizada${ativas !== 1 ? "s" : ""} · janela ${getPeriodoLabel(periodoAlvo)}.`
+      );
+      setTimeout(() => setSuccess(""), 4000);
+    }
+  }, [aplicarDados, buscarDados, getPeriodoLabel, periodo]);
+
   useEffect(() => {
     let cancelled = false;
     async function init() {
       setLoading(true);
+      setError("");
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user || cancelled) return;
         setUserId(user.id);
-        const dados = await buscarDados(user.id, clienteAtual?.id);
-        if (cancelled) return;
-        setCampanhas(dados.campanhas);
-        setDecisoes(dados.decisoes);
-        setSnapshots(dados.snapshots);
-        setDecisaoIgnorada(false);
+        try {
+          await sincronizarPeriodo(user.id, {
+            clienteId: clienteAtual?.id,
+            periodoAlvo: periodo,
+            showSuccess: false,
+            captureSnapshot: false,
+          });
+        } catch (syncErr: unknown) {
+          const dados = await buscarDados(user.id, clienteAtual?.id);
+          if (cancelled) return;
+          aplicarDados(dados);
+          setError(
+            syncErr instanceof Error
+              ? `${syncErr.message} Exibindo últimos dados disponíveis.`
+              : "Não foi possível ressincronizar. Exibindo últimos dados disponíveis."
+          );
+        }
       } catch {}
       if (!cancelled) setLoading(false);
     }
     init();
     return () => { cancelled = true; };
-  }, [buscarDados, supabase, clienteAtual]);
+  }, [aplicarDados, buscarDados, clienteAtual?.id, periodo, sincronizarPeriodo, supabase]);
 
   useEffect(() => { setFiltroCritico(false); }, [periodo]);
 
@@ -681,23 +756,16 @@ export default function DadosPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setError("Sessão expirada."); return; }
-      const url = clienteAtual?.id ? `/api/ads-sync?cliente_id=${clienteAtual.id}` : "/api/ads-sync";
-      const res  = await fetch(url);
-      const text = await res.text();
-      const json = text ? JSON.parse(text) : {};
-      if (!res.ok) { setError(json.error || "Erro ao sincronizar."); return; }
-      fetch("/api/snapshot", { method: "POST" }).catch(() => {});
-      const dados = await buscarDados(user.id, clienteAtual?.id);
-      setCampanhas(dados.campanhas);
-      setDecisoes(dados.decisoes);
-      setSnapshots(dados.snapshots);
-      const ativas = dados.campanhas.filter(c => c.status === "ATIVO" || c.status === "ACTIVE" || c.status === "ATIVA").length;
-      setSuccess(`${ativas} campanha${ativas !== 1 ? "s" : ""} ativa${ativas !== 1 ? "s" : ""} sincronizada${ativas !== 1 ? "s" : ""}.`);
-      setTimeout(() => setSuccess(""), 4000);
+      await sincronizarPeriodo(user.id, {
+        clienteId: clienteAtual?.id,
+        periodoAlvo: periodo,
+        showSuccess: true,
+        captureSnapshot: true,
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro inesperado.");
     } finally { setSyncing(false); }
-  }, [buscarDados, supabase, clienteAtual]);
+  }, [clienteAtual?.id, periodo, sincronizarPeriodo, supabase]);
 
   // ─── Registrar decisão ────────────────────────────────────────────────────────
   const registrarDecisao = useCallback(async (
@@ -809,9 +877,9 @@ export default function DadosPage() {
   const todasEnriquecidas = useMemo<CampanhaEnriquecida[]>(() =>
     campanhas.map(c => ({ ...c, m: calcMetricas(c) })), [campanhas]);
 
-  // porPeriodo: filtra por período dos DADOS (gasto/leads), não pela data de sync
-  // data_atualizacao reflete quando foi feito o último sync — não quando a campanha rodou
-  // O período aqui serve apenas para ordenação visual; os dados são sempre do date_preset do sync
+  // O período selecionado agora controla a janela real do sync no backend.
+  // `metricas_ads` continua representando o último sync da janela escolhida,
+  // então aqui filtramos apenas campanhas operacionais para a camada de decisão.
   const porPeriodo = useMemo(() =>
     todasEnriquecidas.filter(c => STATUS_ATIVOS.has(c.status ?? "")),
     [todasEnriquecidas]);
@@ -962,6 +1030,9 @@ export default function DadosPage() {
               )}
             </p>
             <h1 className="text-[1.9rem] font-bold text-white tracking-tight">Central de Decisão</h1>
+            <p className="mt-2 text-[12px] text-white/25">
+              Janela sincronizada: {getPeriodoLabel(periodo)}. Scores, tendências e projeções abaixo são derivados da última sincronização.
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 mt-1">
             {error && (
@@ -1166,7 +1237,7 @@ export default function DadosPage() {
                     diasDisponiveis={diasDisponiveis}
                     ultimoSnapshot={ultimoSnapshot}
                     loading={histLoading}
-                    titulo="Histórico de Performance"
+                    titulo="Histórico de Performance Derivada"
                     modo="completo"
                   />
                 )}
@@ -1190,10 +1261,10 @@ export default function DadosPage() {
 
                 {contaSaude && (
                   <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-2 xl:grid-cols-4">
-                    <OverviewCard label="Investimento total" value={`R$ ${contaSaude.totalInvest.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} sub="período selecionado" icon={DollarSign} />
-                    <OverviewCard label="Total de leads" value={contaSaude.totalResultado.toLocaleString("pt-BR")} sub={`em ${contaSaude.total} campanha${contaSaude.total !== 1 ? "s" : ""}`} icon={Users} highlight />
-                    <OverviewCard label="CPL médio" value={contaSaude.cplMedio > 0 ? `R$ ${contaSaude.cplMedio.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"} sub="custo por resultado" icon={TrendingUp} />
-                    <OverviewCard label="ROAS médio" value={health.roasMedio > 0 ? `${health.roasMedio.toFixed(2)}×` : "—"} sub="retorno sobre invest." icon={ArrowUpRight} />
+                    <OverviewCard label="Investimento da janela" value={`R$ ${contaSaude.totalInvest.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} sub={`${getPeriodoLabel(periodo)} · última sincronização`} icon={DollarSign} />
+                    <OverviewCard label="Resultados da janela" value={contaSaude.totalResultado.toLocaleString("pt-BR")} sub={`em ${contaSaude.total} campanha${contaSaude.total !== 1 ? "s" : ""} ativa${contaSaude.total !== 1 ? "s" : ""}`} icon={Users} highlight />
+                    <OverviewCard label="CPL médio derivado" value={contaSaude.cplMedio > 0 ? `R$ ${contaSaude.cplMedio.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"} sub="custo por resultado na janela sincronizada" icon={TrendingUp} />
+                    <OverviewCard label="ROAS médio derivado" value={health.roasMedio > 0 ? `${health.roasMedio.toFixed(2)}×` : "—"} sub="retorno estimado sobre o investimento da janela" icon={ArrowUpRight} />
                   </div>
                 )}
 
