@@ -137,23 +137,23 @@ export default function BenchmarksPage() {
         label: "CPL da rede",
         value: insight.cplP50 ? fmtBRL(insight.cplP50) : "—",
         sub: insight.cplP25 && insight.cplP75 ? `p25 ${fmtBRL(insight.cplP25)} · p75 ${fmtBRL(insight.cplP75)}` : "rede ainda sem quartis suficientes",
-        status: compareCost(minhas?.cpl ?? null, insight.cplP25, insight.cplP75),
+        status: compareCost(minhas?.cpl ?? null, insight.cplP25, insight.cplP75) as Status,
         inverse: true,
       },
       {
         label: "ROAS da rede",
         value: insight.roasP50 ? fmtX(insight.roasP50) : "—",
         sub: insight.roasP25 && insight.roasP75 ? `top ${fmtX(insight.roasP25)} · base ${fmtX(insight.roasP75)}` : "rede ainda sem quartis suficientes",
-        status: compareRate(position?.suaRoas ?? null, insight.roasP25, insight.roasP75),
+        status: compareRate(position?.suaRoas ?? null, insight.roasP25, insight.roasP75) as Status,
         inverse: false,
       },
       {
         label: "CTR da rede",
         value: insight.ctrP50 ? fmtPct(insight.ctrP50) : "—",
         sub: minhas?.ctr ? `sua média ${fmtPct(minhas.ctr)}` : "sem CTR suficiente no workspace",
-        status: insight.ctrP50 && minhas?.ctr
+        status: (insight.ctrP50 && minhas?.ctr
           ? minhas.ctr >= insight.ctrP50 ? "winning" : "attention"
-          : "unknown",
+          : "unknown") as Status,
         inverse: false,
       },
     ];
@@ -167,10 +167,10 @@ export default function BenchmarksPage() {
       .map((c) => {
         const cpl = c.contatos > 0 ? c.gasto_total / c.contatos : null;
         const ctr = Number(c.ctr ?? 0) || null;
-        const cplStatus = compareCost(cpl, insight.cplP25, insight.cplP75);
-        const ctrStatus = insight.ctrP50 && ctr
+        const cplStatus = compareCost(cpl, insight.cplP25, insight.cplP75) as Status;
+        const ctrStatus = (insight.ctrP50 && ctr
           ? ctr >= insight.ctrP50 ? "winning" : "attention"
-          : "unknown";
+          : "unknown") as Status;
 
         return {
           ...c,
