@@ -577,9 +577,31 @@ export default function PulseCockpit() {
 
       if (cockpitRes.ok) {
         const data = await cockpitRes.json();
-        setDecisions(data.pending ?? []);
-        setHistory(data.history ?? []);
-        setMode(data.mode ?? "PAZ");
+        let pending = data.pending ?? [];
+        let historyData = data.history ?? [];
+        let nextMode = data.mode ?? "PAZ";
+
+        if (pending.length === 0 && campanhasAtivas.length > 0) {
+          const refreshRes = await fetch("/api/cockpit/decisions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ workspaceId: wsId, userId: user.id }),
+          });
+
+          if (refreshRes.ok) {
+            const refreshedCockpitRes = await fetch(`/api/cockpit/decisions?workspaceId=${wsId}`);
+            if (refreshedCockpitRes.ok) {
+              const refreshedData = await refreshedCockpitRes.json();
+              pending = refreshedData.pending ?? pending;
+              historyData = refreshedData.history ?? historyData;
+              nextMode = refreshedData.mode ?? nextMode;
+            }
+          }
+        }
+
+        setDecisions(pending);
+        setHistory(historyData);
+        setMode(nextMode);
       }
       if (settingsRes.ok) {
         const cfg = await settingsRes.json();

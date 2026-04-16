@@ -93,13 +93,13 @@ function ModalCliente({ cliente, onClose, onSave }: {
   if (salvando) return <SkeletonPage cols={3} />;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#0e0e12] shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="my-auto w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0e0e12] shadow-2xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2rem)]">
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-4 sm:px-6">
           <h2 className="text-base font-semibold text-white">{cliente ? "Editar cliente" : "Novo cliente"}</h2>
           <button onClick={onClose} className="text-white/30 hover:text-white transition-colors"><X size={16} /></button>
         </div>
-        <div className="px-6 py-5 space-y-4">
+        <div className="max-h-[calc(100vh-10rem)] space-y-4 overflow-y-auto px-4 py-4 sm:max-h-[calc(100vh-11rem)] sm:px-6 sm:py-5">
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">Nome do cliente *</label>
             <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Clínica São Paulo"
@@ -165,13 +165,13 @@ function ModalCliente({ cliente, onClose, onSave }: {
           </div>
           {erro && <p className="text-[12px] text-red-400 bg-red-500/5 border border-red-500/15 rounded-lg px-3 py-2">{erro}</p>}
         </div>
-        <div className="px-6 pb-5 flex items-center gap-2">
+        <div className="flex flex-col-reverse gap-2 border-t border-white/[0.06] px-4 py-4 sm:flex-row sm:items-center sm:px-6 sm:py-5">
           <button onClick={salvar} disabled={salvando}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-sm font-semibold transition-all">
             {salvando ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
             {salvando ? "Salvando..." : cliente ? "Salvar" : "Criar cliente"}
           </button>
-          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-white/[0.08] text-white/40 hover:text-white text-sm transition-all">Cancelar</button>
+          <button onClick={onClose} className="w-full rounded-xl border border-white/[0.08] px-4 py-2.5 text-sm text-white/40 transition-all hover:text-white sm:w-auto">Cancelar</button>
         </div>
       </div>
     </div>
