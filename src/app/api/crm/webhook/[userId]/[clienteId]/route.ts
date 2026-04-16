@@ -26,6 +26,7 @@ export async function POST(
   // Aceita JSON ou form-urlencoded
   let body: Record<string, string> = {};
   const contentType = req.headers.get("content-type") ?? "";
+  const redirectMode = req.headers.get("x-erizon-redirect-mode");
 
   try {
     if (contentType.includes("application/json")) {
@@ -127,6 +128,9 @@ export async function POST(
       .replace("{telefone}", telefone ?? "");
 
     const waUrl = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
+    if (redirectMode === "json") {
+      return NextResponse.json({ ok: true, redirectTo: waUrl });
+    }
     return NextResponse.redirect(waUrl, 302);
   }
 

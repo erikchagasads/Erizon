@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { DM_Mono, Sora } from "next/font/google";
 
 const sora = Sora({
@@ -52,7 +52,6 @@ export default function FormularioLanding({
   const [submitting, setSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [fieldError, setFieldError] = useState<"nome" | "telefone" | null>(null);
-  const formRef = useRef<HTMLFormElement | null>(null);
 
   const primeiroNome = useMemo(() => nome.trim().split(" ")[0] || "voce", [nome]);
 
@@ -64,7 +63,7 @@ export default function FormularioLanding({
     return `/api/crm/webhook/${userId}/${clienteId}?${params.toString()}`;
   }, [clienteId, enabled, userId]);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     const numero = whatsapp.replace(/\D/g, "");
     if (!nome.trim()) {
       event.preventDefault();
@@ -81,10 +80,41 @@ export default function FormularioLanding({
     setFieldError(null);
     setSubmitting(true);
     setShowSuccess(true);
+    try {
+      const response = await fetch(actionUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-erizon-redirect-mode": "json",
+        },
+        body: JSON.stringify({
+          nome,
+          telefone: numero,
+          plataforma: "lp_formulario",
+        }),
+      });
 
-    window.setTimeout(() => {
-      formRef.current?.submit();
-    }, 700);
+      const payload = (await response.json().catch(() => null)) as
+        | { redirectTo?: string; error?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Nao foi possivel continuar.");
+      }
+
+      if (payload?.redirectTo) {
+        window.setTimeout(() => {
+          window.location.href = payload.redirectTo!;
+        }, 700);
+        return;
+      }
+
+      throw new Error("Redirecionamento indisponivel para este cliente.");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Nao foi possivel abrir o WhatsApp.");
+      setSubmitting(false);
+      setShowSuccess(false);
+    }
   }
 
   const inputBase =
@@ -130,9 +160,6 @@ export default function FormularioLanding({
           ) : (
             <>
               <form
-                ref={formRef}
-                action={actionUrl}
-                method="POST"
                 onSubmit={handleSubmit}
                 className={showSuccess ? "hidden" : ""}
               >
@@ -171,9 +198,6 @@ export default function FormularioLanding({
                     className={`${inputBase} ${fieldError === "telefone" ? errorClass : ""}`}
                   />
                 </div>
-
-                <input type="hidden" name="platform" value="lp_formulario" />
-
                 <button
                   type="submit"
                   disabled={submitting}
