@@ -1,6 +1,6 @@
-// ── Cockpit Service ───────────────────────────────────────────────────────────
-// Orquestra geração de decisões, aprovação e execução via Meta Ads API.
-// v2: integra TrainingDataService para coleta automática de dados de fine-tuning.
+﻿// Cockpit Service
+// Orquestra geracao de decisoes, aprovacao e execucao via Meta Ads API.
+// v2: integra TrainingDataService para coleta automatica de dados de fine-tuning.
 
 import { SupabaseClient } from "@supabase/supabase-js";
 import { DecisionRepository } from "@/repositories/supabase/decision-repository";
@@ -31,18 +31,21 @@ export class CockpitService {
       this.repo.getConfig(workspaceId),
     ]);
 
-    const total_impact_brl = pending.reduce((s, d) => s + (d.estimated_impact_brl ?? 0), 0);
+    const totalImpactBrl = pending.reduce((sum, decision) => sum + (decision.estimated_impact_brl ?? 0), 0);
     const counts = pending.reduce(
-      (acc, d) => { acc[d.action_type] = (acc[d.action_type] ?? 0) + 1; return acc; },
+      (acc, decision) => {
+        acc[decision.action_type] = (acc[decision.action_type] ?? 0) + 1;
+        return acc;
+      },
       {} as Record<string, number>
     ) as CockpitState["counts"];
 
-    const hasCritical = pending.some(d => d.action_type === "pause" && d.confidence === "high");
+    const hasCritical = pending.some((decision) => decision.action_type === "pause" && decision.confidence === "high");
     let mode: CockpitMode = "PAZ";
     if (hasCritical) mode = "ALERTA";
     else if (pending.length > 0) mode = "DECISÃO";
 
-    return { mode, pending, config, total_impact_brl, counts };
+    return { mode, pending, config, total_impact_brl: totalImpactBrl, counts };
   }
 
   async approve(
@@ -52,7 +55,10 @@ export class CockpitService {
     overrideValue?: number
   ): Promise<{ decision: PendingDecision; executed: boolean; error?: string }> {
     const { data: row } = await this.db
-      .from("pending_decisions").select("*").eq("id", decisionId).single();
+      .from("pending_decisions")
+      .select("*")
+      .eq("id", decisionId)
+      .single();
 
     if (!row) throw new Error("Decisão não encontrada");
     if (row.status !== "pending") throw new Error(`Decisão já está com status: ${row.status}`);
@@ -60,7 +66,6 @@ export class CockpitService {
     const decision = await this.repo.updateStatus(decisionId, "approved", userId);
 
     if (!row.meta_payload || row.action_type === "alert") {
-      // Registra como exemplo de treino: decisão aprovada sem execução automática
       await this.training.recordFromDecision({
         workspaceId: row.workspace_id,
         decisionId,
@@ -76,7 +81,9 @@ export class CockpitService {
 
     try {
       const payload = { ...row.meta_payload };
-      if (overrideValue && payload.action === "UPDATE_BUDGET") payload.newBudget = overrideValue;
+      if (overrideValue && payload.action === "UPDATE_BUDGET") {
+        payload.newBudget = overrideValue;
+      }
 
       const metaRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/meta-actions`, {
         method: "POST",
@@ -93,7 +100,6 @@ export class CockpitService {
 
       await this.repo.updateStatus(decisionId, "executed", userId, result);
 
-      // ── Coleta exemplo de treino: aprovação + execução bem-sucedida ──────────
       await this.training.recordFromDecision({
         workspaceId: row.workspace_id,
         decisionId,
@@ -105,7 +111,6 @@ export class CockpitService {
       }).catch(() => {});
 
       return { decision: { ...decision, status: "executed" }, executed: true };
-
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : "Erro desconhecido";
       await this.repo.updateStatus(decisionId, "approved", userId, { error: errMsg });
@@ -115,23 +120,32 @@ export class CockpitService {
 
   async reject(decisionId: string, userId: string): Promise<PendingDecision> {
     const { data: row } = await this.db
-      .from("pending_decisions").select("workspace_id, action_type, rationale, campaign_id, meta_payload").eq("id", decisionId).maybeSingle();
+      .from("pending_decisions")
+      .select("workspace_id, action_type, rationale, campaign_id, meta_payload")
+      .eq("id", decisionId)
+      .maybeSingle();
 
     const result = await this.repo.updateStatus(decisionId, "rejected", userId);
 
-    // Rejeições também são dados de treino valiosos — o modelo aprende o que NÃO fazer
-    // Não registramos como exemplo positivo, mas podemos usar futuramente para DPO
     if (row) {
-      await this.db.from("training_rejections").insert({
-        workspace_id: row.workspace_id,
-        decision_id: decisionId,
-        action_type: row.action_type,
-        rationale: row.rationale,
-        campaign_id: row.campaign_id,
-        context: row.meta_payload,
-        rejected_by: userId,
-        created_at: new Date().toISOString(),
-      });
+      try {
+        const { error } = await this.db.from("training_rejections").insert({
+          workspace_id: row.workspace_id,
+          decision_id: decisionId,
+          action_type: row.action_type,
+          rationale: row.rationale,
+          campaign_id: row.campaign_id,
+          context: row.meta_payload,
+          rejected_by: userId,
+          created_at: new Date().toISOString(),
+        });
+
+        if (error) {
+          throw error;
+        }
+      } catch {
+        // Falha no log auxiliar nao deve bloquear a rejeicao principal.
+      }
     }
 
     return result;

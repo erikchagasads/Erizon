@@ -664,7 +664,8 @@ export default function PulseCockpit() {
       const res = await fetch(`/api/cockpit/decisions/${id}/reject`, {
         method: "POST",
       });
-      if (!res.ok) throw new Error("Erro ao ignorar");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "Erro ao ignorar");
       setDecisions(prev => prev.filter(d => d.id !== id));
       showToast("Decisão ignorada");
     } catch (err: unknown) {
