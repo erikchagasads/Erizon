@@ -26,9 +26,10 @@ async function getSupabase() {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    const { id } = await Promise.resolve(params);
     const supabase = await getSupabase();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -46,7 +47,7 @@ export async function POST(
     const cockpit = new CockpitService(supabase as unknown as SupabaseClient);
     try {
       const result = await cockpit.approve(
-        params.id,
+        id,
         user.id,
         settings?.access_token ?? "",
         overrideValue

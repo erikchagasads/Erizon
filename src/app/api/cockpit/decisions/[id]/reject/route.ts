@@ -26,16 +26,17 @@ async function getSupabase() {
 
 export async function POST(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    const { id } = await Promise.resolve(params);
     const supabase = await getSupabase();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const cockpit = new CockpitService(supabase as unknown as SupabaseClient);
     try {
-      const decision = await cockpit.reject(params.id, user.id);
+      const decision = await cockpit.reject(id, user.id);
       return NextResponse.json({ ok: true, decision });
     } catch (dbErr: unknown) {
       const msg = dbErr instanceof Error ? dbErr.message : "Erro ao rejeitar";

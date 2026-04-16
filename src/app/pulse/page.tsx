@@ -30,7 +30,7 @@ import { SkeletonPage } from "@/components/ops/AppShell";
 import { BudgetOptimizer } from "@/components/BudgetOptimizer";
 import { DailyDigest } from "@/components/DailyDigest";
 import {
-  processarCampanhas, resolverConfig,
+  filtrarAtivas, processarCampanhas, resolverConfig,
   type CampanhaRaw, type EngineResult, type UserEngineConfig,
 } from "@/app/lib/engine/pulseEngine";
 import { useSessionGuard } from "@/app/hooks/useSessionGuard";
@@ -557,13 +557,16 @@ export default function PulseCockpit() {
 
       const rawCampanhas = metricasRes.data;
       const userSettings = settingsRaw.data;
+      const campanhasAtivas = filtrarAtivas((rawCampanhas ?? []) as CampanhaRaw[]);
 
-      if (rawCampanhas?.length) {
+      if (campanhasAtivas.length) {
         const cfg = resolverConfig(userSettings as UserEngineConfig | null);
-        const eng = processarCampanhas(rawCampanhas as CampanhaRaw[], cfg);
+        const eng = processarCampanhas(campanhasAtivas, cfg);
         setEngine(eng);
+      } else {
+        setEngine(null);
       }
-      setHasData(!!rawCampanhas?.length);
+      setHasData(campanhasAtivas.length > 0);
 
       // Cockpit decisions + alertas preditivos
       const [cockpitRes, settingsRes, alertsRes] = await Promise.all([

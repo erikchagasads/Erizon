@@ -6,8 +6,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { CockpitService } from "@/services/cockpit-service";
+import type { PendingDecision } from "@/types/erizon-cockpit";
 import {
-  processarCampanhas, resolverConfig,
+  filtrarAtivas, processarCampanhas, resolverConfig,
   type CampanhaRaw, type UserEngineConfig,
 } from "@/app/lib/engine/pulseEngine";
 
@@ -52,7 +53,47 @@ export async function GET(req: NextRequest) {
       console.error("[cockpit/decisions GET] DB not ready:", dbErr);
     }
 
-    return NextResponse.json({ ...state, history });
+    const { data: wm } = await supabase
+      .from("workspace_members")
+      .select("user_id")
+      .eq("workspace_id", workspaceId)
+      .limit(1)
+      .maybeSingle();
+
+    const targetUserId = wm?.user_id ?? user.id;
+    const { data: rawCampanhas } = await supabase
+      .from("metricas_ads")
+      .select("id,status")
+      .eq("user_id", targetUserId);
+
+    const activeIds = new Set(
+      filtrarAtivas((rawCampanhas ?? []) as CampanhaRaw[]).map((campaign) => campaign.id)
+    );
+
+    const pendingSource = Array.isArray(state.pending) ? (state.pending as PendingDecision[]) : [];
+    const historySource = Array.isArray(history) ? (history as PendingDecision[]) : [];
+
+    const pending = pendingSource.filter((decision) =>
+      decision.campaign_id === null || activeIds.has(decision.campaign_id)
+    );
+
+    const filteredHistory = historySource.filter((decision) =>
+      decision.campaign_id === null || activeIds.has(decision.campaign_id)
+    );
+
+    const counts = pending.reduce((acc: Record<string, number>, decision) => {
+      acc[decision.action_type] = (acc[decision.action_type] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    const totalImpact = pending.reduce(
+      (sum: number, decision) => sum + (decision.estimated_impact_brl ?? 0),
+      0
+    );
+
+    const mode = pending.length > 0 ? state.mode : "PAZ";
+
+    return NextResponse.json({ ...state, pending, history: filteredHistory, counts, total_impact_brl: totalImpact, mode });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno";
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -89,8 +130,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, generated: 0, message: "Sem campanhas para analisar" });
     }
 
+    const campanhasAtivas = filtrarAtivas(rawCampanhas as CampanhaRaw[]);
     const config = resolverConfig(userSettings as UserEngineConfig | null);
-    const engine = processarCampanhas(rawCampanhas as CampanhaRaw[], config);
+    const engine = processarCampanhas(campanhasAtivas, config);
 
     try {
       // Garante que o workspace existe (upsert) antes de inserir pending_decisions (FK)
