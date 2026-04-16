@@ -53,25 +53,24 @@ export async function GET(req: NextRequest) {
       console.error("[cockpit/decisions GET] DB not ready:", dbErr);
     }
 
-    const { data: wm } = await supabase
-      .from("workspace_members")
-      .select("user_id")
-      .eq("workspace_id", workspaceId)
-      .limit(1)
-      .maybeSingle();
-
-    const targetUserId = wm?.user_id ?? user.id;
-    const { data: rawCampanhas } = await supabase
-      .from("metricas_ads")
-      .select("id,status")
-      .eq("user_id", targetUserId);
-
-    const activeIds = new Set(
-      filtrarAtivas((rawCampanhas ?? []) as CampanhaRaw[]).map((campaign) => campaign.id)
-    );
-
     const pendingSource = Array.isArray(state.pending) ? (state.pending as PendingDecision[]) : [];
     const historySource = Array.isArray(history) ? (history as PendingDecision[]) : [];
+    const referencedCampaignIds = Array.from(new Set(
+      [...pendingSource, ...historySource]
+        .map((decision) => decision.campaign_id)
+        .filter((campaignId): campaignId is string => typeof campaignId === "string" && campaignId.length > 0)
+    ));
+
+    const { data: referencedCampaigns } = referencedCampaignIds.length > 0
+      ? await supabase
+          .from("metricas_ads")
+          .select("id,status")
+          .in("id", referencedCampaignIds)
+      : { data: [] as Array<Pick<CampanhaRaw, "id" | "status">> };
+
+    const activeIds = new Set(
+      filtrarAtivas((referencedCampaigns ?? []) as CampanhaRaw[]).map((campaign) => campaign.id)
+    );
 
     const pending = pendingSource.filter((decision) =>
       decision.campaign_id === null || activeIds.has(decision.campaign_id)

@@ -118,7 +118,7 @@ export async function GET() {
     const previousEndStr = previousEnd.toISOString().slice(0, 10);
     const todayStr = today.toISOString().slice(0, 10);
 
-    const [currentMetricsRes, previousMetricsRes, pendingDecisionsRes, alertsRes, topCampaignRes, workspaceRes, benchmarkRes, strategic, rawCampaignsRes] =
+    const [currentMetricsRes, previousMetricsRes, pendingDecisionsRes, alertsRes, topCampaignRes, workspaceRes, benchmarkRes, strategic] =
       await Promise.all([
         supabase
           .from("campaign_snapshots_daily")
@@ -163,19 +163,29 @@ export async function GET() {
           .order("semana_inicio", { ascending: false })
           .limit(1),
         strategicIntelligenceService.getWorkspaceSnapshot({ workspaceId, userId: user.id }),
-        supabase
-          .from("metricas_ads")
-          .select("id, status")
-          .eq("user_id", user.id),
       ]);
 
     const currentMetrics = (currentMetricsRes.data ?? []) as SnapshotRow[];
     const previousMetrics = (previousMetricsRes.data ?? []) as SnapshotRow[];
+    const pendingDecisionSource = (pendingDecisionsRes.data ?? []) as PendingDecisionRow[];
+    const referencedCampaignIds = Array.from(new Set(
+      pendingDecisionSource
+        .map((decision) => decision.campaign_id)
+        .filter((campaignId): campaignId is string => typeof campaignId === "string" && campaignId.length > 0)
+    ));
+
+    const { data: referencedCampaigns } = referencedCampaignIds.length > 0
+      ? await supabase
+          .from("metricas_ads")
+          .select("id,status")
+          .in("id", referencedCampaignIds)
+      : { data: [] as Array<Pick<CampanhaRaw, "id" | "status">> };
+
     const activeIds = new Set(
-      filtrarAtivas((rawCampaignsRes.data ?? []) as CampanhaRaw[]).map((campaign) => campaign.id)
+      filtrarAtivas((referencedCampaigns ?? []) as CampanhaRaw[]).map((campaign) => campaign.id)
     );
 
-    const pendingDecisions = ((pendingDecisionsRes.data ?? []) as PendingDecisionRow[]).filter(
+    const pendingDecisions = pendingDecisionSource.filter(
       (decision) => decision.campaign_id == null || activeIds.has(decision.campaign_id)
     );
     const alertCampaigns = (alertsRes.data ?? []) as AlertRow[];
