@@ -20,9 +20,26 @@ export class CockpitService {
 
   async refreshDecisions(workspaceId: string, engine: EngineResult): Promise<void> {
     await this.repo.expireOld();
-    const existing = await this.repo.getExistingPairs(workspaceId);
-    const newDecisions = generateDecisions(workspaceId, engine, existing);
-    await this.repo.insertMany(newDecisions);
+    const currentPending = await this.repo.getPending(workspaceId);
+    const currentPairs = new Map(
+      currentPending.map((decision) => [`${decision.campaign_id ?? "null"}::${decision.action_type}`, decision.id])
+    );
+
+    const desiredDecisions = generateDecisions(workspaceId, engine, new Set());
+    const desiredPairs = new Set(
+      desiredDecisions.map((decision) => `${decision.campaign_id ?? "null"}::${decision.action_type}`)
+    );
+
+    const toExpire = currentPending
+      .filter((decision) => !desiredPairs.has(`${decision.campaign_id ?? "null"}::${decision.action_type}`))
+      .map((decision) => decision.id);
+
+    const toInsert = desiredDecisions.filter(
+      (decision) => !currentPairs.has(`${decision.campaign_id ?? "null"}::${decision.action_type}`)
+    );
+
+    await this.repo.expireByIds(toExpire);
+    await this.repo.insertMany(toInsert);
   }
 
   async getState(workspaceId: string): Promise<CockpitState> {

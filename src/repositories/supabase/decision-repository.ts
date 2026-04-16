@@ -17,6 +17,15 @@ export class DecisionRepository {
     return (data ?? []) as PendingDecision[];
   }
 
+  async expireByIds(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const { error } = await this.db
+      .from("pending_decisions")
+      .update({ status: "expired" })
+      .in("id", ids);
+    if (error) throw error;
+  }
+
   /** Busca histórico recente (aprovadas/rejeitadas/executadas) */
   async getHistory(workspaceId: string, limit = 10): Promise<PendingDecision[]> {
     const { data, error } = await this.db

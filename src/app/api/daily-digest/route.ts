@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { strategicIntelligenceService } from "@/services/strategic-intelligence-service";
+import { filtrarAtivas, type CampanhaRaw } from "@/app/lib/engine/pulseEngine";
 
 type SnapshotRow = {
   spend: number | null;
@@ -13,6 +14,7 @@ type SnapshotRow = {
 
 type PendingDecisionRow = {
   id: string;
+  campaign_id?: string | null;
   action_type: string;
   title: string;
   estimated_impact_brl: number | null;
@@ -116,7 +118,7 @@ export async function GET() {
     const previousEndStr = previousEnd.toISOString().slice(0, 10);
     const todayStr = today.toISOString().slice(0, 10);
 
-    const [currentMetricsRes, previousMetricsRes, pendingDecisionsRes, alertsRes, topCampaignRes, workspaceRes, benchmarkRes, strategic] =
+    const [currentMetricsRes, previousMetricsRes, pendingDecisionsRes, alertsRes, topCampaignRes, workspaceRes, benchmarkRes, strategic, rawCampaignsRes] =
       await Promise.all([
         supabase
           .from("campaign_snapshots_daily")
@@ -132,7 +134,7 @@ export async function GET() {
           .lte("snapshot_date", previousEndStr),
         supabase
           .from("pending_decisions")
-          .select("id, action_type, title, estimated_impact_brl, confidence")
+          .select("id, campaign_id, action_type, title, estimated_impact_brl, confidence")
           .eq("workspace_id", workspaceId)
           .eq("status", "pending")
           .order("created_at", { ascending: true }),
@@ -161,11 +163,21 @@ export async function GET() {
           .order("semana_inicio", { ascending: false })
           .limit(1),
         strategicIntelligenceService.getWorkspaceSnapshot({ workspaceId, userId: user.id }),
+        supabase
+          .from("metricas_ads")
+          .select("id, status")
+          .eq("user_id", user.id),
       ]);
 
     const currentMetrics = (currentMetricsRes.data ?? []) as SnapshotRow[];
     const previousMetrics = (previousMetricsRes.data ?? []) as SnapshotRow[];
-    const pendingDecisions = (pendingDecisionsRes.data ?? []) as PendingDecisionRow[];
+    const activeIds = new Set(
+      filtrarAtivas((rawCampaignsRes.data ?? []) as CampanhaRaw[]).map((campaign) => campaign.id)
+    );
+
+    const pendingDecisions = ((pendingDecisionsRes.data ?? []) as PendingDecisionRow[]).filter(
+      (decision) => decision.campaign_id == null || activeIds.has(decision.campaign_id)
+    );
     const alertCampaigns = (alertsRes.data ?? []) as AlertRow[];
     const topCampaign = topCampaignRes.data?.[0] ?? null;
 
