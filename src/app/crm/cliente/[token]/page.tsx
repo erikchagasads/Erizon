@@ -7,7 +7,7 @@ import {
   DollarSign, X, Tag, TrendingUp, Users, CheckCircle, XCircle, LogOut,
 } from "lucide-react";
 
-// ── Tipos ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Tipos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type Estagio = "novo" | "contato" | "proposta" | "fechado" | "perdido";
 
 interface Lead {
@@ -17,6 +17,7 @@ interface Lead {
   email?: string | null;
   estagio: Estagio;
   valor_fechado?: number | null;
+  margem_lucro?: number | null;  // porcentagem de lucro
   motivo_perda?: string | null;
   campanha_nome?: string | null;
   plataforma?: string | null;
@@ -29,7 +30,7 @@ interface ClienteInfo {
   nome: string;
 }
 
-// ── Config colunas ─────────────────────────────────────────────────────────────
+// â”€â”€ Config colunas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const COLUNAS: { id: Estagio; label: string; cor: string; bg: string; icon: string }[] = [
   { id: "novo",     label: "Novos",    cor: "#6366f1", bg: "rgba(99,102,241,0.06)",  icon: "⚡" },
   { id: "contato",  label: "Contato",  cor: "#f59e0b", bg: "rgba(245,158,11,0.06)",  icon: "📞" },
@@ -44,7 +45,7 @@ const fmtBRL = (v: number) =>
 const fmtData = (iso: string) =>
   new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 
-// ── Componente ─────────────────────────────────────────────────────────────────
+// â”€â”€ Componente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function CRMClientePage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
@@ -55,11 +56,15 @@ export default function CRMClientePage() {
   const [erro, setErro]         = useState("");
 
   const [leadAtivo, setLeadAtivo]       = useState<Lead | null>(null);
+  const [estagioSelecionado, setEstagioSelecionado] = useState<Estagio>("novo");
   const [valorFechado, setValorFechado] = useState("");
+  const [margemLucro, setMargemLucro]   = useState("6");  // padrão 6%
   const [motivoPerda, setMotivoPerda]   = useState("");
+  const [anotacao, setAnotacao]         = useState("");
   const [salvando, setSalvando]         = useState(false);
+  const [feedback, setFeedback]         = useState<{ tipo: "sucesso" | "erro"; msg: string } | null>(null);
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Fetch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const fetchLeads = useCallback(async () => {
     const res = await fetch(`/api/crm-cliente/${token}/leads`);
     if (res.status === 401) {
@@ -80,12 +85,18 @@ export default function CRMClientePage() {
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
-  // ── Mover lead ─────────────────────────────────────────────────────────────
-  async function moverLead(leadId: string, estagio: Estagio) {
+  // â”€â”€ Mover lead â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  async function salvarLead(leadId: string) {
     setSalvando(true);
-    const body: Record<string, unknown> = { estagio };
-    if (estagio === "fechado" && valorFechado) body.valor_fechado = Number(valorFechado);
-    if (estagio === "perdido" && motivoPerda)  body.motivo_perda  = motivoPerda;
+    const body: Record<string, unknown> = {
+      estagio: estagioSelecionado,
+      anotacao,
+    };
+    const hasValor = valorFechado.trim() !== "";
+    const hasMargem = margemLucro.trim() !== "";
+    body.valor_fechado = hasValor ? Number(valorFechado) : null;
+    body.margem_lucro = hasValor && hasMargem ? Number(margemLucro) : null;
+    body.motivo_perda = estagioSelecionado === "perdido" ? (motivoPerda.trim() || null) : null;
 
     const res = await fetch(`/api/crm-cliente/${token}/leads/${leadId}`, {
       method: "PATCH",
@@ -97,23 +108,34 @@ export default function CRMClientePage() {
       const atualizado = await res.json() as Lead;
       setLeads(prev => prev.map(l => l.id === leadId ? atualizado : l));
       setLeadAtivo(atualizado);
+      setEstagioSelecionado(atualizado.estagio);
+      setValorFechado(atualizado.valor_fechado ? atualizado.valor_fechado.toString() : "");
+      setMargemLucro(atualizado.margem_lucro ? atualizado.margem_lucro.toString() : "6");
+      setMotivoPerda(atualizado.motivo_perda ?? "");
+      setAnotacao(atualizado.anotacao ?? "");
+      setFeedback({ tipo: "sucesso", msg: "Lead atualizado com sucesso!" });
+      setTimeout(() => setFeedback(null), 3000);
+    } else {
+      setFeedback({ tipo: "erro", msg: "Erro ao salvar lead" });
+      setTimeout(() => setFeedback(null), 3000);
     }
     setSalvando(false);
   }
 
-  // ── Logout ────────────────────────────────────────────────────────────────
+  // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function handleLogout() {
     await fetch("/api/crm-cliente/auth/logout", { method: "POST" });
     router.replace(`/crm/cliente/login/${token}`);
   }
 
-  // ── Métricas rápidas ───────────────────────────────────────────────────────
+  // â”€â”€ Métricas rápidas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const totalFechado   = leads.filter(l => l.estagio === "fechado").reduce((a, l) => a + (l.valor_fechado ?? 0), 0);
+  const totalLucro     = leads.filter(l => l.estagio === "fechado").reduce((a, l) => a + ((l.valor_fechado ?? 0) * ((l.margem_lucro ?? 0) / 100)), 0);
   const taxaFechamento = leads.length > 0
     ? Math.round((leads.filter(l => l.estagio === "fechado").length / leads.length) * 100)
     : 0;
 
-  // ── Loading / Erro ─────────────────────────────────────────────────────────
+  // â”€â”€ Loading / Erro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (loading) {
     return (
       <div className="min-h-screen bg-[#080808] flex items-center justify-center">
@@ -167,6 +189,15 @@ export default function CRMClientePage() {
         </div>
       </div>
 
+      {/* Feedback Toast */}
+      {feedback && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg text-sm font-medium shadow-lg ${
+          feedback.tipo === "sucesso" ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
+        }`}>
+          {feedback.msg}
+        </div>
+      )}
+
       {/* Métricas */}
       <div className="px-6 py-4 border-b border-white/5">
         <div className="max-w-[1400px] mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -175,6 +206,7 @@ export default function CRMClientePage() {
             { icon: TrendingUp,  label: "Taxa de fechamento",value: taxaFechamento,        color: "#3b82f6", fmt: (v: number) => `${v}%` },
             { icon: CheckCircle, label: "Leads fechados",    value: leads.filter(l => l.estagio === "fechado").length, color: "#10b981", fmt: (v: number) => String(v) },
             { icon: DollarSign,  label: "Receita fechada",   value: totalFechado,          color: "#10b981", fmt: fmtBRL },
+            { icon: TrendingUp,  label: "Lucro real",         value: totalLucro,           color: "#22c55e", fmt: fmtBRL },
           ].map(m => (
             <div key={m.label} className="bg-white/[0.03] rounded-xl border border-white/5 px-4 py-3">
               <div className="flex items-center gap-2 mb-1">
@@ -230,8 +262,10 @@ export default function CRMClientePage() {
                           key={lead.id}
                           onClick={() => {
                             setLeadAtivo(lead);
+                            setEstagioSelecionado(lead.estagio);
                             setValorFechado(lead.valor_fechado?.toString() ?? "");
                             setMotivoPerda(lead.motivo_perda ?? "");
+                            setAnotacao(lead.anotacao ?? "");
                           }}
                           className="bg-white/[0.04] rounded-lg p-3 cursor-pointer hover:bg-white/[0.08] transition-colors border border-white/5"
                         >
@@ -251,10 +285,17 @@ export default function CRMClientePage() {
                             </div>
                           )}
 
-                          {lead.valor_fechado && (
-                            <div className="flex items-center gap-1 text-emerald-400 text-xs font-medium">
-                              <DollarSign size={10} />
-                              {fmtBRL(lead.valor_fechado)}
+                          {lead.valor_fechado && lead.valor_fechado > 0 && (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1 text-emerald-400 text-xs font-medium">
+                                <DollarSign size={10} />
+                                {fmtBRL(lead.valor_fechado)}
+                              </div>
+                              {lead.margem_lucro != null && (
+                                <div className="text-emerald-300 text-[10px]">
+                                  Lucro: {fmtBRL(lead.valor_fechado * (lead.margem_lucro / 100))} ({lead.margem_lucro}%)
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -270,7 +311,7 @@ export default function CRMClientePage() {
         </div>
       </div>
 
-      {/* ── Modal: Detalhe do Lead ─────────────────────────────────────────────── */}
+      {/* â”€â”€ Modal: Detalhe do Lead â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {leadAtivo && (
         <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-4">
           <div className="bg-[#111] border border-white/10 rounded-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
@@ -309,6 +350,20 @@ export default function CRMClientePage() {
                 </a>
               </div>
             )}
+            {leadAtivo.valor_fechado && leadAtivo.margem_lucro != null && (
+              <div className="mb-5 bg-white/[0.05] border border-emerald-500/15 rounded-xl px-4 py-3">
+                <p className="text-[11px] text-white/40 uppercase tracking-wider mb-2">Lucro real estimado</p>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-white font-semibold">{fmtBRL(leadAtivo.valor_fechado * (leadAtivo.margem_lucro / 100))}</p>
+                    <p className="text-xs text-white/40 mt-1">({leadAtivo.margem_lucro}% da receita)</p>
+                  </div>
+                  <div className="text-right text-xs text-white/30">
+                    <p>Receita: {fmtBRL(leadAtivo.valor_fechado)}</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Pipeline */}
             <div className="mb-5">
@@ -317,17 +372,17 @@ export default function CRMClientePage() {
                 {COLUNAS.map(col => (
                   <button
                     key={col.id}
-                    onClick={() => moverLead(leadAtivo.id, col.id)}
-                    disabled={leadAtivo.estagio === col.id || salvando}
+                    onClick={() => setEstagioSelecionado(col.id)}
+                    disabled={salvando}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                     style={{
-                      background: leadAtivo.estagio === col.id ? col.cor + "33" : "rgba(255,255,255,0.05)",
-                      color:      leadAtivo.estagio === col.id ? col.cor : "rgba(255,255,255,0.45)",
-                      border:    `1px solid ${leadAtivo.estagio === col.id ? col.cor + "55" : "transparent"}`,
-                      opacity:   salvando ? 0.5 : 1,
+                      background: estagioSelecionado === col.id ? col.cor + "33" : "rgba(255,255,255,0.05)",
+                      color: estagioSelecionado === col.id ? col.cor : "rgba(255,255,255,0.45)",
+                      border: `1px solid ${estagioSelecionado === col.id ? col.cor + "55" : "transparent"}`,
+                      opacity: salvando ? 0.5 : 1,
                     }}
                   >
-                    {leadAtivo.estagio === col.id && <ChevronRight size={10} />}
+                    {estagioSelecionado === col.id && <ChevronRight size={10} />}
                     {col.icon} {col.label}
                   </button>
                 ))}
@@ -335,55 +390,102 @@ export default function CRMClientePage() {
             </div>
 
             {/* Valor / Motivo */}
-            {leadAtivo.estagio !== "fechado" && leadAtivo.estagio !== "perdido" && (
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                <div>
-                  <p className="text-[11px] text-white/30 mb-1.5">Valor da venda (R$)</p>
-                  <input
-                    type="number"
-                    value={valorFechado}
-                    onChange={e => setValorFechado(e.target.value)}
-                    placeholder="Ex: 2500"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#6366f1]"
-                  />
-                  <p className="text-[10px] text-white/20 mt-1">Preencha antes de mover para Fechado</p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-white/30 mb-1.5">Motivo da perda</p>
-                  <input
-                    value={motivoPerda}
-                    onChange={e => setMotivoPerda(e.target.value)}
-                    placeholder="Ex: Preço alto"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#6366f1]"
-                  />
-                  <p className="text-[10px] text-white/20 mt-1">Preencha antes de mover para Perdido</p>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+              <div>
+                <p className="text-[11px] text-white/30 mb-1.5">Valor da venda (R$)</p>
+                <input
+                  type="number"
+                  value={valorFechado}
+                  onChange={e => setValorFechado(e.target.value)}
+                  placeholder="Ex: 2500"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#6366f1]"
+                />
+                <p className="text-[10px] text-white/20 mt-1">Use ao salvar como Fechado</p>
               </div>
-            )}
+              <div>
+                <p className="text-[11px] text-white/30 mb-1.5">Margem de lucro (%)</p>
+                <input
+                  type="number"
+                  value={margemLucro}
+                  onChange={e => setMargemLucro(e.target.value)}
+                  placeholder="Ex: 6"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#6366f1]"
+                />
+                <p className="text-[10px] text-white/20 mt-1">Use ao salvar como Fechado para calcular lucro real</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-white/30 mb-1.5">Motivo da perda</p>
+                <input
+                  value={motivoPerda}
+                  onChange={e => setMotivoPerda(e.target.value)}
+                  placeholder="Ex: Preço alto"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#6366f1]"
+                />
+                <p className="text-[10px] text-white/20 mt-1">Use ao salvar como Perdido</p>
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <p className="text-[11px] text-white/30 mb-1.5">Observação</p>
+              <textarea
+                value={anotacao}
+                onChange={e => setAnotacao(e.target.value)}
+                placeholder="Ex: Agendou visita, vai falar com a esposa, pediu retorno amanhã..."
+                rows={4}
+                className="w-full resize-none bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#6366f1]"
+              />
+              <p className="text-[10px] text-white/20 mt-1">
+                Esse histórico fica salvo no lead para a cliente acompanhar o andamento.
+              </p>
+            </div>
 
             {/* Badge fechado */}
-            {leadAtivo.estagio === "fechado" && leadAtivo.valor_fechado && (
-              <div className="mb-5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 flex items-center gap-3">
-                <CheckCircle size={18} className="text-emerald-400 shrink-0" />
-                <div>
-                  <p className="text-emerald-400 font-semibold">{fmtBRL(leadAtivo.valor_fechado)}</p>
-                  <p className="text-emerald-400/50 text-xs">Venda confirmada</p>
+            {estagioSelecionado === "fechado" && valorFechado && (
+              <div className="mb-5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <CheckCircle size={18} className="text-emerald-400 shrink-0" />
+                  <div>
+                    <p className="text-emerald-400 font-semibold">{fmtBRL(Number(valorFechado))}</p>
+                    <p className="text-emerald-400/50 text-xs">Venda pronta para salvar</p>
+                  </div>
                 </div>
+                {margemLucro.trim() !== "" && (
+                  <p className="text-emerald-200 text-xs mt-3">
+                    Lucro real estimado: {fmtBRL(Number(valorFechado) * (Number(margemLucro) / 100))} ({Number(margemLucro)}%)
+                  </p>
+                )}
               </div>
             )}
 
             {/* Badge perdido */}
-            {leadAtivo.estagio === "perdido" && (
+            {estagioSelecionado === "perdido" && (
               <div className="mb-5 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 flex items-center gap-3">
                 <XCircle size={18} className="text-red-400 shrink-0" />
                 <div>
-                  <p className="text-red-400 font-medium text-sm">Lead perdido</p>
-                  {leadAtivo.motivo_perda && (
-                    <p className="text-red-400/50 text-xs mt-0.5">{leadAtivo.motivo_perda}</p>
+                  <p className="text-red-400 font-medium text-sm">Lead marcado como perdido</p>
+                  {motivoPerda && (
+                    <p className="text-red-400/50 text-xs mt-0.5">{motivoPerda}</p>
                   )}
                 </div>
               </div>
             )}
+
+            <div className="mb-5 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <button
+                onClick={() => setLeadAtivo(null)}
+                className="px-4 py-2 rounded-lg border border-white/10 text-sm text-white/60 hover:bg-white/5 transition-colors"
+              >
+                Fechar
+              </button>
+              <button
+                onClick={() => salvarLead(leadAtivo.id)}
+                disabled={salvando}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#6366f1] text-white text-sm font-medium hover:bg-[#5558e6] transition-colors disabled:opacity-60"
+              >
+                {salvando ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                Salvar alterações
+              </button>
+            </div>
 
             {/* Origem */}
             {(leadAtivo.campanha_nome || leadAtivo.plataforma) && (

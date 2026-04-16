@@ -20,6 +20,7 @@ interface Lead {
   anotacao?: string | null;
   estagio: Estagio;
   valor_fechado?: number | null;
+  margem_lucro?: number | null;
   motivo_perda?: string | null;
   campanha_nome?: string | null;
   campanha_id?: string | null;
@@ -237,6 +238,7 @@ function ModalEditarLead({
   const [estagio, setEstagio]   = useState<Estagio>(lead.estagio);
   const [anotacao, setAnotacao] = useState(lead.anotacao ?? "");
   const [valor, setValor]       = useState(lead.valor_fechado ? String(lead.valor_fechado) : "");
+  const [margemLucro, setMargemLucro] = useState(lead.margem_lucro ? String(lead.margem_lucro) : "");
   const [motivo, setMotivo]     = useState(lead.motivo_perda ?? "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro]         = useState<string | null>(null);
@@ -251,6 +253,7 @@ function ModalEditarLead({
           estagio,
           anotacao: anotacao.trim() || null,
           valor_fechado: valor ? parseFloat(valor) : null,
+          margem_lucro: margemLucro ? parseFloat(margemLucro) : null,
           motivo_perda: motivo.trim() || null,
         }),
       });
@@ -294,6 +297,15 @@ function ModalEditarLead({
               <input value={valor} onChange={e => setValor(e.target.value)} type="number"
                 className="w-full px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40"
                 placeholder="Ex: 1500" />
+            </div>
+          )}
+          {/* Margem de lucro (se fechado) */}
+          {estagio === "fechado" && (
+            <div>
+              <label className="text-[10px] text-white/40 uppercase tracking-wider block mb-1">Margem de lucro (%)</label>
+              <input value={margemLucro} onChange={e => setMargemLucro(e.target.value)} type="number" step="0.01"
+                className="w-full px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40"
+                placeholder="Ex: 6" />
             </div>
           )}
           {/* Motivo perda (se perdido) */}
@@ -396,6 +408,7 @@ export default function CRMGestorPage() {
   });
 
   const totalFechado   = leadsFiltrados.filter(l => l.estagio === "fechado").reduce((a, l) => a + (l.valor_fechado ?? 0), 0);
+  const totalLucro     = leadsFiltrados.filter(l => l.estagio === "fechado").reduce((a, l) => a + ((l.valor_fechado ?? 0) * ((l.margem_lucro ?? 0) / 100)), 0);
   const taxaFechamento = leadsFiltrados.length > 0
     ? Math.round((leadsFiltrados.filter(l => l.estagio === "fechado").length / leadsFiltrados.length) * 100)
     : 0;
@@ -514,12 +527,13 @@ export default function CRMGestorPage() {
         <div className="flex-1 px-8 py-6 space-y-6 overflow-y-auto">
 
           {/* â”€â”€ KPIs â”€â”€ */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-5 gap-4">
             {[
               { icon: Users,      label: "Total de leads",   value: String(leadsFiltrados.length), sub: `${leadsSemana} esta semana`,     cor: "#6366f1" },
               { icon: Target,     label: "Taxa fechamento",  value: `${taxaFechamento}%`,          sub: `${leadsFiltrados.filter(l=>l.estagio==="fechado").length} fechados`,  cor: "#10b981" },
               { icon: DollarSign, label: "Receita fechada",  value: fmtBRL(totalFechado),          sub: analytics?.ticket_medio ? `ticket mÃ©dio ${fmtBRL(analytics.ticket_medio)}` : "registrado pelos clientes", cor: "#10b981" },
-              { icon: TrendingUp, label: "Em negociação",    value: String(leadsFiltrados.filter(l=>["contato","proposta"].includes(l.estagio)).length), sub: "contato + proposta", cor: "#f59e0b" },
+              { icon: TrendingUp, label: "Lucro total",      value: fmtBRL(totalLucro),            sub: "dos negócios fechados", cor: "#22c55e" },
+              { icon: BarChart2,  label: "Em negociação",    value: String(leadsFiltrados.filter(l=>["contato","proposta"].includes(l.estagio)).length), sub: "contato + proposta", cor: "#f59e0b" },
             ].map(m => (
               <div key={m.label} className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
@@ -605,7 +619,14 @@ export default function CRMGestorPage() {
                               <div className="w-1.5 h-1.5 rounded-full" style={{ background: PLATAFORMA_COR[l.plataforma] ?? "#6b7280" }} />
                             )}
                             {l.estagio === "fechado" && l.valor_fechado && (
-                              <span className="text-[11px] font-semibold text-emerald-400">{fmtBRL(l.valor_fechado)}</span>
+                              <div className="flex flex-col items-end">
+                                <span className="text-[11px] font-semibold text-emerald-400">{fmtBRL(l.valor_fechado)}</span>
+                                {l.margem_lucro != null && (
+                                  <span className="text-[9px] text-emerald-300">
+                                    Lucro: {fmtBRL(l.valor_fechado * (l.margem_lucro / 100))} ({l.margem_lucro}%)
+                                  </span>
+                                )}
+                              </div>
                             )}
                             <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
                               style={{ background: (est?.cor ?? "#6b7280") + "15", color: est?.cor ?? "#6b7280" }}>

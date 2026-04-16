@@ -27,6 +27,7 @@ export async function PATCH(
   const body = await req.json() as {
     estagio?: string;
     valor_fechado?: number;
+    margem_lucro?: number;
     motivo_perda?: string;
     anotacao?: string;
   };
@@ -38,6 +39,7 @@ export async function PATCH(
   const update: Record<string, unknown> = {};
   if (body.estagio)                      update.estagio       = body.estagio;
   if (body.valor_fechado !== undefined)  update.valor_fechado = body.valor_fechado;
+  if (body.margem_lucro !== undefined)   update.margem_lucro  = body.margem_lucro;
   if (body.motivo_perda)                 update.motivo_perda  = body.motivo_perda;
   if (body.anotacao !== undefined)       update.anotacao      = body.anotacao;
 
@@ -56,5 +58,12 @@ export async function PATCH(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data)  return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 });
 
-  return NextResponse.json(data);
+  // Garante que valor_fechado seja retornado como número (Supabase retorna como string para numeric)
+  const leadFormatado = {
+    ...data,
+    valor_fechado: data.valor_fechado ? Number(data.valor_fechado) : null,
+    margem_lucro: data.margem_lucro !== null ? Number(data.margem_lucro) : null,
+  };
+
+  return NextResponse.json(leadFormatado);
 }

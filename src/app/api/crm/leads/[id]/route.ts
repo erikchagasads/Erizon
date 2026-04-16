@@ -27,6 +27,12 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json() as Record<string, unknown>;
 
+  // Compatibilidade com nome antigo de campo
+  if (body.lucro_porcentagem !== undefined) {
+    body.margem_lucro = body.lucro_porcentagem;
+    delete body.lucro_porcentagem;
+  }
+
   // Remove campos que não podem ser alterados diretamente
   delete body.id;
   delete body.user_id;

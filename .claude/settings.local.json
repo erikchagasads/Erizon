@@ -113,7 +113,8 @@
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
       "Bash(git push:*)",
-      "Bash(grep -r \"RESEND_API_KEY\\\\|resend\" c:/Users/isado/Documents/erizon/.env*)"
+      "Bash(grep -r \"RESEND_API_KEY\\\\|resend\" c:/Users/isado/Documents/erizon/.env*)",
+      "Bash(curl -s http://localhost:3000)"
     ]
   }
 }

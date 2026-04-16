@@ -118,8 +118,8 @@ export async function POST(
     const mensagemBase = whatsapp_mensagem
       ? whatsapp_mensagem
       : referenciaAnuncio
-        ? `OlÃ¡! Vi o anÃºncio "${referenciaAnuncio}" e tenho interesse. Pode me passar mais informaÃ§Ãµes?`
-        : "OlÃ¡! Tenho interesse e gostaria de mais informaÃ§Ãµes.";
+        ? `Ola! Vi seu anuncio sobre "${referenciaAnuncio}" e tenho interesse. Pode me passar mais informacoes?`
+        : "Ola! Tenho interesse e gostaria de mais informacoes.";
 
     // Substitui variÃ¡veis dinÃ¢micas na mensagem
     const mensagem = mensagemBase

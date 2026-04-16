@@ -23,11 +23,18 @@ export async function GET(
 
   const { data: leads, error } = await supabaseAdmin
     .from("crm_leads")
-    .select("id, nome, telefone, email, estagio, valor_fechado, motivo_perda, campanha_nome, plataforma, anotacao, created_at, updated_at")
+    .select("id, nome, telefone, email, estagio, valor_fechado, margem_lucro, motivo_perda, campanha_nome, plataforma, anotacao, created_at, updated_at")
     .eq("cliente_id", sessao.clienteId)
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Garante que valor_fechado seja retornado como número (Supabase retorna como string para numeric)
+  const leadsFormatados = (leads ?? []).map(lead => ({
+    ...lead,
+    valor_fechado: lead.valor_fechado ? Number(lead.valor_fechado) : null,
+    margem_lucro: lead.margem_lucro !== null ? Number(lead.margem_lucro) : null,
+  }));
 
   const { data: cliente } = await supabaseAdmin
     .from("clientes")
@@ -40,6 +47,6 @@ export async function GET(
       id: sessao.clienteId,
       nome: cliente?.nome_cliente ?? cliente?.nome ?? "Cliente",
     },
-    leads: leads ?? [],
+    leads: leadsFormatados,
   });
 }
