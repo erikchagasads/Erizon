@@ -71,6 +71,8 @@ export async function GET() {
           meta_account_id:     c.meta_account_id,
           ig_user_id:          c.ig_user_id ?? null,
           campanha_keywords:    c.campanha_keywords ?? null,
+          whatsapp:           c.whatsapp ?? null,
+          whatsapp_mensagem:  c.whatsapp_mensagem ?? null,
           ticket_medio:        c.ticket_medio,
           ativo:               c.ativo ?? true,
           ultima_atualizacao:  c.ultima_atualizacao,
