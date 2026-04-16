@@ -127,23 +127,15 @@ export default function FormularioLanding({
               Abra esta pagina no formato
               <div className="mt-2 break-all text-[#F0EFF8]">/lp/formulario/USER_ID/CLIENTE_ID</div>
             </div>
-          ) : showSuccess ? (
-            <div className="flex flex-col items-center gap-3 py-3 text-center">
-              <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full border border-[rgba(29,158,117,0.4)] bg-[rgba(29,158,117,0.15)]">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2.5">
-                  <path d="M20 6L9 17l-5-5" />
-                </svg>
-              </div>
-              <div className="text-center text-[18px] font-semibold text-[#E8E7F0]">
-                Perfeito, {primeiroNome}!
-              </div>
-              <div className={`text-center text-[13px] text-[#4A4960] ${dmMono.className}`}>
-                Redirecionando para o WhatsApp...
-              </div>
-            </div>
           ) : (
             <>
-              <form ref={formRef} action={actionUrl} method="POST" onSubmit={handleSubmit}>
+              <form
+                ref={formRef}
+                action={actionUrl}
+                method="POST"
+                onSubmit={handleSubmit}
+                className={showSuccess ? "hidden" : ""}
+              >
                 <div className="mb-5">
                   <div className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#4A4960] ${dmMono.className}`}>
                     Nome
@@ -195,27 +187,43 @@ export default function FormularioLanding({
                 </button>
               </form>
 
-              <div className="mt-5 flex items-center justify-center gap-5">
-                <TrustItem label="Dados protegidos">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3 shrink-0">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                  </svg>
-                </TrustItem>
-                <div className="h-3 w-px bg-white/5" />
-                <TrustItem label="Resposta rapida">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3 shrink-0">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 6v6l4 2" />
-                  </svg>
-                </TrustItem>
-                <div className="h-3 w-px bg-white/5" />
-                <TrustItem label="Sem spam">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3 shrink-0">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                    <path d="M22 4L12 14.01l-3-3" />
-                  </svg>
-                </TrustItem>
-              </div>
+              {showSuccess ? (
+                <div className="flex flex-col items-center gap-3 py-3 text-center">
+                  <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full border border-[rgba(29,158,117,0.4)] bg-[rgba(29,158,117,0.15)]">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2.5">
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                  </div>
+                  <div className="text-center text-[18px] font-semibold text-[#E8E7F0]">
+                    Perfeito, {primeiroNome}!
+                  </div>
+                  <div className={`text-center text-[13px] text-[#4A4960] ${dmMono.className}`}>
+                    Redirecionando para o WhatsApp...
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5 flex items-center justify-center gap-5">
+                  <TrustItem label="Dados protegidos">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3 shrink-0">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                  </TrustItem>
+                  <div className="h-3 w-px bg-white/5" />
+                  <TrustItem label="Resposta rapida">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3 shrink-0">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 6v6l4 2" />
+                    </svg>
+                  </TrustItem>
+                  <div className="h-3 w-px bg-white/5" />
+                  <TrustItem label="Sem spam">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3 shrink-0">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <path d="M22 4L12 14.01l-3-3" />
+                    </svg>
+                  </TrustItem>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -230,4 +238,3 @@ export default function FormularioLanding({
     </main>
   );
 }
-
