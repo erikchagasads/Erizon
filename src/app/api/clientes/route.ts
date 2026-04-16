@@ -73,6 +73,7 @@ export async function GET() {
           campanha_keywords:    c.campanha_keywords ?? null,
           whatsapp:           c.whatsapp ?? null,
           whatsapp_mensagem:  c.whatsapp_mensagem ?? null,
+          facebook_pixel_id:  c.facebook_pixel_id ?? null,
           ticket_medio:        c.ticket_medio,
           ativo:               c.ativo ?? true,
           ultima_atualizacao:  c.ultima_atualizacao,
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
 
     const body = await req.json();
-    const { nome, meta_account_id, ticket_medio, cor, ig_user_id, campanha_keywords, whatsapp, whatsapp_mensagem } = body;
+    const { nome, meta_account_id, ticket_medio, cor, ig_user_id, campanha_keywords, whatsapp, whatsapp_mensagem, facebook_pixel_id } = body;
 
     if (!nome?.trim()) {
       return NextResponse.json({ error: "Nome é obrigatório." }, { status: 400 });
@@ -120,6 +121,7 @@ export async function POST(req: NextRequest) {
         ticket_medio:        ticket_medio         || null,
         whatsapp:            whatsapp             || null,
         whatsapp_mensagem:   whatsapp_mensagem    || null,
+        facebook_pixel_id:   facebook_pixel_id    || null,
         cor:             cor             ?? "#6366f1",
         ativo:           true,
       })
@@ -150,7 +152,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
 
     // Campos permitidos para atualização via PATCH
-    const camposPermitidos = ["meta_account_id", "ticket_medio", "cor", "nome", "nome_cliente", "ig_user_id", "campanha_keywords", "whatsapp", "whatsapp_mensagem"];
+    const camposPermitidos = ["meta_account_id", "ticket_medio", "cor", "nome", "nome_cliente", "ig_user_id", "campanha_keywords", "whatsapp", "whatsapp_mensagem", "facebook_pixel_id"];
     const updates: Record<string, unknown> = {};
     for (const campo of camposPermitidos) {
       if (campo in body) updates[campo] = body[campo];

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
@@ -33,6 +33,7 @@ interface Cliente {
   total_impressoes?: number;
   whatsapp?: string | null;
   whatsapp_mensagem?: string | null;
+  facebook_pixel_id?: string | null;
 }
 
 interface CampanhaAtiva {
@@ -58,7 +59,7 @@ const fmtBRL0 = (v: number) =>
 
 const CORES = ["#6366f1","#8b5cf6","#ec4899","#f59e0b","#10b981","#3b82f6","#ef4444","#14b8a6"];
 
-// ─── Modal Cadastro/Edição ────────────────────────────────────────────────────
+// â”€â”€â”€ Modal Cadastro/EdiÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ModalCliente({ cliente, onClose, onSave }: {
   cliente?: Cliente | null; onClose: () => void; onSave: () => void;
 }) {
@@ -72,14 +73,15 @@ function ModalCliente({ cliente, onClose, onSave }: {
   const [cor, setCor]           = useState(cliente?.cor ?? CORES[0]);
   const [whatsapp, setWhatsapp] = useState(cliente?.whatsapp ?? "");
   const [waMensagem, setWaMensagem] = useState(cliente?.whatsapp_mensagem ?? "");
+  const [facebookPixelId, setFacebookPixelId] = useState(cliente?.facebook_pixel_id ?? "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro]         = useState<string | null>(null);
 
   async function salvar() {
-    if (!nome.trim()) { setErro("Nome é obrigatório."); return; }
+    if (!nome.trim()) { setErro("Nome Ã© obrigatÃ³rio."); return; }
     setSalvando(true); setErro(null);
     try {
-      const body = { nome: nome.trim(), meta_account_id: metaId.trim() || null, ig_user_id: igUserId.trim() || null, campanha_keywords: keywords.trim() || null, ticket_medio: ticket ? parseFloat(ticket) : null, cor, whatsapp: whatsapp.trim() || null, whatsapp_mensagem: waMensagem.trim() || null };
+      const body = { nome: nome.trim(), meta_account_id: metaId.trim() || null, ig_user_id: igUserId.trim() || null, campanha_keywords: keywords.trim() || null, ticket_medio: ticket ? parseFloat(ticket) : null, cor, whatsapp: whatsapp.trim() || null, whatsapp_mensagem: waMensagem.trim() || null, facebook_pixel_id: facebookPixelId.trim() || null };
       const res = cliente
         ? await fetch(`/api/clientes?id=${cliente.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         : await fetch("/api/clientes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -102,57 +104,66 @@ function ModalCliente({ cliente, onClose, onSave }: {
         <div className="max-h-[calc(100vh-10rem)] space-y-4 overflow-y-auto px-4 py-4 sm:max-h-[calc(100vh-11rem)] sm:px-6 sm:py-5">
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">Nome do cliente *</label>
-            <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Clínica São Paulo"
+            <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: ClÃ­nica SÃ£o Paulo"
               className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 transition-all" />
           </div>
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
-              Meta Account ID <span className="text-white/20 normal-case">(vínculo automático)</span>
+              Meta Account ID <span className="text-white/20 normal-case">(vÃ­nculo automÃ¡tico)</span>
             </label>
             <input value={metaId} onChange={e => setMetaId(e.target.value)} placeholder="Ex: act_123456789"
               className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 transition-all font-mono" />
-            <p className="text-[10px] text-white/25 mt-1">Meta Ads Manager → Configurações da conta → ID da conta</p>
+            <p className="text-[10px] text-white/25 mt-1">Meta Ads Manager â†’ ConfiguraÃ§Ãµes da conta â†’ ID da conta</p>
           </div>
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
-              Instagram Business ID <span className="text-white/20 normal-case">(Insights orgânicos)</span>
+              Instagram Business ID <span className="text-white/20 normal-case">(Insights orgÃ¢nicos)</span>
             </label>
             <input value={igUserId} onChange={e => setIgUserId(e.target.value)} placeholder="Ex: 17841400000000000"
               className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-pink-500/40 transition-all font-mono" />
-            <p className="text-[10px] text-white/25 mt-1">Meta Business Suite → Configurações → Contas do Instagram → ID da conta</p>
+            <p className="text-[10px] text-white/25 mt-1">Meta Business Suite â†’ ConfiguraÃ§Ãµes â†’ Contas do Instagram â†’ ID da conta</p>
           </div>
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
-              Keywords de campanha <span className="text-white/20 normal-case">(vínculo automático)</span>
+              Keywords de campanha <span className="text-white/20 normal-case">(vÃ­nculo automÃ¡tico)</span>
             </label>
             <input value={keywords} onChange={e => setKeywords(e.target.value)} placeholder="Ex: clinica, saopaulo, estetica"
               className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40 transition-all" />
-            <p className="text-[10px] text-white/25 mt-1">Palavras separadas por vírgula. Campanhas com esses termos no nome serão vinculadas automaticamente no próximo sync.</p>
+            <p className="text-[10px] text-white/25 mt-1">Palavras separadas por vÃ­rgula. Campanhas com esses termos no nome serÃ£o vinculadas automaticamente no prÃ³ximo sync.</p>
           </div>
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
-              Ticket médio (R$) <span className="text-white/20 normal-case">(cálculo de ROAS)</span>
+              Ticket mÃ©dio (R$) <span className="text-white/20 normal-case">(cÃ¡lculo de ROAS)</span>
             </label>
             <input value={ticket} onChange={e => setTicket(e.target.value)} placeholder="Ex: 297" type="number"
               className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 transition-all" />
           </div>
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
-              WhatsApp do cliente <span className="text-white/20 normal-case">(redirect automático do lead)</span>
+              WhatsApp do cliente <span className="text-white/20 normal-case">(redirect automÃ¡tico do lead)</span>
             </label>
             <input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="Ex: 11999990000"
               className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40 transition-all font-mono" />
-            <p className="text-[10px] text-white/25 mt-1">Só números, com DDD. Ex: 11999990000. O lead será redirecionado para este número após preencher o formulário.</p>
+            <p className="text-[10px] text-white/25 mt-1">SÃ³ nÃºmeros, com DDD. Ex: 11999990000. O lead serÃ¡ redirecionado para este nÃºmero apÃ³s preencher o formulÃ¡rio.</p>
           </div>
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
               Mensagem WhatsApp <span className="text-white/20 normal-case">(opcional)</span>
             </label>
             <input value={waMensagem} onChange={e => setWaMensagem(e.target.value)}
-              placeholder="Ex: Olá {nome}! Vi seu interesse em {campanha}."
+              placeholder="Ex: OlÃ¡ {nome}! Vi seu interesse em {campanha}."
               className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40 transition-all" />
-            <p className="text-[10px] text-white/25 mt-1">Variáveis disponíveis: {"{nome}"}, {"{campanha}"}, {"{telefone}"}. Deixe vazio para usar a mensagem padrão.</p>
+            <p className="text-[10px] text-white/25 mt-1">VariÃ¡veis disponÃ­veis: {"{nome}"}, {"{campanha}"}, {"{telefone}"}. Deixe vazio para usar a mensagem padrÃ£o.</p>
           </div>
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
+              Pixel do Facebook <span className="text-white/20 normal-case">(Meta Pixel ID)</span>
+            </label>
+            <input value={facebookPixelId} onChange={e => setFacebookPixelId(e.target.value)} placeholder="Ex: 953096617304991"
+              className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-sky-500/40 transition-all font-mono" />
+            <p className="text-[10px] text-white/25 mt-1">Use apenas o ID numÃ©rico. A landing do cliente dispara PageView e Lead automaticamente.</p>
+          </div>
+
 
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-2">Cor</label>
@@ -178,7 +189,7 @@ function ModalCliente({ cliente, onClose, onSave }: {
   );
 }
 
-// ─── Painel de Campanhas ──────────────────────────────────────────────────────
+// â”€â”€â”€ Painel de Campanhas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () => void }) {
   const [vinculadas, setVinculadas]     = useState<CampanhaItem[]>([]);
   const [todas, setTodas]               = useState<CampanhaItem[]>([]);
@@ -210,7 +221,7 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
     const json = await res.json();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const camps: CampanhaItem[] = (json.relatorio?.campanhas ?? []).map((c: any) => ({
-      id: String(c.id ?? ""), nome: String(c.nome ?? "—"),
+      id: String(c.id ?? ""), nome: String(c.nome ?? "â€”"),
       status: String(c.status ?? ""), gasto: Number(c.gasto ?? 0),
       leads: Number(c.leads ?? 0), cliente_id: cliente.id,
     }));
@@ -227,7 +238,7 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
     const json = await res.json();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const camps: CampanhaItem[] = (json.relatorio?.campanhas ?? []).map((c: any) => ({
-      id: String(c.id ?? ""), nome: String(c.nome ?? "—"),
+      id: String(c.id ?? ""), nome: String(c.nome ?? "â€”"),
       status: String(c.status ?? ""), gasto: Number(c.gasto ?? 0),
       leads: Number(c.leads ?? 0), cliente_id: c.cliente_id ?? null,
     }));
@@ -320,7 +331,7 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
                 <p className={`text-[12px] px-3 py-2 rounded-lg border ${
                   msg.tipo === "ok" ? "text-emerald-400 bg-emerald-500/5 border-emerald-500/15" : "text-red-400 bg-red-500/5 border-red-500/15"
                 }`}>
-                  {msg.tipo === "ok" ? "✅ " : "⚠️ "}{msg.texto}
+                  {msg.tipo === "ok" ? "âœ… " : "âš ï¸ "}{msg.texto}
                 </p>
               )}
             </div>
@@ -329,7 +340,7 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
           {/* Vinculadas */}
           <div className="px-6 pt-5 pb-3">
             <p className="text-[11px] text-white/30 uppercase tracking-wider font-medium mb-2">
-              Vinculadas ({loadingV ? "…" : vinculadas.length})
+              Vinculadas ({loadingV ? "â€¦" : vinculadas.length})
             </p>
             {loadingV ? (
               <div className="flex items-center justify-center py-4"><Loader2 size={14} className="animate-spin text-white/20" /></div>
@@ -362,7 +373,7 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
 
           {/* Buscar e vincular */}
           <div className="px-6 pt-4 pb-5 space-y-3">
-            {/* Header da seção com ações em massa */}
+            {/* Header da seÃ§Ã£o com aÃ§Ãµes em massa */}
             <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] text-white/30 uppercase tracking-wider font-medium">
                 Campanhas sem cliente
@@ -414,8 +425,8 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
                 {buscaInput.trim()
                   ? "Nenhuma campanha encontrada para essa busca."
                   : livres.length === 0
-                    ? "Todas as campanhas já estão vinculadas a um cliente. 🎉"
-                    : "Nenhuma campanha disponível."}
+                    ? "Todas as campanhas jÃ¡ estÃ£o vinculadas a um cliente. ðŸŽ‰"
+                    : "Nenhuma campanha disponÃ­vel."}
               </p>
             ) : (
               <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
@@ -464,11 +475,11 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
   );
 }
 
-// ─── Modal Importar CSV ───────────────────────────────────────────────────────
+// â”€â”€â”€ Modal Importar CSV â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const TEMPLATE_CSV = `nome,meta_account_id,ticket_medio,cor
-Clínica São Paulo,act_123456789,297,#6366f1
+ClÃ­nica SÃ£o Paulo,act_123456789,297,#6366f1
 Ecom Moda Feminina,act_987654321,150,#ec4899
-Consultório Odonto,,450,#10b981`;
+ConsultÃ³rio Odonto,,450,#10b981`;
 
 const CORES_DEFAULT = ["#6366f1","#8b5cf6","#ec4899","#f59e0b","#10b981","#3b82f6","#ef4444","#14b8a6"];
 
@@ -495,8 +506,8 @@ function parseCSV(texto: string): LinhaCSV[] {
     const ticket   = ticketRaw ? parseFloat(ticketRaw) : null;
     const cor      = /^#[0-9a-fA-F]{6}$/.test(corRaw) ? corRaw : CORES_DEFAULT[i % CORES_DEFAULT.length];
     let erro: string | null = null;
-    if (!nome.trim()) erro = "Nome obrigatório";
-    else if (ticketRaw && isNaN(Number(ticketRaw))) erro = "Ticket deve ser número";
+    if (!nome.trim()) erro = "Nome obrigatÃ³rio";
+    else if (ticketRaw && isNaN(Number(ticketRaw))) erro = "Ticket deve ser nÃºmero";
     return { linha: i + 2, nome, meta_account_id: metaId, ticket_medio: ticket, cor, erro };
   });
 }
@@ -589,7 +600,7 @@ function ModalImportCSV({ onClose, onSave }: { onClose: () => void; onSave: () =
               <p className="text-[11px] text-white/35 leading-relaxed">
                 Preencha o arquivo com seus clientes. Colunas: <span className="font-mono text-white/50">nome, meta_account_id, ticket_medio, cor</span>
               </p>
-              <p className="text-[10px] text-white/25 mt-1">Apenas &quot;nome&quot; é obrigatório. meta_account_id e ticket_medio são opcionais.</p>
+              <p className="text-[10px] text-white/25 mt-1">Apenas &quot;nome&quot; Ã© obrigatÃ³rio. meta_account_id e ticket_medio sÃ£o opcionais.</p>
             </div>
             <button onClick={downloadTemplate}
               className="flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 text-[12px] font-semibold hover:bg-emerald-500/15 transition-all shrink-0">
@@ -611,7 +622,7 @@ function ModalImportCSV({ onClose, onSave }: { onClose: () => void; onSave: () =
                 onChange={e => { const f = e.target.files?.[0]; if (f) processarArquivo(f); }} />
               <Upload size={24} className="text-white/20 mx-auto mb-3" />
               <p className="text-[13px] text-white/50 font-medium">Arraste o CSV aqui ou clique para selecionar</p>
-              <p className="text-[11px] text-white/25 mt-1">Arquivos .csv ou .txt · UTF-8</p>
+              <p className="text-[11px] text-white/25 mt-1">Arquivos .csv ou .txt Â· UTF-8</p>
             </div>
           )}
 
@@ -620,10 +631,10 @@ function ModalImportCSV({ onClose, onSave }: { onClose: () => void; onSave: () =
             <div>
               <div className="flex items-center justify-between mb-3">
                 <p className="text-[11px] text-white/30 uppercase tracking-wider font-medium">
-                  Preview — {linhas.length} linha{linhas.length > 1 ? "s" : ""}
+                  Preview â€” {linhas.length} linha{linhas.length > 1 ? "s" : ""}
                 </p>
                 <div className="flex items-center gap-3 text-[11px]">
-                  <span className="text-emerald-400">{validas.length} válidas</span>
+                  <span className="text-emerald-400">{validas.length} vÃ¡lidas</span>
                   {invalidas.length > 0 && <span className="text-red-400">{invalidas.length} com erro</span>}
                 </div>
               </div>
@@ -646,7 +657,7 @@ function ModalImportCSV({ onClose, onSave }: { onClose: () => void; onSave: () =
             </div>
           )}
 
-          {/* Resultado da importação */}
+          {/* Resultado da importaÃ§Ã£o */}
           {resultado && (
             <div className="space-y-3">
               <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
@@ -656,13 +667,13 @@ function ModalImportCSV({ onClose, onSave }: { onClose: () => void; onSave: () =
                     {resultado.ok} cliente{resultado.ok !== 1 ? "s" : ""} importado{resultado.ok !== 1 ? "s" : ""} com sucesso
                   </p>
                 </div>
-                <p className="text-[11px] text-white/30 ml-6">Já aparecem na lista de clientes.</p>
+                <p className="text-[11px] text-white/30 ml-6">JÃ¡ aparecem na lista de clientes.</p>
               </div>
               {resultado.erros.length > 0 && (
                 <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
                   <p className="text-[12px] font-semibold text-red-400 mb-2">{resultado.erros.length} erro{resultado.erros.length > 1 ? "s" : ""}:</p>
                   <ul className="space-y-1">
-                    {resultado.erros.map((e, i) => <li key={i} className="text-[11px] text-red-300/70">• {e}</li>)}
+                    {resultado.erros.map((e, i) => <li key={i} className="text-[11px] text-red-300/70">â€¢ {e}</li>)}
                   </ul>
                 </div>
               )}
@@ -688,7 +699,7 @@ function ModalImportCSV({ onClose, onSave }: { onClose: () => void; onSave: () =
   );
 }
 
-// ─── Card do Cliente ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Card do Cliente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ClienteCard({ c, onEdit, onDelete, onVincular }: {
   c: Cliente; onEdit: () => unknown; onDelete: () => unknown; onVincular: () => unknown;
 }) {
@@ -743,7 +754,7 @@ function ClienteCard({ c, onEdit, onDelete, onVincular }: {
           </div>
         </div>
 
-        {/* Métricas resumo */}
+        {/* MÃ©tricas resumo */}
         <div className="grid grid-cols-2 gap-2 mb-4 sm:grid-cols-3">
           {[
             { icon: BarChart3, label: "Ativas", value: String(c.campanhas_ativas ?? 0) },
@@ -777,7 +788,7 @@ function ClienteCard({ c, onEdit, onDelete, onVincular }: {
                 rel="noopener noreferrer"
                 className="inline-block text-[9px] text-purple-400/50 hover:text-purple-400 underline mt-1"
               >
-                ver diagnóstico
+                ver diagnÃ³stico
               </a>
             </div>
           )}
@@ -791,12 +802,12 @@ function ClienteCard({ c, onEdit, onDelete, onVincular }: {
                 <div className="flex-1 min-w-0">
                   <p className="text-[12px] text-white/80 truncate font-medium">{camp.nome_campanha}</p>
                   <p className="text-[10px] text-white/30 mt-0.5">
-                    {fmtBRL0(camp.gasto_total)} · {camp.contatos} leads
+                    {fmtBRL0(camp.gasto_total)} Â· {camp.contatos} leads
                   </p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className={`text-[11px] font-semibold ${cplBom ? "text-emerald-400" : "text-amber-400"}`}>
-                    {camp.contatos > 0 ? `CPL ${fmtBRL0(cpl)}` : "—"}
+                    {camp.contatos > 0 ? `CPL ${fmtBRL0(cpl)}` : "â€”"}
                   </p>
                 </div>
               </div>
@@ -816,11 +827,11 @@ function ClienteCard({ c, onEdit, onDelete, onVincular }: {
         {(c.campanhas_criticas ?? 0) > 0 && (
           <div className="flex items-center gap-2 mb-3 rounded-lg border border-amber-500/15 bg-amber-500/5 px-3 py-1.5">
             <AlertTriangle size={10} className="text-amber-400 shrink-0" />
-            <p className="text-[11px] text-amber-400">{c.campanhas_criticas} crítica{(c.campanhas_criticas ?? 0) > 1 ? "s" : ""}</p>
+            <p className="text-[11px] text-amber-400">{c.campanhas_criticas} crÃ­tica{(c.campanhas_criticas ?? 0) > 1 ? "s" : ""}</p>
           </div>
         )}
 
-        {/* Links rápidos CRM */}
+        {/* Links rÃ¡pidos CRM */}
         {c.crm_token && (
           <div className="mb-2 space-y-1.5">
             {[
@@ -872,7 +883,7 @@ function ClienteCard({ c, onEdit, onDelete, onVincular }: {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function ClientesPage() {
   const [clientes, setClientes]               = useState<Cliente[]>([]);
   const [loading, setLoading]                 = useState(true);
@@ -893,7 +904,7 @@ export default function ClientesPage() {
   useEffect(() => { carregar(); }, []);
 
   async function excluir(id: string) {
-    if (!confirm("Remover este cliente? As campanhas vinculadas não serão apagadas.")) return;
+    if (!confirm("Remover este cliente? As campanhas vinculadas nÃ£o serÃ£o apagadas.")) return;
     await fetch(`/api/clientes?id=${id}`, { method: "DELETE" });
     carregar();
   }
@@ -906,7 +917,7 @@ export default function ClientesPage() {
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[11px] text-purple-400 font-semibold uppercase tracking-wider mb-1">Clientes</p>
-              <h1 className="text-2xl font-bold text-white">Gestão de Clientes</h1>
+              <h1 className="text-2xl font-bold text-white">GestÃ£o de Clientes</h1>
               <p className="text-sm text-white/40 mt-1">Cadastre clientes e vincule as campanhas de cada um.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -922,15 +933,15 @@ export default function ClientesPage() {
             </div>
           </div>
 
-          {/* Banner de instruções */}
+          {/* Banner de instruÃ§Ãµes */}
             <StrategicMoatPanel />
             <div className="rounded-2xl border border-blue-500/15 bg-blue-500/[0.04] p-5 mb-6">
             <p className="text-[11px] text-blue-400 font-semibold uppercase tracking-wider mb-3">Fluxo de uso</p>
             <div className="flex items-start gap-6 flex-wrap">
               {[
-                { n: "1", t: "Crie o cliente", d: "Nome e cor. Meta Account ID é opcional." },
+                { n: "1", t: "Crie o cliente", d: "Nome e cor. Meta Account ID Ã© opcional." },
                 { n: "2", t: "Vincule campanhas", d: "Busca por nome + selecionar todos de uma vez." },
-                { n: "3", t: "Relatório e Portal", d: "Dados automáticos por cliente em /relatorios e /portal." },
+                { n: "3", t: "RelatÃ³rio e Portal", d: "Dados automÃ¡ticos por cliente em /relatorios e /portal." },
               ].map(s => (
                 <div key={s.n} className="flex items-start gap-3 flex-1 min-w-[160px]">
                   <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</div>
@@ -951,7 +962,7 @@ export default function ClientesPage() {
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-12 text-center">
               <Users size={36} className="text-white/15 mx-auto mb-4" />
               <p className="text-white/40 text-sm">Nenhum cliente cadastrado ainda.</p>
-              <p className="text-white/25 text-xs mt-1 mb-5">Crie o primeiro cliente para começar.</p>
+              <p className="text-white/25 text-xs mt-1 mb-5">Crie o primeiro cliente para comeÃ§ar.</p>
               <button onClick={() => setModalNovo(true)}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-all">
                 <Plus size={14} />Criar primeiro cliente

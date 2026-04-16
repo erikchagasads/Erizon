@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import Script from "next/script";
 import { useMemo, useState } from "react";
 import { DM_Mono, Sora } from "next/font/google";
 
@@ -16,8 +17,15 @@ const dmMono = DM_Mono({
 type FormularioLandingProps = {
   userId?: string;
   clienteId?: string;
+  facebookPixelId?: string | null;
   enabled: boolean;
 };
+
+declare global {
+  interface Window {
+    fbq?: (...args: unknown[]) => void;
+  }
+}
 
 function formatPhone(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -45,6 +53,7 @@ function TrustItem({
 export default function FormularioLanding({
   userId,
   clienteId,
+  facebookPixelId,
   enabled,
 }: FormularioLandingProps) {
   const [nome, setNome] = useState("");
@@ -62,6 +71,19 @@ export default function FormularioLanding({
     if (!params.has("plataforma")) params.set("plataforma", "lp_formulario");
     return `/api/crm/webhook/${userId}/${clienteId}?${params.toString()}`;
   }, [clienteId, enabled, userId]);
+
+  const pixelMetadata = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { campaign: null, adset: null, ad: null };
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    return {
+      campaign: params.get("utm_campaign"),
+      adset: params.get("utm_term"),
+      ad: params.get("utm_content"),
+    };
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     const numero = whatsapp.replace(/\D/g, "");
@@ -102,6 +124,13 @@ export default function FormularioLanding({
         throw new Error(payload?.error ?? "Nao foi possivel continuar.");
       }
 
+      if (facebookPixelId && typeof window !== "undefined" && typeof window.fbq === "function") {
+        window.fbq("track", "Lead", {
+          content_name: pixelMetadata.ad ?? pixelMetadata.adset ?? undefined,
+          campaign_name: pixelMetadata.campaign ?? undefined,
+        });
+      }
+
       if (payload?.redirectTo) {
         window.setTimeout(() => {
           window.location.href = payload.redirectTo!;
@@ -126,6 +155,21 @@ export default function FormularioLanding({
     <main
       className={`relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#0A0A0F] px-5 py-12 text-white ${sora.className}`}
     >
+      {facebookPixelId ? (
+        <Script id={`meta-pixel-${facebookPixelId}`} strategy="afterInteractive">{`
+          !function(f,b,e,v,n,t,s)
+          {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+          n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+          if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+          n.queue=[];t=b.createElement(e);t.async=!0;
+          t.src=v;s=b.getElementsByTagName(e)[0];
+          s.parentNode.insertBefore(t,s)}(window, document,'script',
+          'https://connect.facebook.net/en_US/fbevents.js');
+          fbq('init', '${facebookPixelId}');
+          fbq('track', 'PageView');
+        `}</Script>
+      ) : null}
+
       <div className="pointer-events-none absolute left-1/2 top-[-160px] h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(83,74,183,0.18)_0%,transparent_70%)]" />
       <div className="pointer-events-none absolute bottom-[-100px] right-[-100px] h-[400px] w-[400px] rounded-full bg-[radial-gradient(circle,rgba(29,158,117,0.10)_0%,transparent_70%)]" />
 
