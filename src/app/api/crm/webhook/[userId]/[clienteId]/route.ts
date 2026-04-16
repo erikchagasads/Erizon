@@ -1,5 +1,5 @@
-// POST /api/crm/webhook/[userId]/[clienteId]
-// Endpoint público — recebe leads de formulários externos (landing pages, RD Station, etc.)
+﻿// POST /api/crm/webhook/[userId]/[clienteId]
+// Endpoint pÃºblico â€” recebe leads de formulÃ¡rios externos (landing pages, RD Station, etc.)
 // Captura UTMs da URL ou do body para rastrear origem exata do clique.
 // Se o cliente tiver WhatsApp cadastrado, redireciona o lead direto para o WhatsApp.
 
@@ -20,7 +20,7 @@ export async function POST(
   const { userId, clienteId } = await params;
 
   if (!userId || !clienteId) {
-    return NextResponse.json({ error: "Parâmetros inválidos" }, { status: 400 });
+    return NextResponse.json({ error: "ParÃ¢metros invÃ¡lidos" }, { status: 400 });
   }
 
   // Aceita JSON ou form-urlencoded
@@ -38,7 +38,7 @@ export async function POST(
     body = {};
   }
 
-  // UTMs da query string têm prioridade sobre o body
+  // UTMs da query string tÃªm prioridade sobre o body
   const { searchParams } = req.nextUrl;
   const utm = (key: string) => searchParams.get(key) ?? body[key] ?? null;
 
@@ -56,13 +56,13 @@ export async function POST(
     .eq("user_id", userId)
     .maybeSingle();
 
-  // Se falhar por colunas inexistentes, tenta só com id
+  // Se falhar por colunas inexistentes, tenta sÃ³ com id
   const clienteOk = cliente ?? (clienteError
     ? (await supabaseAdmin.from("clientes").select("id").eq("id", clienteId).eq("user_id", userId).maybeSingle()).data
     : null);
 
   if (!clienteOk) {
-    return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
+    return NextResponse.json({ error: "Cliente nÃ£o encontrado" }, { status: 404 });
   }
 
   const whatsapp = (cliente as Record<string, string> | null)?.whatsapp ?? null;
@@ -90,7 +90,7 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // ── Notificar o usuário por email ──────────────────────────────────────────
+  // â”€â”€ Notificar o usuÃ¡rio por email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const { data: userRow } = await supabaseAdmin.auth.admin.getUserById(userId);
   const userEmail = userRow?.user?.email;
   if (userEmail && process.env.RESEND_API_KEY) {
@@ -107,19 +107,20 @@ export async function POST(
     }).catch(() => {});
   }
 
-  // ── Redirect para WhatsApp do cliente ──────────────────────────────────────
+  // â”€â”€ Redirect para WhatsApp do cliente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Prioridade: 1) WhatsApp cadastrado no cliente, 2) redirect_url manual no body
   if (whatsapp) {
     const numero = whatsapp.replace(/\D/g, "");
 
-    // Mensagem padrão ou personalizada
+    // Mensagem padrÃ£o ou personalizada
+    const referenciaAnuncio = utm("utm_content") ?? utm("utm_term");
     const mensagemBase = whatsapp_mensagem
       ? whatsapp_mensagem
-      : (utm("utm_content") ?? campanha)
-        ? `Olá! Vi o anúncio "${utm("utm_content") ?? campanha}" e tenho interesse. Pode me passar mais informações?`
-        : "Olá! Tenho interesse e gostaria de mais informações.";
+      : referenciaAnuncio
+        ? `OlÃ¡! Vi o anÃºncio "${referenciaAnuncio}" e tenho interesse. Pode me passar mais informaÃ§Ãµes?`
+        : "OlÃ¡! Tenho interesse e gostaria de mais informaÃ§Ãµes.";
 
-    // Substitui variáveis dinâmicas na mensagem
+    // Substitui variÃ¡veis dinÃ¢micas na mensagem
     const mensagem = mensagemBase
       .replace("{nome}",     nome)
       .replace("{campanha}", campanha ?? "")
@@ -129,7 +130,7 @@ export async function POST(
     return NextResponse.redirect(waUrl, 302);
   }
 
-  // Redirect manual se não tiver WhatsApp configurado
+  // Redirect manual se nÃ£o tiver WhatsApp configurado
   const redirectUrl = body.redirect_url ?? searchParams.get("redirect_url");
   if (redirectUrl) {
     return NextResponse.redirect(redirectUrl, 302);
@@ -138,7 +139,8 @@ export async function POST(
   return NextResponse.json({ ok: true, message: "Lead recebido com sucesso" }, { status: 201 });
 }
 
-// GET — útil para testar o webhook via browser
+// GET â€” Ãºtil para testar o webhook via browser
 export async function GET() {
   return NextResponse.json({ status: "Webhook ativo. Use POST para enviar leads." });
 }
+

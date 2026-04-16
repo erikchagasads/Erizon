@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import {
@@ -94,7 +94,7 @@ function ScoreBadge({ score }: { score: number }) {
   );
 }
 
-// ── Modal Novo Lead ──────────────────────────────────────────────────────────
+// â”€â”€ Modal Novo Lead â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ModalNovoLead({
   clientes,
   onClose,
@@ -116,7 +116,7 @@ function ModalNovoLead({
   const [erro, setErro]         = useState<string | null>(null);
 
   async function salvar() {
-    if (!nome.trim()) { setErro("Nome é obrigatório"); return; }
+    if (!nome.trim()) { setErro("Nome Ã© obrigatÃ³rio"); return; }
     setSalvando(true); setErro(null);
     try {
       const res = await fetch("/api/crm/leads", {
@@ -153,7 +153,7 @@ function ModalNovoLead({
             <label className="text-[10px] text-white/40 uppercase tracking-wider block mb-1">Nome *</label>
             <input value={nome} onChange={e => setNome(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40"
-              placeholder="João Silva" autoFocus />
+              placeholder="JoÃ£o Silva" autoFocus />
           </div>
           {/* Telefone + Email */}
           <div className="grid grid-cols-2 gap-3">
@@ -202,12 +202,12 @@ function ModalNovoLead({
               className="w-full px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 font-mono text-xs"
               placeholder="Ex: 23848..." />
           </div>
-          {/* Anotação */}
+          {/* AnotaÃ§Ã£o */}
           <div>
-            <label className="text-[10px] text-white/40 uppercase tracking-wider block mb-1">Anotação</label>
+            <label className="text-[10px] text-white/40 uppercase tracking-wider block mb-1">AnotaÃ§Ã£o</label>
             <textarea value={anotacao} onChange={e => setAnotacao(e.target.value)} rows={2}
               className="w-full px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 resize-none"
-              placeholder="Observações sobre o lead..." />
+              placeholder="ObservaÃ§Ãµes sobre o lead..." />
           </div>
           {erro && <p className="text-xs text-red-400">{erro}</p>}
         </div>
@@ -224,7 +224,7 @@ function ModalNovoLead({
   );
 }
 
-// ── Modal Editar Lead ────────────────────────────────────────────────────────
+// â”€â”€ Modal Editar Lead â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ModalEditarLead({
   lead,
   onClose,
@@ -272,9 +272,9 @@ function ModalEditarLead({
           <button onClick={onClose} className="text-white/30 hover:text-white"><X size={14} /></button>
         </div>
         <div className="px-5 py-4 space-y-3">
-          {/* Estágio */}
+          {/* EstÃ¡gio */}
           <div>
-            <label className="text-[10px] text-white/40 uppercase tracking-wider block mb-1.5">Estágio</label>
+            <label className="text-[10px] text-white/40 uppercase tracking-wider block mb-1.5">EstÃ¡gio</label>
             <div className="flex flex-wrap gap-1.5">
               {ESTAGIOS.map(e => (
                 <button key={e.id} onClick={() => setEstagio(e.id)}
@@ -302,15 +302,15 @@ function ModalEditarLead({
               <label className="text-[10px] text-white/40 uppercase tracking-wider block mb-1">Motivo da perda</label>
               <input value={motivo} onChange={e => setMotivo(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-red-500/40"
-                placeholder="Ex: Sem orçamento, concorrente..." />
+                placeholder="Ex: Sem orÃ§amento, concorrente..." />
             </div>
           )}
-          {/* Anotação */}
+          {/* AnotaÃ§Ã£o */}
           <div>
-            <label className="text-[10px] text-white/40 uppercase tracking-wider block mb-1">Anotação</label>
+            <label className="text-[10px] text-white/40 uppercase tracking-wider block mb-1">AnotaÃ§Ã£o</label>
             <textarea value={anotacao} onChange={e => setAnotacao(e.target.value)} rows={3}
               className="w-full px-3 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-purple-500/40 resize-none"
-              placeholder="Observações..." />
+              placeholder="ObservaÃ§Ãµes..." />
           </div>
           {erro && <p className="text-xs text-red-400">{erro}</p>}
         </div>
@@ -327,7 +327,7 @@ function ModalEditarLead({
   );
 }
 
-// ── Página Principal ─────────────────────────────────────────────────────────
+// â”€â”€ PÃ¡gina Principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function CRMGestorPage() {
   const [leads, setLeads]           = useState<Lead[]>([]);
   const [clientes, setClientes]     = useState<Cliente[]>([]);
@@ -340,6 +340,7 @@ export default function CRMGestorPage() {
   const [copiado, setCopiado]       = useState<string | null>(null);
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [abaAtiva, setAbaAtiva]     = useState<"leads" | "analytics" | "campanhas" | "webhooks">("leads");
+  const [webhookClienteId, setWebhookClienteId] = useState("");
   const [modalNovo, setModalNovo]   = useState(false);
   const [leadEditando, setLeadEditando] = useState<Lead | null>(null);
 
@@ -367,6 +368,17 @@ export default function CRMGestorPage() {
 
   useEffect(() => { fetchDados(); }, [fetchDados]);
 
+  useEffect(() => {
+    if (clientes.length === 0) {
+      setWebhookClienteId("");
+      return;
+    }
+
+    if (!webhookClienteId || !clientes.some((cliente) => cliente.id === webhookClienteId)) {
+      setWebhookClienteId(clientes[0].id);
+    }
+  }, [clientes, webhookClienteId]);
+
   // Filtros aplicados
   const leadsFiltrados = leads.filter(l => {
     if (filtroEstagio !== "todos" && l.estagio !== filtroEstagio) return false;
@@ -392,6 +404,7 @@ export default function CRMGestorPage() {
     const ref = new Date(); ref.setDate(ref.getDate() - 7);
     return d >= ref;
   }).length;
+  const webhookClienteAtivo = clientes.find((cliente) => cliente.id === webhookClienteId) ?? null;
 
   function copiar(key: string, texto: string) {
     navigator.clipboard.writeText(texto);
@@ -443,7 +456,7 @@ export default function CRMGestorPage() {
         <div className="px-8 py-5 border-b border-white/5 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-lg font-semibold text-white">CRM</h1>
-            <p className="text-xs text-white/30 mt-0.5">Painel de inteligência de leads</p>
+            <p className="text-xs text-white/30 mt-0.5">Painel de inteligencia de leads</p>
           </div>
           <div className="flex items-center gap-3">
             {analytics?.leads_atrasados ? (
@@ -500,12 +513,12 @@ export default function CRMGestorPage() {
 
         <div className="flex-1 px-8 py-6 space-y-6 overflow-y-auto">
 
-          {/* ── KPIs ── */}
+          {/* â”€â”€ KPIs â”€â”€ */}
           <div className="grid grid-cols-4 gap-4">
             {[
               { icon: Users,      label: "Total de leads",   value: String(leadsFiltrados.length), sub: `${leadsSemana} esta semana`,     cor: "#6366f1" },
               { icon: Target,     label: "Taxa fechamento",  value: `${taxaFechamento}%`,          sub: `${leadsFiltrados.filter(l=>l.estagio==="fechado").length} fechados`,  cor: "#10b981" },
-              { icon: DollarSign, label: "Receita fechada",  value: fmtBRL(totalFechado),          sub: analytics?.ticket_medio ? `ticket médio ${fmtBRL(analytics.ticket_medio)}` : "registrado pelos clientes", cor: "#10b981" },
+              { icon: DollarSign, label: "Receita fechada",  value: fmtBRL(totalFechado),          sub: analytics?.ticket_medio ? `ticket mÃ©dio ${fmtBRL(analytics.ticket_medio)}` : "registrado pelos clientes", cor: "#10b981" },
               { icon: TrendingUp, label: "Em negociação",    value: String(leadsFiltrados.filter(l=>["contato","proposta"].includes(l.estagio)).length), sub: "contato + proposta", cor: "#f59e0b" },
             ].map(m => (
               <div key={m.label} className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
@@ -519,7 +532,7 @@ export default function CRMGestorPage() {
             ))}
           </div>
 
-          {/* ── ABA LEADS ── */}
+          {/* â”€â”€ ABA LEADS â”€â”€ */}
           {abaAtiva === "leads" && (
             <>
               {/* Filtros */}
@@ -577,7 +590,7 @@ export default function CRMGestorPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <p className="text-xs font-medium text-white/90">{l.nome}</p>
-                              {clienteNome && <span className="text-[10px] text-white/25">· {clienteNome}</span>}
+                              {clienteNome && <span className="text-[10px] text-white/25">Â· {clienteNome}</span>}
                               {typeof l.score === "number" && <ScoreBadge score={l.score} />}
                             </div>
                             <div className="flex items-center gap-3 mt-0.5 flex-wrap">
@@ -686,7 +699,7 @@ export default function CRMGestorPage() {
             </>
           )}
 
-          {/* ── ABA ANALYTICS ── */}
+          {/* â”€â”€ ABA ANALYTICS â”€â”€ */}
           {abaAtiva === "analytics" && analytics && (
             <div className="grid grid-cols-3 gap-4">
               {/* Funil */}
@@ -747,7 +760,7 @@ export default function CRMGestorPage() {
                 )}
               </div>
 
-              {/* Evolução diária */}
+              {/* EvoluÃ§Ã£o diÃ¡ria */}
               <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5">
                 <p className="text-xs text-white/40 uppercase tracking-wider mb-4">Leads últimos 14 dias</p>
                 {analytics.evolucao_diaria.length === 0 ? (
@@ -772,7 +785,7 @@ export default function CRMGestorPage() {
             </div>
           )}
 
-          {/* ── ABA CAMPANHAS ── */}
+          {/* â”€â”€ ABA CAMPANHAS â”€â”€ */}
           {abaAtiva === "campanhas" && (
             <div className="bg-white/[0.03] border border-white/5 rounded-xl overflow-hidden">
               <div className="px-5 py-4 border-b border-white/5">
@@ -784,7 +797,7 @@ export default function CRMGestorPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-white/5">
-                      {["Campanha", "Plataforma", "Leads", "Fechados", "Perdidos", "Conversão", "Receita"].map(h => (
+                      {["Campanha", "Plataforma", "Leads", "Fechados", "Perdidos", "ConversÃ£o", "Receita"].map(h => (
                         <th key={h} className="text-left px-4 py-2.5 text-white/25 font-medium">{h}</th>
                       ))}
                     </tr>
@@ -809,7 +822,7 @@ export default function CRMGestorPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-emerald-400 font-semibold">
-                            {c.valor > 0 ? fmtBRL(c.valor) : "—"}
+                            {c.valor > 0 ? fmtBRL(c.valor) : "â€”"}
                           </td>
                         </tr>
                       );
@@ -820,68 +833,101 @@ export default function CRMGestorPage() {
             </div>
           )}
 
-          {/* ── Aba Webhooks ── */}
+          {/* Aba Webhooks */}
           {abaAtiva === "webhooks" && (
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-purple-500/[0.05] border border-purple-500/15">
                 <p className="text-xs text-white/50 leading-relaxed">
-                  Cole o link abaixo como destino do formulário da campanha no Meta Ads, Google Ads ou qualquer landing page.
-                  Os leads chegam automaticamente no CRM com UTMs rastreados.
+                  Escolha um cliente e copie o link pronto da landing para usar nas campanhas.
+                  O lead entra no CRM e o redirecionamento segue para o WhatsApp configurado daquele cliente.
                 </p>
               </div>
 
               {clientes.length === 0 ? (
                 <div className="py-12 text-center text-white/20 text-sm">Nenhum cliente cadastrado ainda.</div>
               ) : (
-                <div className="space-y-3">
-                  {clientes.map(c => {
+                <div className="space-y-4">
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {clientes.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => setWebhookClienteId(c.id)}
+                        className={`shrink-0 rounded-full border px-4 py-2 text-sm transition-colors ${
+                          webhookClienteId === c.id
+                            ? "border-purple-400/40 bg-purple-500/15 text-white"
+                            : "border-white/[0.08] bg-white/[0.03] text-white/55 hover:text-white"
+                        }`}
+                      >
+                        {c.nome ?? "Cliente sem nome"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {webhookClienteAtivo && (() => {
                     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://erizonai.com.br";
-                    const webhookBase = `${baseUrl}/api/crm/webhook/${userId}/${c.id}`;
-                    const webhookMeta = `${webhookBase}?utm_source=facebook&utm_medium=cpc&utm_campaign={{campaign.name}}&utm_content={{ad.name}}`;
+                    const landingBase = `${baseUrl}/lp/formulario/${userId}/${webhookClienteAtivo.id}`;
+                    const landingMeta = `${landingBase}?utm_source=facebook&utm_medium=cpc&utm_campaign={{campaign.name}}&utm_term={{adset.name}}&utm_content={{ad.name}}`;
+                    const webhookBase = `${baseUrl}/api/crm/webhook/${userId}/${webhookClienteAtivo.id}`;
 
                     return (
-                      <div key={c.id} className="rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+                      <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
                         <div className="px-4 py-3 border-b border-white/[0.05] flex items-center justify-between">
-                          <span className="text-sm font-medium text-white">{c.nome}</span>
-                          <span className="text-[10px] text-white/30 font-mono">{c.id.slice(0, 8)}…</span>
+                          <div>
+                            <p className="text-sm font-medium text-white">{webhookClienteAtivo.nome}</p>
+                            <p className="text-[11px] text-white/30 mt-1">Links prontos deste cliente</p>
+                          </div>
+                          <span className="text-[10px] text-white/30 font-mono">{webhookClienteAtivo.id.slice(0, 8)}…</span>
                         </div>
 
-                        <div className="p-4 space-y-3">
-                          {/* Link limpo */}
+                        <div className="p-4 space-y-4">
                           <div>
-                            <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Link base</p>
+                            <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Landing pronta</p>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 text-[11px] text-emerald-300 bg-emerald-500/[0.06] border border-emerald-500/15 rounded-lg px-3 py-2 truncate">
+                                {landingBase}
+                              </code>
+                              <button
+                                onClick={() => copiar(`landing-${webhookClienteAtivo.id}`, landingBase)}
+                                className="shrink-0 p-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.07] transition-colors"
+                              >
+                                {copiado === `landing-${webhookClienteAtivo.id}` ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-white/40" />}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Meta Ads com UTMs automáticos</p>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 text-[11px] text-blue-300 bg-blue-500/[0.06] border border-blue-500/15 rounded-lg px-3 py-2 truncate">
+                                {landingMeta}
+                              </code>
+                              <button
+                                onClick={() => copiar(`meta-${webhookClienteAtivo.id}`, landingMeta)}
+                                className="shrink-0 p-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.07] transition-colors"
+                              >
+                                {copiado === `meta-${webhookClienteAtivo.id}` ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-white/40" />}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Webhook técnico</p>
                             <div className="flex items-center gap-2">
                               <code className="flex-1 text-[11px] text-purple-300 bg-purple-500/[0.06] border border-purple-500/15 rounded-lg px-3 py-2 truncate">
                                 {webhookBase}
                               </code>
                               <button
-                                onClick={() => copiar(`base-${c.id}`, webhookBase)}
+                                onClick={() => copiar(`webhook-${webhookClienteAtivo.id}`, webhookBase)}
                                 className="shrink-0 p-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.07] transition-colors"
                               >
-                                {copiado === `base-${c.id}` ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-white/40" />}
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Link Meta Ads com UTMs */}
-                          <div>
-                            <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Meta Ads (com UTMs automáticos)</p>
-                            <div className="flex items-center gap-2">
-                              <code className="flex-1 text-[11px] text-blue-300 bg-blue-500/[0.06] border border-blue-500/15 rounded-lg px-3 py-2 truncate">
-                                {webhookMeta}
-                              </code>
-                              <button
-                                onClick={() => copiar(`meta-${c.id}`, webhookMeta)}
-                                className="shrink-0 p-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.07] transition-colors"
-                              >
-                                {copiado === `meta-${c.id}` ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-white/40" />}
+                                {copiado === `webhook-${webhookClienteAtivo.id}` ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-white/40" />}
                               </button>
                             </div>
                           </div>
                         </div>
                       </div>
                     );
-                  })}
+                  })()}
                 </div>
               )}
             </div>
