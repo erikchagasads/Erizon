@@ -56,8 +56,9 @@ const NAV: NavEntry[] = [
   {
     group: true, icon: Layers, label: "Clientes",
     items: [
-      { href: "/relatorios", icon: FileText,  label: "Relatórios"        },
-      { href: "/portal",     icon: Layers,    label: "Portal do Cliente"  },
+      { href: "/relatorios",    icon: FileText,  label: "Relatórios"         },
+      { href: "/portal",        icon: Layers,    label: "Portal do Cliente"  },
+      { href: "/relatorio-dna", icon: FileText,  label: "Profit DNA Report"  },
       { href: "/insights",   icon: Instagram, label: "Insights Instagram" },
     ],
   },

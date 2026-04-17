@@ -1,3 +1,9 @@
+/**
+ * Pre-flight Engine
+ * Analisa o setup de uma campanha ANTES de lançar e retorna score 0-100 + riscos.
+ * Previne dinheiro desperdiçado detectando problemas antes da veiculação.
+ */
+
 export type PreflightSeverity = "critical" | "warning" | "info";
 
 export type PreflightRisk = {
@@ -6,36 +12,43 @@ export type PreflightRisk = {
   label: string;
   detail: string;
   recommendation: string;
-  impactScore: number;
+  impactScore: number;  // pontos que subtrai do score (0-100)
 };
 
 export type PreflightInput = {
-  objetivo: string;
-  orcamentoDiario: number;
-  audienciaSize?: number;
+  // Básico
+  objetivo: string;          // LEADS, SALES, TRAFFIC, AWARENESS, etc.
+  orcamentoDiario: number;   // R$
+  audienciaSize?: number;    // tamanho do público estimado
   criativo?: {
-    formato: string;
+    formato: string;         // video, imagem, carrossel
     temTexto?: boolean;
     temCTA?: boolean;
-    duracaoSegundos?: number;
+    duracaoSegundos?: number; // para vídeos
   };
   urlDestino?: string;
-  velocidadeUrl?: number;
+  velocidadeUrl?: number;    // segundos de load (Core Web Vitals)
+
+  // Histórico do cliente (opcional — vem do Profit DNA)
   historicoCpl?: number;
   historicoRoas?: number;
   cplAlvo?: number;
   roasAlvo?: number;
   metaCpl?: number;
   metaLeads?: number;
+
+  // Benchmarks do nicho (opcional)
   benchmarkCpl?: number;
   benchmarkRoas?: number;
+
+  // Contexto adicional
   temPixel?: boolean;
-  publicoCustom?: boolean;
-  diasDeSemana?: number[];
+  publicoCustom?: boolean;   // usa Custom Audience ou Lookalike
+  diasDeSemana?: number[];   // dias programados (0-6)
 };
 
 export type PreflightResult = {
-  score: number;
+  score: number;                // 0-100
   classification: "excellent" | "good" | "risky" | "critical";
   risks: PreflightRisk[];
   estimatedCplMin: number | null;
@@ -49,6 +62,7 @@ export function runPreflight(input: PreflightInput): PreflightResult {
   const risks: PreflightRisk[] = [];
   let score = 100;
 
+  // ── 1. Orçamento ─────────────────────────────────────────────────────────
   if (input.orcamentoDiario < 20) {
     risks.push({
       id: "budget_too_low",
@@ -71,6 +85,7 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     score -= 12;
   }
 
+  // ── 2. Público ────────────────────────────────────────────────────────────
   if (input.audienciaSize !== undefined) {
     if (input.audienciaSize > 10_000_000 && input.objetivo === "LEADS") {
       risks.push({
@@ -107,6 +122,7 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     score -= 8;
   }
 
+  // ── 3. Pixel / Rastreamento ───────────────────────────────────────────────
   if (input.temPixel === false) {
     risks.push({
       id: "no_pixel",
@@ -119,6 +135,7 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     score -= 35;
   }
 
+  // ── 4. Criativo ───────────────────────────────────────────────────────────
   if (input.criativo) {
     const c = input.criativo;
 
@@ -134,16 +151,18 @@ export function runPreflight(input: PreflightInput): PreflightResult {
       score -= 10;
     }
 
-    if (c.formato === "video" && c.duracaoSegundos !== undefined && c.duracaoSegundos > 60) {
-      risks.push({
-        id: "video_too_long",
-        severity: "warning",
-        label: "Vídeo longo para tráfego pago",
-        detail: `${c.duracaoSegundos}s é longo. 70% das pessoas saem antes de 15s no feed.`,
-        recommendation: "Corte para 15-30s com o gancho nos primeiros 3 segundos.",
-        impactScore: 8,
-      });
-      score -= 8;
+    if (c.formato === "video" && c.duracaoSegundos !== undefined) {
+      if (c.duracaoSegundos > 60) {
+        risks.push({
+          id: "video_too_long",
+          severity: "warning",
+          label: "Vídeo longo para tráfego pago",
+          detail: `${c.duracaoSegundos}s é longo. 70% das pessoas saem antes de 15s no feed.`,
+          recommendation: "Corte para 15-30s com o gancho nos primeiros 3 segundos.",
+          impactScore: 8,
+        });
+        score -= 8;
+      }
     }
   } else {
     risks.push({
@@ -157,6 +176,7 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     score -= 5;
   }
 
+  // ── 5. Velocidade da URL ──────────────────────────────────────────────────
   if (input.velocidadeUrl !== undefined) {
     if (input.velocidadeUrl > 5) {
       risks.push({
@@ -181,6 +201,7 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     }
   }
 
+  // ── 6. Viabilidade financeira ─────────────────────────────────────────────
   if (input.metaCpl && input.benchmarkCpl && input.metaCpl < input.benchmarkCpl * 0.5) {
     risks.push({
       id: "unrealistic_cpl",
@@ -193,6 +214,7 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     score -= 15;
   }
 
+  // ── 7. Estimativa de CPL ──────────────────────────────────────────────────
   let estimatedCplMin: number | null = null;
   let estimatedCplMax: number | null = null;
   let estimatedRoas: number | null = null;
@@ -225,6 +247,7 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     estimatedRoas = parseFloat((input.roasAlvo * Math.max(0.4, penalty)).toFixed(1));
   }
 
+  // Garantir score dentro dos limites
   score = Math.max(0, Math.min(100, Math.round(score)));
 
   const classification =
@@ -233,6 +256,7 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     score >= 40 ? "risky" :
     "critical";
 
+  // Recomendação principal
   const criticals = risks.filter(r => r.severity === "critical");
   const topRecommendation =
     criticals.length > 0

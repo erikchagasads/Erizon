@@ -159,6 +159,37 @@ export async function GET(
             ? "Conta em boa fase: a maior parte das campanhas esta performando acima do esperado."
             : null;
 
+    // Buscar faturamento real registrado pelo gestor (último mês)
+    const mesAtual = new Date().toISOString().slice(0, 7);
+    const { data: financeiroRows } = await supabase
+      .from("cliente_financeiro")
+      .select("receita_gerada, leads_fechados")
+      .eq("cliente_id", clienteId)
+      .gte("created_at", `${mesAtual}-01`)
+      .order("created_at", { ascending: false });
+
+    const receitaTotal = (financeiroRows ?? []).reduce((s, r) => s + (Number(r.receita_gerada) || 0), 0);
+    const leadsFechados = (financeiroRows ?? []).reduce((s, r) => s + (Number(r.leads_fechados) || 0), 0);
+    const roiPct = receitaTotal > 0 && totalGasto > 0
+      ? Math.round(((receitaTotal - totalGasto) / totalGasto) * 100)
+      : null;
+    const taxaFechamento = totalLeads > 0 && leadsFechados > 0
+      ? Math.round((leadsFechados / totalLeads) * 1000) / 10
+      : null;
+
+    // Comparativo semana anterior para deltas
+    const semanaAtras = new Date(today);
+    semanaAtras.setDate(today.getDate() - 7);
+    const { data: snapshotsSemanaAnterior } = await supabase
+      .from("campaign_snapshots_daily")
+      .select("leads, spend")
+      .eq("cliente_id", clienteId)
+      .gte("snapshot_date", semanaAtras.toISOString().split("T")[0])
+      .lt("snapshot_date", today.toISOString().split("T")[0]);
+
+    const leadsSemanaAnterior = (snapshotsSemanaAnterior ?? []).reduce((s, r) => s + (Number(r.leads) || 0), 0);
+    const gastoSemanaAnterior = (snapshotsSemanaAnterior ?? []).reduce((s, r) => s + (Number(r.spend) || 0), 0);
+
     return NextResponse.json({
       nome: cliente.nome_cliente ?? cliente.nome,
       cor: cliente.cor ?? "#6366f1",
@@ -168,6 +199,14 @@ export async function GET(
       cpl_medio: Math.round(cplMedio * 100) / 100,
       campanhas_ativas: campanhas.length,
       ultima_atualizacao: cliente.ultima_atualizacao,
+      // Dados financeiros reais
+      receita_total: receitaTotal > 0 ? receitaTotal : undefined,
+      roi_pct: roiPct,
+      leads_fechados_total: leadsFechados > 0 ? leadsFechados : undefined,
+      taxa_fechamento: taxaFechamento,
+      // Deltas para comparativo
+      leads_semana_anterior: leadsSemanaAnterior > 0 ? leadsSemanaAnterior : undefined,
+      gasto_semana_anterior: gastoSemanaAnterior > 0 ? gastoSemanaAnterior : undefined,
       crm_token: (cliente as Record<string, unknown>).crm_token as string ?? null,
       period: {
         current: {

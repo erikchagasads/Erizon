@@ -55,8 +55,8 @@ export async function GET() {
       .from("referral_events").select("id", { count: "exact", head: true })
       .eq("referrer_code", code).eq("event", "paid");
 
-    // Créditos acumulados: R$10 por conversão paga
-    const creditPerConversion = 10;
+    // Créditos acumulados: R$97 por conversão paga (valor do plano Core)
+    const creditPerConversion = 97;
     const totalCredit = ((conversions as unknown as { count: number })?.count ?? 0) * creditPerConversion;
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.erizonai.com.br";
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
     if (event === "paid") {
       await supabase.from("referral_credits").insert({
         user_id: referrer.user_id,
-        amount_brl: 10,
+        amount_brl: 97,
         reason: `Indicação convertida — código ${referrerCode}`,
         status: "pending",
         created_at: new Date().toISOString(),
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             chat_id: settings.telegram_chat_id,
-            text: `🎉 *Indicação convertida!*\nUm usuário que você indicou assinou o Erizon. R$10 de crédito adicionado à sua conta.`,
+            text: `🎉 *Indicação convertida!*\nUm usuário que você indicou assinou o Erizon. R$97 de crédito adicionado à sua conta.`,
             parse_mode: "Markdown",
           }),
         }).catch(() => {}); // não bloqueia
