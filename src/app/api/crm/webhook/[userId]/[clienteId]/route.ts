@@ -48,6 +48,8 @@ export async function POST(
   const email     = body.email ?? body.e_mail ?? null;
   const campanha  = body.campanha ?? body.campaign ?? utm("utm_campaign") ?? null;
   const plataforma = body.plataforma ?? body.platform ?? utm("utm_source") ?? "manual";
+  const conjuntoAnuncio = body.conjunto_anuncio ?? body.adset ?? utm("utm_term") ?? null;
+  const anuncio = body.anuncio ?? body.ad ?? utm("utm_content") ?? null;
 
   // Busca cliente
   const { data: cliente, error: clienteError } = await supabaseAdmin
@@ -114,7 +116,7 @@ export async function POST(
     const numero = whatsapp.replace(/\D/g, "");
 
     // Mensagem padrÃ£o ou personalizada
-    const referenciaAnuncio = utm("utm_content") ?? utm("utm_term");
+    const referenciaAnuncio = conjuntoAnuncio ?? anuncio ?? campanha;
     const mensagemBase = whatsapp_mensagem
       ? whatsapp_mensagem
       : referenciaAnuncio
@@ -122,10 +124,20 @@ export async function POST(
         : "Ola! Tenho interesse e gostaria de mais informacoes.";
 
     // Substitui variÃ¡veis dinÃ¢micas na mensagem
-    const mensagem = mensagemBase
-      .replace("{nome}",     nome)
-      .replace("{campanha}", campanha ?? "")
-      .replace("{telefone}", telefone ?? "");
+    const temPlaceholderDeOrigem = /\{(campanha|conjunto|conjunto_anuncio|adset|anuncio|ad)\}/i.test(mensagemBase);
+    const mensagemComVariaveis = mensagemBase
+      .replaceAll("{nome}", nome)
+      .replaceAll("{campanha}", campanha ?? "")
+      .replaceAll("{telefone}", telefone ?? "")
+      .replaceAll("{conjunto}", conjuntoAnuncio ?? "")
+      .replaceAll("{conjunto_anuncio}", conjuntoAnuncio ?? "")
+      .replaceAll("{adset}", conjuntoAnuncio ?? "")
+      .replaceAll("{anuncio}", anuncio ?? "")
+      .replaceAll("{ad}", anuncio ?? "");
+
+    const mensagem = !temPlaceholderDeOrigem && referenciaAnuncio && whatsapp_mensagem
+      ? `${mensagemComVariaveis}\n\nReferencia do anuncio: ${referenciaAnuncio}`
+      : mensagemComVariaveis;
 
     const waUrl = `https://wa.me/55${numero}?text=${encodeURIComponent(mensagem)}`;
     if (redirectMode === "json") {

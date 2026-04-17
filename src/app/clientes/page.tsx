@@ -151,9 +151,9 @@ function ModalCliente({ cliente, onClose, onSave }: {
               Mensagem WhatsApp <span className="text-white/20 normal-case">(opcional)</span>
             </label>
             <input value={waMensagem} onChange={e => setWaMensagem(e.target.value)}
-              placeholder="Ex: OlÃ¡ {nome}! Vi seu interesse em {campanha}."
+              placeholder="Ex: Olá {nome}! Vi seu interesse no conjunto {conjunto} da campanha {campanha}."
               className="w-full px-3 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40 transition-all" />
-            <p className="text-[10px] text-white/25 mt-1">VariÃ¡veis disponÃ­veis: {"{nome}"}, {"{campanha}"}, {"{telefone}"}. Deixe vazio para usar a mensagem padrÃ£o.</p>
+            <p className="text-[10px] text-white/25 mt-1">Variáveis disponíveis: {"{nome}"}, {"{campanha}"}, {"{conjunto}"}, {"{conjunto_anuncio}"}, {"{adset}"}, {"{anuncio}"}, {"{ad}"}, {"{telefone}"}. Se a mensagem personalizada não usar origem do anúncio, a referência será anexada automaticamente.</p>
           </div>
           <div>
             <label className="text-[11px] text-white/40 uppercase tracking-wider font-medium block mb-1.5">
