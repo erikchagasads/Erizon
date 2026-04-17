@@ -1,10 +1,11 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCliente } from "@/app/hooks/useCliente";
 import Sidebar from "@/components/Sidebar";
 import {
   ArrowLeft, Zap, Loader2, CheckCircle2, AlertTriangle,
-  XCircle, Info, ChevronDown, ChevronUp, Gauge,
+  XCircle, Info, ChevronDown, ChevronUp, Gauge, Users,
 } from "lucide-react";
 import type { PreflightResult, PreflightRisk } from "@/core/preflight-engine";
 
@@ -66,6 +67,7 @@ function ScoreGauge({ score, classification }: { score: number; classification: 
 
 export default function NovaPage() {
   const router = useRouter();
+  const { clientes, clienteAtual, loading: loadingClientes, selecionarCliente } = useCliente();
 
   const [step, setStep] = useState<"form" | "result">("form");
   const [loading, setLoading] = useState(false);
@@ -90,6 +92,7 @@ export default function NovaPage() {
     setLoading(true);
 
     const body = {
+      clientId: clienteAtual?.id,
       campaignName,
       objetivo,
       orcamentoDiario: parseFloat(orcamento),
@@ -141,6 +144,63 @@ export default function NovaPage() {
 
         {step === "form" && (
           <div className="space-y-4">
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Users size={14} className="text-purple-400" />
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Contexto do cliente</p>
+              </div>
+
+              {loadingClientes ? (
+                <div className="flex items-center gap-2 text-[12px] text-white/35">
+                  <Loader2 size={13} className="animate-spin text-white/30" />
+                  Carregando clientes...
+                </div>
+              ) : clientes.length === 0 ? (
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+                  <p className="text-[12px] text-white/55">Nenhum cliente cadastrado.</p>
+                  <p className="mt-1 text-[11px] text-white/30">
+                    O preflight ainda funciona, mas sem DNA, metas e memoria especifica do cliente.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-[11px] text-white/35">
+                    Selecione um cliente para enriquecer a previsao com historico, Profit DNA e memoria operacional.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => selecionarCliente(null)}
+                      className={`px-4 py-2 rounded-xl border text-[12px] font-semibold transition-all ${
+                        !clienteAtual
+                          ? "border-purple-500/40 bg-purple-500/[0.10] text-purple-300"
+                          : "border-white/[0.07] text-white/45 hover:text-white/70 hover:bg-white/[0.04]"
+                      }`}
+                    >
+                      Sem cliente
+                    </button>
+                    {clientes.map((cliente) => (
+                      <button
+                        key={cliente.id}
+                        onClick={() => selecionarCliente(cliente)}
+                        className={`px-4 py-2 rounded-xl border text-[12px] font-semibold transition-all ${
+                          clienteAtual?.id === cliente.id
+                            ? "border-purple-500/40 bg-purple-500/[0.10] text-purple-300"
+                            : "border-white/[0.07] text-white/45 hover:text-white/70 hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        {cliente.nome_cliente ?? cliente.nome}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-white/28">
+                    {clienteAtual
+                      ? `Preflight enriquecido para ${clienteAtual.nome_cliente ?? clienteAtual.nome}.`
+                      : "Preflight generico da conta, sem contexto de cliente."}
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Nome */}
             <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 space-y-4">
               <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Identificação</p>

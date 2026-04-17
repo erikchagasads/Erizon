@@ -227,6 +227,14 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     const penaltyFactor = 1 + (100 - Math.max(0, score)) / 250;
     estimatedCplMin = Math.round(input.historicoCpl * 0.8 * penaltyFactor);
     estimatedCplMax = Math.round(input.historicoCpl * 1.5 * penaltyFactor);
+  } else if (input.cplAlvo) {
+    const penaltyFactor = 1 + (100 - Math.max(0, score)) / 220;
+    estimatedCplMin = Math.round(input.cplAlvo * 0.9 * penaltyFactor);
+    estimatedCplMax = Math.round(input.cplAlvo * 1.45 * penaltyFactor);
+  } else if (input.metaCpl) {
+    const penaltyFactor = 1 + (100 - Math.max(0, score)) / 180;
+    estimatedCplMin = Math.max(1, Math.round(input.metaCpl * 0.95 * penaltyFactor));
+    estimatedCplMax = Math.max(estimatedCplMin, Math.round(input.metaCpl * 1.6 * penaltyFactor));
   }
 
   if (input.historicoRoas) {
@@ -234,6 +242,9 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     estimatedRoas = parseFloat((input.historicoRoas * Math.max(0.3, penalty)).toFixed(1));
   } else if (input.benchmarkRoas) {
     estimatedRoas = parseFloat((input.benchmarkRoas * 0.85).toFixed(1));
+  } else if (input.roasAlvo) {
+    const penalty = 1 - (100 - Math.max(0, score)) / 260;
+    estimatedRoas = parseFloat((input.roasAlvo * Math.max(0.4, penalty)).toFixed(1));
   }
 
   // Garantir score dentro dos limites
