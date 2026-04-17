@@ -4,6 +4,7 @@
 // Interface inspirada no Meta Ads Manager
 
 import { useEffect, useState, useMemo } from "react";
+import Link from "next/link";
 import {
   Search, RefreshCw, Download, BarChart3, ChevronDown, ChevronUp,
   Loader2, X, Eye, ArrowUpDown,
@@ -866,6 +867,14 @@ export default function GerenciadorAnunciosPage() {
               <RefreshCw size={12} className={syncingId === "all" ? "animate-spin" : ""}/>
               Sincronizar
             </button>
+
+            <Link
+              href="/campanhas/nova"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-purple-500/25 bg-purple-500/10 text-[11px] font-semibold text-purple-300 hover:bg-purple-500/15 hover:border-purple-400/35 transition-all"
+            >
+              <Zap size={12} />
+              Pre-flight
+            </Link>
 
             <button onClick={handleExportar} disabled={exportando}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-[11px] font-semibold text-white transition-all disabled:opacity-50">
