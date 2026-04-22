@@ -6,6 +6,8 @@
 import { useEffect, useState } from "react";
 import { Gift, Copy, CheckCheck, Users, TrendingUp, DollarSign, ExternalLink } from "lucide-react";
 
+const REFERRAL_CREDIT_LABEL = "R$10";
+
 interface ReferralStats {
   clicks: number;
   signups: number;
@@ -53,7 +55,7 @@ export default function ReferralPage() {
           <h1 className="text-xl font-medium text-white">Programa de Indicação</h1>
         </div>
         <p className="text-sm text-zinc-400">
-          Indique gestores de tráfego e ganhe <span className="text-violet-400 font-medium">R$97 de crédito</span> por cada assinante que você trouxer.
+          Indique gestores de tráfego e ganhe <span className="text-violet-400 font-medium">{REFERRAL_CREDIT_LABEL} de crédito</span> por cada assinante que você trouxer.
         </p>
       </div>
 
@@ -116,7 +118,7 @@ export default function ReferralPage() {
           {[
             { step: "1", label: "Compartilhe seu link com gestores de tráfego" },
             { step: "2", label: "Eles se cadastram e testam o Erizon por 7 dias grátis" },
-            { step: "3", label: "Quando assinam qualquer plano, você recebe R$97 de crédito" },
+            { step: "3", label: `Quando assinam qualquer plano, você recebe ${REFERRAL_CREDIT_LABEL} de crédito` },
             { step: "4", label: "Crédito é descontado automaticamente na sua próxima fatura" },
           ].map(({ step, label }) => (
             <div key={step} className="flex items-start gap-3">

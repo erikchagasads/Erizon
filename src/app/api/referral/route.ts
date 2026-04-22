@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+const REFERRAL_CREDIT_BRL = 10;
+
 async function getSupabase() {
   const cookieStore = await cookies();
   return createServerClient(
@@ -55,9 +57,8 @@ export async function GET() {
       .from("referral_events").select("id", { count: "exact", head: true })
       .eq("referrer_code", code).eq("event", "paid");
 
-    // Créditos acumulados: R$97 por conversão paga (valor do plano Core)
-    const creditPerConversion = 97;
-    const totalCredit = ((conversions as unknown as { count: number })?.count ?? 0) * creditPerConversion;
+    // Créditos acumulados por conversão paga.
+    const totalCredit = ((conversions as unknown as { count: number })?.count ?? 0) * REFERRAL_CREDIT_BRL;
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.erizonai.com.br";
     const referralLink = `${appUrl}?ref=${code}`;
@@ -119,7 +120,7 @@ export async function POST(req: NextRequest) {
     if (event === "paid") {
       await supabase.from("referral_credits").insert({
         user_id: referrer.user_id,
-        amount_brl: 97,
+        amount_brl: REFERRAL_CREDIT_BRL,
         reason: `Indicação convertida — código ${referrerCode}`,
         status: "pending",
         created_at: new Date().toISOString(),
@@ -135,7 +136,7 @@ export async function POST(req: NextRequest) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             chat_id: settings.telegram_chat_id,
-            text: `🎉 *Indicação convertida!*\nUm usuário que você indicou assinou o Erizon. R$97 de crédito adicionado à sua conta.`,
+            text: `🎉 *Indicação convertida!*\nUm usuário que você indicou assinou o Erizon. R$${REFERRAL_CREDIT_BRL} de crédito adicionado à sua conta.`,
             parse_mode: "Markdown",
           }),
         }).catch(() => {}); // não bloqueia

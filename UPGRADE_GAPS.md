@@ -81,7 +81,7 @@ await fetch('/api/meta-actions', {
 - **`src/app/api/referral/route.ts`** — nova API:
   - `GET` → retorna código + link + stats (clicks, signups, conversions, creditBRL)
   - `POST` → registra evento: `click`, `signup`, `paid`
-  - Crédito automático de R$97 por conversão paga
+  - Crédito automático de R$10 por conversão paga
   - Notificação Telegram ao referrer na conversão
   - Proteção anti-auto-referral
 

@@ -46,10 +46,10 @@ export async function POST(
   const nome      = body.nome ?? body.name ?? body.full_name ?? body.nome_completo ?? "Lead sem nome";
   const telefone  = body.telefone ?? body.phone ?? body.whatsapp ?? body.celular ?? null;
   const email     = body.email ?? body.e_mail ?? null;
-  const campanha  = body.campanha ?? body.campaign ?? utm("utm_campaign") ?? null;
+  const campanha  = body.campanha ?? body.campaign ?? body.campaign_name ?? utm("utm_campaign") ?? utm("campaign_name") ?? null;
   const plataforma = body.plataforma ?? body.platform ?? utm("utm_source") ?? "manual";
-  const conjuntoAnuncio = body.conjunto_anuncio ?? body.adset ?? utm("utm_term") ?? null;
-  const anuncio = body.anuncio ?? body.ad ?? utm("utm_content") ?? null;
+  const conjuntoAnuncio = body.conjunto_anuncio ?? body.conjunto ?? body.adset ?? body.adset_name ?? body.ad_set_name ?? utm("utm_term") ?? utm("utm_adset") ?? utm("adset") ?? utm("adset_name") ?? null;
+  const anuncio = body.anuncio ?? body.ad ?? body.ad_name ?? utm("utm_content") ?? utm("utm_ad") ?? utm("ad") ?? utm("ad_name") ?? null;
 
   // Busca cliente
   const { data: cliente, error: clienteError } = await supabaseAdmin
