@@ -140,6 +140,22 @@ type WorkspaceRow = {
 
 const ACTIVE_STATUSES = ["ATIVO", "ACTIVE", "ATIVA"];
 
+const DEFAULT_NICHES = [
+  "geral",
+  "ecommerce",
+  "imobiliario",
+  "saude_beleza",
+  "educacao",
+  "infoprodutos",
+  "servicos_locais",
+  "financeiro",
+  "juridico",
+  "turismo",
+  "automotivo",
+  "b2b_saas",
+  "restaurantes",
+];
+
 const NICHE_KEYWORDS: Record<string, string[]> = {
   ecommerce: ["ecommerce", "e-commerce", "loja", "shop", "produto", "catalogo", "checkout", "compra"],
   imobiliario: ["imovel", "imobiliario", "apartamento", "casa", "condominio", "lancamento", "mcmv", "alto padrao"],
@@ -376,6 +392,15 @@ export class BenchmarkMarketIntelligenceService {
       .order("nicho", { ascending: true });
 
     const options = new Map<string, BenchmarkNicheOption>();
+
+    for (const niche of DEFAULT_NICHES) {
+      options.set(niche, {
+        niche,
+        label: this.nicheLabel(niche),
+        source: "external",
+        benchmarks: 0,
+      });
+    }
 
     for (const row of (external.data ?? []) as Array<{ niche: string | null }>) {
       const niche = normalize(row.niche);

@@ -61,6 +61,22 @@ type Status = "winning" | "median" | "attention" | "unknown";
 
 const ACTIVE_STATUSES = ["ATIVO", "ACTIVE", "ATIVA"];
 
+const DEFAULT_NICHE_OPTIONS = [
+  "geral",
+  "ecommerce",
+  "imobiliario",
+  "saude_beleza",
+  "educacao",
+  "infoprodutos",
+  "servicos_locais",
+  "financeiro",
+  "juridico",
+  "turismo",
+  "automotivo",
+  "b2b_saas",
+  "restaurantes",
+];
+
 const statusConfig: Record<Status, { label: string; text: string; border: string }> = {
   winning: {
     label: "acima da referencia",
@@ -243,19 +259,32 @@ export default function BenchmarksPage() {
   const detectedNiches = network?.detectedNiches ?? [];
   const benchmarkGroups = network?.benchmarkGroups ?? [];
   const globalNiches = network?.globalNiches ?? [];
-  const selectedAccountGroup = benchmarkGroups.find((group) => group.niche === selectedAccountNiche) ?? benchmarkGroups[0] ?? null;
-  const accountNicheValue = selectedAccountGroup?.niche ?? "";
+  const selectedAccountGroup = benchmarkGroups.find((group) => group.niche === selectedAccountNiche) ?? null;
+  const accountNicheOptions = useMemo(() => {
+    const map = new Map<string, { niche: string; label: string; campaigns: number }>();
+    for (const niche of DEFAULT_NICHE_OPTIONS) {
+      map.set(niche, { niche, label: labelNiche(niche), campaigns: 0 });
+    }
+    for (const group of benchmarkGroups) {
+      map.set(group.niche, { niche: group.niche, label: labelNiche(group.niche), campaigns: group.campaigns });
+    }
+    return [...map.values()].sort((a, b) => {
+      if (a.campaigns !== b.campaigns) return b.campaigns - a.campaigns;
+      return a.label.localeCompare(b.label, "pt-BR");
+    });
+  }, [benchmarkGroups]);
+  const accountNicheValue = selectedAccountNiche || selectedAccountGroup?.niche || accountNicheOptions[0]?.niche || "";
   const globalNicheValue = selectedGlobalNiche || network?.selectedMarketNiche || selectedMarketBenchmark?.niche || "";
 
   useEffect(() => {
-    if (!benchmarkGroups.length) {
+    if (!accountNicheOptions.length) {
       if (selectedAccountNiche) setSelectedAccountNiche("");
       return;
     }
-    if (!selectedAccountNiche || !benchmarkGroups.some((group) => group.niche === selectedAccountNiche)) {
-      setSelectedAccountNiche(benchmarkGroups[0].niche);
+    if (!selectedAccountNiche || !accountNicheOptions.some((option) => option.niche === selectedAccountNiche)) {
+      setSelectedAccountNiche(accountNicheOptions[0].niche);
     }
-  }, [benchmarkGroups, selectedAccountNiche]);
+  }, [accountNicheOptions, selectedAccountNiche]);
 
   const effectiveStats = {
     activeCampaigns: ownStats?.activeCampaigns ?? localStats.activeCampaigns,
@@ -356,13 +385,13 @@ export default function BenchmarksPage() {
     },
   ] : [];
 
-  const selectedExternalCards = selectedAccountGroup ? [
+  const selectedExternalCards = [
     {
       label: "CPL global",
       value: fmtBRL(selectedMarketBenchmark?.metrics.cpl.p50),
       sub: selectedMarketBenchmark ? `${selectedMarketBenchmark.sourceName} | ${selectedMarketBenchmark.sampleSize ?? "amostra n/i"} amostras` : "sem fonte externa neste nicho",
       status: selectedMarketBenchmark?.metrics.cpl.p50
-        ? compareLowerIsBetter(selectedAccountGroup.internal.avgCpl, selectedMarketBenchmark.metrics.cpl.p25, selectedMarketBenchmark.metrics.cpl.p75)
+        ? compareLowerIsBetter(selectedAccountGroup?.internal.avgCpl ?? null, selectedMarketBenchmark.metrics.cpl.p25, selectedMarketBenchmark.metrics.cpl.p75)
         : "unknown" as Status,
       inverse: true,
     },
@@ -371,7 +400,7 @@ export default function BenchmarksPage() {
       value: fmtX(selectedMarketBenchmark?.metrics.roas.p50),
       sub: selectedMarketBenchmark?.sourceNote ?? "sem base externa rastreavel",
       status: selectedMarketBenchmark?.metrics.roas.p50
-        ? compareHigherIsBetter(selectedAccountGroup.internal.avgRoas, selectedMarketBenchmark.metrics.roas.p25, selectedMarketBenchmark.metrics.roas.p75)
+        ? compareHigherIsBetter(selectedAccountGroup?.internal.avgRoas ?? null, selectedMarketBenchmark.metrics.roas.p25, selectedMarketBenchmark.metrics.roas.p75)
         : "unknown" as Status,
       inverse: false,
     },
@@ -380,11 +409,11 @@ export default function BenchmarksPage() {
       value: fmtPct(selectedMarketBenchmark?.metrics.ctr.p50),
       sub: selectedMarketBenchmark ? `confianca ${(selectedMarketBenchmark.confidence * 100).toFixed(0)}%` : "cadastre market_benchmarks para comparar",
       status: selectedMarketBenchmark?.metrics.ctr.p50
-        ? compareHigherIsBetter(selectedAccountGroup.internal.avgCtr, selectedMarketBenchmark.metrics.ctr.p25, selectedMarketBenchmark.metrics.ctr.p75)
+        ? compareHigherIsBetter(selectedAccountGroup?.internal.avgCtr ?? null, selectedMarketBenchmark.metrics.ctr.p25, selectedMarketBenchmark.metrics.ctr.p75)
         : "unknown" as Status,
       inverse: false,
     },
-  ] : [];
+  ];
 
   const comparedCampaigns = useMemo(() => {
     if (apiCampaignComparisons.length > 0) {
@@ -506,11 +535,11 @@ export default function BenchmarksPage() {
                         onChange={(event) => setSelectedAccountNiche(event.target.value)}
                         className="h-10 w-full min-w-[210px] rounded-xl border border-white/[0.08] bg-[#08080b] px-3 text-[12px] font-semibold text-white/70 outline-none transition-all hover:border-white/20 focus:border-fuchsia-500/50"
                       >
-                        {benchmarkGroups.length === 0 ? (
+                        {accountNicheOptions.length === 0 ? (
                           <option value="">Sem dados da conta</option>
-                        ) : benchmarkGroups.map((group) => (
-                          <option key={group.niche} value={group.niche}>
-                            {labelNiche(group.niche)} ({group.campaigns})
+                        ) : accountNicheOptions.map((option) => (
+                          <option key={option.niche} value={option.niche}>
+                            {option.label}{option.campaigns > 0 ? ` (${option.campaigns})` : ""}
                           </option>
                         ))}
                       </select>
