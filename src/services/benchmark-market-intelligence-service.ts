@@ -94,6 +94,14 @@ export type BenchmarkNicheGroup = {
   campaignComparisons: CampaignBenchmarkComparison[];
 };
 
+export type BenchmarkNicheOption = {
+  niche: string;
+  label: string;
+  source: "account" | "external" | "network";
+  campaigns?: number;
+  benchmarks?: number;
+};
+
 type CampaignRow = {
   id: string;
   nome_campanha: string | null;
@@ -193,11 +201,14 @@ function statusAgainstAverage(value: number | null, average: number | null, lowe
 export class BenchmarkMarketIntelligenceService {
   private db = createServerSupabase();
 
-  async getCampaignComparisons(workspaceId: string): Promise<{
+  async getCampaignComparisons(workspaceId: string, options?: { marketNiche?: string | null }): Promise<{
     marketBenchmark: MarketBenchmark | null;
+    selectedMarketBenchmark: MarketBenchmark | null;
+    selectedMarketNiche: string;
     campaignComparisons: CampaignBenchmarkComparison[];
     detectedNiches: Array<{ niche: string; campaigns: number; confidence: number }>;
     benchmarkGroups: BenchmarkNicheGroup[];
+    globalNiches: BenchmarkNicheOption[];
   }> {
     const workspace = await this.getWorkspace(workspaceId);
     const ownerUserId = workspace?.owner_user_id ?? workspaceId;
@@ -317,6 +328,7 @@ export class BenchmarkMarketIntelligenceService {
       .sort((a, b) => b.campaigns - a.campaigns);
 
     const primary = detectedNiches[0]?.niche ?? workspaceNiche;
+    const selectedMarketNiche = normalize(options?.marketNiche) || primary;
     const groups = await Promise.all(detectedNiches.map(async (item) => {
       const groupComparisons = comparisons
         .filter((comparison) => comparison.niche === item.niche)
@@ -336,8 +348,58 @@ export class BenchmarkMarketIntelligenceService {
 
     const marketBenchmark = groups.find((group) => group.niche === primary)?.marketBenchmark
       ?? await this.getMarketBenchmark({ niche: primary, campaignType: "all", platform: "meta" });
+    const selectedMarketBenchmark = selectedMarketNiche === primary
+      ? marketBenchmark
+      : await this.getMarketBenchmark({ niche: selectedMarketNiche, campaignType: "all", platform: "meta" });
+    const globalNiches = await this.listAvailableGlobalNiches();
 
-    return { marketBenchmark, campaignComparisons: comparisons, detectedNiches, benchmarkGroups: groups };
+    return {
+      marketBenchmark,
+      selectedMarketBenchmark,
+      selectedMarketNiche,
+      campaignComparisons: comparisons,
+      detectedNiches,
+      benchmarkGroups: groups,
+      globalNiches,
+    };
+  }
+
+  async listAvailableGlobalNiches(): Promise<BenchmarkNicheOption[]> {
+    const external = await this.db
+      .from("market_benchmarks")
+      .select("niche")
+      .order("niche", { ascending: true });
+
+    const network = await this.db
+      .from("network_weekly_insights")
+      .select("nicho")
+      .order("nicho", { ascending: true });
+
+    const options = new Map<string, BenchmarkNicheOption>();
+
+    for (const row of (external.data ?? []) as Array<{ niche: string | null }>) {
+      const niche = normalize(row.niche);
+      if (!niche) continue;
+      const current = options.get(niche);
+      options.set(niche, {
+        niche,
+        label: this.nicheLabel(niche),
+        source: "external",
+        benchmarks: (current?.benchmarks ?? 0) + 1,
+      });
+    }
+
+    for (const row of (network.data ?? []) as Array<{ nicho: string | null }>) {
+      const niche = normalize(row.nicho);
+      if (!niche || options.has(niche)) continue;
+      options.set(niche, {
+        niche,
+        label: this.nicheLabel(niche),
+        source: "network",
+      });
+    }
+
+    return [...options.values()].sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
   }
 
   async getMarketBenchmark(params: {
@@ -527,6 +589,13 @@ export class BenchmarkMarketIntelligenceService {
       avgCpc: null,
       avgFrequency: null,
     };
+  }
+
+  private nicheLabel(niche: string): string {
+    return niche
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
   }
 
   private async getWorkspace(workspaceId: string): Promise<WorkspaceRow | null> {

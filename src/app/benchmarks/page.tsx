@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type {
   BenchmarkNicheGroup,
+  BenchmarkNicheOption,
   CampaignBenchmarkComparison,
   MarketBenchmark,
 } from "@/services/benchmark-market-intelligence-service";
@@ -48,9 +49,12 @@ interface NetworkResponse {
   ownStats: OwnBenchmarkStatsType | null;
   readiness: NetworkReadinessType | null;
   marketBenchmark: MarketBenchmark | null;
+  selectedMarketBenchmark?: MarketBenchmark | null;
+  selectedMarketNiche?: string;
   campaignComparisons: CampaignBenchmarkComparison[];
   detectedNiches: Array<{ niche: string; campaigns: number; confidence: number }>;
   benchmarkGroups?: BenchmarkNicheGroup[];
+  globalNiches?: BenchmarkNicheOption[];
 }
 
 type Status = "winning" | "median" | "attention" | "unknown";
@@ -93,6 +97,13 @@ function fmtPct(value: number | null | undefined) {
 function fmtX(value: number | null | undefined) {
   if (!value || !Number.isFinite(value)) return "-";
   return `${value.toFixed(2)}x`;
+}
+
+function labelNiche(niche: string) {
+  return niche
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function average(values: number[]) {
@@ -161,6 +172,8 @@ export default function BenchmarksPage() {
   const [network, setNetwork] = useState<NetworkResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [selectedAccountNiche, setSelectedAccountNiche] = useState("");
+  const [selectedGlobalNiche, setSelectedGlobalNiche] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -174,7 +187,7 @@ export default function BenchmarksPage() {
           .select("id,nome_campanha,gasto_total,contatos,receita_estimada,ctr,cpm,cpc,frequencia,impressoes,status,data_atualizacao")
           .eq("user_id", user.id)
           .in("status", ACTIVE_STATUSES),
-        fetch("/api/intelligence/network", { cache: "no-store" })
+        fetch(`/api/intelligence/network${selectedGlobalNiche ? `?global_niche=${encodeURIComponent(selectedGlobalNiche)}` : ""}`, { cache: "no-store" })
           .then((res) => res.json())
           .catch(() => null),
       ]);
@@ -184,7 +197,7 @@ export default function BenchmarksPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, [selectedGlobalNiche, supabase]);
 
   useEffect(() => {
     void load();
@@ -225,9 +238,24 @@ export default function BenchmarksPage() {
   const insight = network?.nicheInsight ?? null;
   const position = network?.position ?? null;
   const marketBenchmark = network?.marketBenchmark ?? null;
+  const selectedMarketBenchmark = network?.selectedMarketBenchmark ?? marketBenchmark;
   const apiCampaignComparisons = network?.campaignComparisons ?? [];
   const detectedNiches = network?.detectedNiches ?? [];
   const benchmarkGroups = network?.benchmarkGroups ?? [];
+  const globalNiches = network?.globalNiches ?? [];
+  const selectedAccountGroup = benchmarkGroups.find((group) => group.niche === selectedAccountNiche) ?? benchmarkGroups[0] ?? null;
+  const accountNicheValue = selectedAccountGroup?.niche ?? "";
+  const globalNicheValue = selectedGlobalNiche || network?.selectedMarketNiche || selectedMarketBenchmark?.niche || "";
+
+  useEffect(() => {
+    if (!benchmarkGroups.length) {
+      if (selectedAccountNiche) setSelectedAccountNiche("");
+      return;
+    }
+    if (!selectedAccountNiche || !benchmarkGroups.some((group) => group.niche === selectedAccountNiche)) {
+      setSelectedAccountNiche(benchmarkGroups[0].niche);
+    }
+  }, [benchmarkGroups, selectedAccountNiche]);
 
   const effectiveStats = {
     activeCampaigns: ownStats?.activeCampaigns ?? localStats.activeCampaigns,
@@ -303,6 +331,60 @@ export default function BenchmarksPage() {
       inverse: false,
     },
   ];
+
+  const selectedInternalCards = selectedAccountGroup ? [
+    {
+      label: "CPL interno",
+      value: fmtBRL(selectedAccountGroup.internal.avgCpl),
+      sub: `${selectedAccountGroup.internal.campaignsWithLeads} campanhas com leads | ${fmtBRL(selectedAccountGroup.internal.totalSpend)} investidos`,
+      status: selectedAccountGroup.internal.avgCpl ? "median" as Status : "unknown" as Status,
+      inverse: true,
+    },
+    {
+      label: "ROAS interno",
+      value: fmtX(selectedAccountGroup.internal.avgRoas),
+      sub: `${fmtBRL(selectedAccountGroup.internal.totalRevenue)} em receita estimada`,
+      status: selectedAccountGroup.internal.avgRoas ? "median" as Status : "unknown" as Status,
+      inverse: false,
+    },
+    {
+      label: "CTR interno",
+      value: fmtPct(selectedAccountGroup.internal.avgCtr),
+      sub: `${selectedAccountGroup.internal.campaignsWithSpend} campanhas com investimento`,
+      status: selectedAccountGroup.internal.avgCtr ? "median" as Status : "unknown" as Status,
+      inverse: false,
+    },
+  ] : [];
+
+  const selectedExternalCards = selectedAccountGroup ? [
+    {
+      label: "CPL global",
+      value: fmtBRL(selectedMarketBenchmark?.metrics.cpl.p50),
+      sub: selectedMarketBenchmark ? `${selectedMarketBenchmark.sourceName} | ${selectedMarketBenchmark.sampleSize ?? "amostra n/i"} amostras` : "sem fonte externa neste nicho",
+      status: selectedMarketBenchmark?.metrics.cpl.p50
+        ? compareLowerIsBetter(selectedAccountGroup.internal.avgCpl, selectedMarketBenchmark.metrics.cpl.p25, selectedMarketBenchmark.metrics.cpl.p75)
+        : "unknown" as Status,
+      inverse: true,
+    },
+    {
+      label: "ROAS global",
+      value: fmtX(selectedMarketBenchmark?.metrics.roas.p50),
+      sub: selectedMarketBenchmark?.sourceNote ?? "sem base externa rastreavel",
+      status: selectedMarketBenchmark?.metrics.roas.p50
+        ? compareHigherIsBetter(selectedAccountGroup.internal.avgRoas, selectedMarketBenchmark.metrics.roas.p25, selectedMarketBenchmark.metrics.roas.p75)
+        : "unknown" as Status,
+      inverse: false,
+    },
+    {
+      label: "CTR global",
+      value: fmtPct(selectedMarketBenchmark?.metrics.ctr.p50),
+      sub: selectedMarketBenchmark ? `confianca ${(selectedMarketBenchmark.confidence * 100).toFixed(0)}%` : "cadastre market_benchmarks para comparar",
+      status: selectedMarketBenchmark?.metrics.ctr.p50
+        ? compareHigherIsBetter(selectedAccountGroup.internal.avgCtr, selectedMarketBenchmark.metrics.ctr.p25, selectedMarketBenchmark.metrics.ctr.p75)
+        : "unknown" as Status,
+      inverse: false,
+    },
+  ] : [];
 
   const comparedCampaigns = useMemo(() => {
     if (apiCampaignComparisons.length > 0) {
@@ -404,6 +486,85 @@ export default function BenchmarksPage() {
                         Ultimo dado real: {new Date(effectiveStats.lastSyncAt).toLocaleString("pt-BR")}
                       </p>
                     )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+                <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Comparativo selecionado</p>
+                    <p className="mt-1 text-[12px] text-white/35">
+                      Escolha um nicho da sua conta e compare contra qualquer nicho global com base externa cadastrada.
+                    </p>
+                  </div>
+                  <div className="grid w-full grid-cols-1 gap-3 md:w-auto md:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/25">Nicho da conta</span>
+                      <select
+                        value={accountNicheValue}
+                        onChange={(event) => setSelectedAccountNiche(event.target.value)}
+                        className="h-10 w-full min-w-[210px] rounded-xl border border-white/[0.08] bg-[#08080b] px-3 text-[12px] font-semibold text-white/70 outline-none transition-all hover:border-white/20 focus:border-fuchsia-500/50"
+                      >
+                        {benchmarkGroups.length === 0 ? (
+                          <option value="">Sem dados da conta</option>
+                        ) : benchmarkGroups.map((group) => (
+                          <option key={group.niche} value={group.niche}>
+                            {labelNiche(group.niche)} ({group.campaigns})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/25">Nicho global</span>
+                      <select
+                        value={globalNicheValue}
+                        onChange={(event) => setSelectedGlobalNiche(event.target.value)}
+                        className="h-10 w-full min-w-[210px] rounded-xl border border-white/[0.08] bg-[#08080b] px-3 text-[12px] font-semibold text-white/70 outline-none transition-all hover:border-white/20 focus:border-sky-400/50"
+                      >
+                        {globalNicheValue && !globalNiches.some((option) => option.niche === globalNicheValue) && (
+                          <option value={globalNicheValue}>{labelNiche(globalNicheValue)}</option>
+                        )}
+                        {globalNiches.length === 0 && !globalNicheValue && (
+                          <option value="">Sem nichos globais</option>
+                        )}
+                        {globalNiches.map((option) => (
+                          <option key={option.niche} value={option.niche}>
+                            {option.label}{option.benchmarks ? ` (${option.benchmarks})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div>
+                    <div className="mb-2 flex items-center gap-2">
+                      <BarChart2 size={14} className="text-fuchsia-300" />
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-white/35">
+                        Conta | {selectedAccountGroup ? labelNiche(selectedAccountGroup.niche) : "sem nicho"}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      {selectedInternalCards.length > 0
+                        ? selectedInternalCards.map((card) => <MetricCard key={card.label} {...card} />)
+                        : <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4 text-[12px] text-white/30 sm:col-span-3">Sincronize campanhas para criar nichos da conta.</div>}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mb-2 flex items-center gap-2">
+                      <Globe size={14} className="text-sky-300" />
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-white/35">
+                        Global | {globalNicheValue ? labelNiche(globalNicheValue) : "sem nicho"}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      {selectedExternalCards.length > 0
+                        ? selectedExternalCards.map((card) => <MetricCard key={card.label} {...card} />)
+                        : <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4 text-[12px] text-white/30 sm:col-span-3">Nenhum benchmark global disponivel.</div>}
+                    </div>
                   </div>
                 </div>
               </section>

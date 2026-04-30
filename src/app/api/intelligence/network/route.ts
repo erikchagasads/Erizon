@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
   if (auth.response) return auth.response;
 
+  const { searchParams } = new URL(req.url);
+  const marketNiche = searchParams.get("global_niche");
   const db = createServerSupabase();
   const { data: ws } = await db
     .from("workspace_members")
@@ -23,7 +25,7 @@ export async function GET(req: NextRequest) {
     svc.getWorkspacePosition(workspaceId),
     db.from("workspaces").select("niche").eq("id", workspaceId).maybeSingle(),
     svc.getOwnStats(workspaceId),
-    marketSvc.getCampaignComparisons(workspaceId),
+    marketSvc.getCampaignComparisons(workspaceId, { marketNiche }),
   ]);
 
   const nicho = wsData?.data?.niche ?? "geral";
@@ -50,7 +52,11 @@ export async function GET(req: NextRequest) {
     ownStats,
     readiness,
     marketBenchmark: marketData.marketBenchmark,
+    selectedMarketBenchmark: marketData.selectedMarketBenchmark,
+    selectedMarketNiche: marketData.selectedMarketNiche,
     campaignComparisons: marketData.campaignComparisons,
     detectedNiches: marketData.detectedNiches,
+    benchmarkGroups: marketData.benchmarkGroups,
+    globalNiches: marketData.globalNiches,
   });
 }
