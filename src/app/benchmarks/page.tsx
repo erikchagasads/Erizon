@@ -298,6 +298,25 @@ export default function BenchmarksPage() {
     nicho: ownStats?.nicho ?? position?.nicho ?? insight?.nicho ?? "geral",
     lastSyncAt: ownStats?.lastSyncAt ?? campaigns.map((campaign) => campaign.data_atualizacao).filter(Boolean).sort().at(-1) ?? null,
   };
+  const selectedAccountInternal = selectedAccountGroup?.internal ?? (
+    effectiveStats.campaignsWithSpend > 0
+      ? {
+          activeCampaigns: effectiveStats.activeCampaigns,
+          campaignsWithSpend: effectiveStats.campaignsWithSpend,
+          campaignsWithLeads: effectiveStats.campaignsWithLeads,
+          totalSpend: effectiveStats.totalSpend,
+          totalLeads: effectiveStats.totalLeads,
+          totalRevenue: effectiveStats.avgRoas && effectiveStats.totalSpend > 0 ? effectiveStats.avgRoas * effectiveStats.totalSpend : 0,
+          avgCpl: effectiveStats.avgCpl,
+          avgRoas: effectiveStats.avgRoas,
+          avgCtr: effectiveStats.avgCtr,
+          avgCpm: null,
+          avgCpc: null,
+          avgFrequency: null,
+        }
+      : null
+  );
+  const selectedAccountHasExactNiche = Boolean(selectedAccountGroup);
 
   const networkCards = [
     {
@@ -361,26 +380,28 @@ export default function BenchmarksPage() {
     },
   ];
 
-  const selectedInternalCards = selectedAccountGroup ? [
+  const selectedInternalCards = selectedAccountInternal ? [
     {
       label: "CPL interno",
-      value: fmtBRL(selectedAccountGroup.internal.avgCpl),
-      sub: `${selectedAccountGroup.internal.campaignsWithLeads} campanhas com leads | ${fmtBRL(selectedAccountGroup.internal.totalSpend)} investidos`,
-      status: selectedAccountGroup.internal.avgCpl ? "median" as Status : "unknown" as Status,
+      value: fmtBRL(selectedAccountInternal.avgCpl),
+      sub: selectedAccountHasExactNiche
+        ? `${selectedAccountInternal.campaignsWithLeads} campanhas com leads | ${fmtBRL(selectedAccountInternal.totalSpend)} investidos`
+        : `${selectedAccountInternal.campaignsWithLeads} campanhas com leads | base total da conta`,
+      status: selectedAccountInternal.avgCpl ? "median" as Status : "unknown" as Status,
       inverse: true,
     },
     {
       label: "ROAS interno",
-      value: fmtX(selectedAccountGroup.internal.avgRoas),
-      sub: `${fmtBRL(selectedAccountGroup.internal.totalRevenue)} em receita estimada`,
-      status: selectedAccountGroup.internal.avgRoas ? "median" as Status : "unknown" as Status,
+      value: fmtX(selectedAccountInternal.avgRoas),
+      sub: selectedAccountHasExactNiche ? `${fmtBRL(selectedAccountInternal.totalRevenue)} em receita estimada` : "base total da conta",
+      status: selectedAccountInternal.avgRoas ? "median" as Status : "unknown" as Status,
       inverse: false,
     },
     {
       label: "CTR interno",
-      value: fmtPct(selectedAccountGroup.internal.avgCtr),
-      sub: `${selectedAccountGroup.internal.campaignsWithSpend} campanhas com investimento`,
-      status: selectedAccountGroup.internal.avgCtr ? "median" as Status : "unknown" as Status,
+      value: fmtPct(selectedAccountInternal.avgCtr),
+      sub: `${selectedAccountInternal.campaignsWithSpend} campanhas com investimento`,
+      status: selectedAccountInternal.avgCtr ? "median" as Status : "unknown" as Status,
       inverse: false,
     },
   ] : [];
@@ -391,7 +412,7 @@ export default function BenchmarksPage() {
       value: fmtBRL(selectedMarketBenchmark?.metrics.cpl.p50),
       sub: selectedMarketBenchmark ? `${selectedMarketBenchmark.sourceName} | ${selectedMarketBenchmark.sampleSize ?? "amostra n/i"} amostras` : "sem fonte externa neste nicho",
       status: selectedMarketBenchmark?.metrics.cpl.p50
-        ? compareLowerIsBetter(selectedAccountGroup?.internal.avgCpl ?? null, selectedMarketBenchmark.metrics.cpl.p25, selectedMarketBenchmark.metrics.cpl.p75)
+        ? compareLowerIsBetter(selectedAccountInternal?.avgCpl ?? null, selectedMarketBenchmark.metrics.cpl.p25, selectedMarketBenchmark.metrics.cpl.p75)
         : "unknown" as Status,
       inverse: true,
     },
@@ -400,7 +421,7 @@ export default function BenchmarksPage() {
       value: fmtX(selectedMarketBenchmark?.metrics.roas.p50),
       sub: selectedMarketBenchmark?.sourceNote ?? "sem base externa rastreavel",
       status: selectedMarketBenchmark?.metrics.roas.p50
-        ? compareHigherIsBetter(selectedAccountGroup?.internal.avgRoas ?? null, selectedMarketBenchmark.metrics.roas.p25, selectedMarketBenchmark.metrics.roas.p75)
+        ? compareHigherIsBetter(selectedAccountInternal?.avgRoas ?? null, selectedMarketBenchmark.metrics.roas.p25, selectedMarketBenchmark.metrics.roas.p75)
         : "unknown" as Status,
       inverse: false,
     },
@@ -409,7 +430,7 @@ export default function BenchmarksPage() {
       value: fmtPct(selectedMarketBenchmark?.metrics.ctr.p50),
       sub: selectedMarketBenchmark ? `confianca ${(selectedMarketBenchmark.confidence * 100).toFixed(0)}%` : "cadastre market_benchmarks para comparar",
       status: selectedMarketBenchmark?.metrics.ctr.p50
-        ? compareHigherIsBetter(selectedAccountGroup?.internal.avgCtr ?? null, selectedMarketBenchmark.metrics.ctr.p25, selectedMarketBenchmark.metrics.ctr.p75)
+        ? compareHigherIsBetter(selectedAccountInternal?.avgCtr ?? null, selectedMarketBenchmark.metrics.ctr.p25, selectedMarketBenchmark.metrics.ctr.p75)
         : "unknown" as Status,
       inverse: false,
     },
@@ -572,9 +593,14 @@ export default function BenchmarksPage() {
                     <div className="mb-2 flex items-center gap-2">
                       <BarChart2 size={14} className="text-fuchsia-300" />
                       <p className="text-[11px] font-semibold uppercase tracking-wider text-white/35">
-                        Conta | {selectedAccountGroup ? labelNiche(selectedAccountGroup.niche) : "sem nicho"}
+                        Conta | {accountNicheValue ? labelNiche(accountNicheValue) : "sem nicho"}
                       </p>
                     </div>
+                    {!selectedAccountHasExactNiche && selectedAccountInternal && (
+                      <p className="mb-2 text-[10px] leading-relaxed text-amber-300/70">
+                        Ainda nao ha campanhas classificadas neste nicho. Comparando com a base real total da conta.
+                      </p>
+                    )}
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       {selectedInternalCards.length > 0
                         ? selectedInternalCards.map((card) => <MetricCard key={card.label} {...card} />)
