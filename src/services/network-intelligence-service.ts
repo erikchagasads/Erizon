@@ -28,6 +28,28 @@ export type WorkspacePosition = {
   insight: string;
 };
 
+export type OwnBenchmarkStats = {
+  nicho: string;
+  activeCampaigns: number;
+  campaignsWithSpend: number;
+  campaignsWithLeads: number;
+  totalSpend: number;
+  totalLeads: number;
+  avgCpl: number | null;
+  avgCtr: number | null;
+  avgRoas: number | null;
+  lastSyncAt: string | null;
+};
+
+export type NetworkReadiness = {
+  hasOwnData: boolean;
+  hasNetworkBenchmark: boolean;
+  requiredWorkspaces: number;
+  currentWorkspaces: number;
+  source: "weekly" | "live" | "unavailable";
+  message: string;
+};
+
 function percentile(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
   const idx = Math.max(0, Math.floor((p / 100) * sorted.length) - 1);
@@ -41,6 +63,126 @@ function avg(arr: number[]): number {
 
 export class NetworkIntelligenceService {
   private db = createServerSupabase();
+
+  private activeStatuses = ["ATIVO", "ACTIVE", "ATIVA"];
+
+  private async getWorkspace(workspaceId: string): Promise<{ id: string; niche: string; owner_user_id: string } | null> {
+    const { data } = await this.db
+      .from("workspaces")
+      .select("id, niche, owner_user_id")
+      .eq("id", workspaceId)
+      .maybeSingle();
+
+    return data
+      ? {
+          id: String(data.id),
+          niche: String(data.niche ?? "geral"),
+          owner_user_id: String(data.owner_user_id ?? workspaceId),
+        }
+      : null;
+  }
+
+  async getOwnStats(workspaceId: string): Promise<OwnBenchmarkStats> {
+    const workspace = await this.getWorkspace(workspaceId);
+    const userId = workspace?.owner_user_id ?? workspaceId;
+    const nicho = workspace?.niche ?? "geral";
+
+    const { data } = await this.db
+      .from("metricas_ads")
+      .select("gasto_total, contatos, receita_estimada, ctr, status, data_atualizacao")
+      .eq("user_id", userId)
+      .in("status", this.activeStatuses);
+
+    const rows = data ?? [];
+    const withSpend = rows.filter((row) => Number(row.gasto_total ?? 0) > 0);
+    const withLeads = withSpend.filter((row) => Number(row.contatos ?? 0) > 0);
+    const withCtr = withSpend.filter((row) => Number(row.ctr ?? 0) > 0);
+    const withRoas = withSpend.filter((row) => Number(row.receita_estimada ?? 0) > 0);
+    const totalSpend = withSpend.reduce((sum, row) => sum + Number(row.gasto_total ?? 0), 0);
+    const totalLeads = withLeads.reduce((sum, row) => sum + Number(row.contatos ?? 0), 0);
+    const totalRevenue = withRoas.reduce((sum, row) => sum + Number(row.receita_estimada ?? 0), 0);
+    const syncDates = rows
+      .map((row) => String(row.data_atualizacao ?? ""))
+      .filter(Boolean)
+      .sort();
+
+    return {
+      nicho,
+      activeCampaigns: rows.length,
+      campaignsWithSpend: withSpend.length,
+      campaignsWithLeads: withLeads.length,
+      totalSpend,
+      totalLeads,
+      avgCpl: totalLeads > 0 ? totalSpend / totalLeads : null,
+      avgCtr: withCtr.length ? avg(withCtr.map((row) => Number(row.ctr ?? 0))) : null,
+      avgRoas: totalSpend > 0 && totalRevenue > 0 ? totalRevenue / totalSpend : null,
+      lastSyncAt: syncDates.at(-1) ?? null,
+    };
+  }
+
+  async getLiveForNiche(nicho: string): Promise<NicheInsight | null> {
+    const { data: optedOut } = await this.db
+      .from("network_participation")
+      .select("workspace_id")
+      .eq("opted_in", false);
+    const excludedIds = new Set((optedOut ?? []).map((row) => String(row.workspace_id)));
+
+    const { data: workspaces } = await this.db
+      .from("workspaces")
+      .select("id, owner_user_id, niche")
+      .eq("niche", nicho);
+
+    const eligible = (workspaces ?? []).filter((workspace) => !excludedIds.has(String(workspace.id)));
+    const ownerIds = Array.from(new Set(eligible.map((workspace) => String(workspace.owner_user_id)).filter(Boolean)));
+    if (ownerIds.length < 2) return null;
+
+    const { data: campaigns } = await this.db
+      .from("metricas_ads")
+      .select("user_id, gasto_total, contatos, receita_estimada, ctr, status")
+      .in("user_id", ownerIds)
+      .in("status", this.activeStatuses);
+
+    const rows = campaigns ?? [];
+    const wsIds = new Set<string>();
+    const cpls: number[] = [];
+    const roass: number[] = [];
+    const ctrs: number[] = [];
+
+    for (const row of rows) {
+      const spend = Number(row.gasto_total ?? 0);
+      const leads = Number(row.contatos ?? 0);
+      const revenue = Number(row.receita_estimada ?? 0);
+      const ctr = Number(row.ctr ?? 0);
+      if (spend <= 0) continue;
+      wsIds.add(String(row.user_id));
+      if (leads > 0) cpls.push(spend / leads);
+      if (revenue > 0) roass.push(revenue / spend);
+      if (ctr > 0) ctrs.push(ctr);
+    }
+
+    if (wsIds.size < 2 || (cpls.length === 0 && roass.length === 0 && ctrs.length === 0)) return null;
+
+    const sortedCpl = [...cpls].sort((a, b) => a - b);
+    const sortedRoas = [...roass].sort((a, b) => b - a);
+    const sortedCtr = [...ctrs].sort((a, b) => a - b);
+
+    return {
+      nicho,
+      semanaInicio: this.getSemanaInicio(),
+      cplP25: sortedCpl.length >= 4 ? percentile(sortedCpl, 25) : null,
+      cplP50: sortedCpl.length ? percentile(sortedCpl, 50) : null,
+      cplP75: sortedCpl.length >= 4 ? percentile(sortedCpl, 75) : null,
+      roasP25: sortedRoas.length >= 4 ? percentile(sortedRoas, 25) : null,
+      roasP50: sortedRoas.length ? percentile(sortedRoas, 50) : null,
+      roasP75: sortedRoas.length >= 4 ? percentile(sortedRoas, 75) : null,
+      ctrP50: sortedCtr.length ? percentile(sortedCtr, 50) : null,
+      nWorkspaces: wsIds.size,
+      topPattern: null,
+      marketTrend: "stable",
+      trendNote: "Benchmark calculado ao vivo com campanhas reais sincronizadas no Meta Ads.",
+      computedAt: new Date().toISOString(),
+    };
+  }
 
   // Computa benchmarks semanais para todos os nichos
   async computeWeeklyInsights(): Promise<void> {
@@ -150,20 +292,14 @@ export class NetworkIntelligenceService {
       .limit(1)
       .maybeSingle();
 
-    if (!data) return null;
+    if (!data) return this.getLiveForNiche(nicho);
     return this.mapRow(data);
   }
 
   // Compara a performance de um workspace com a rede
   async getWorkspacePosition(workspaceId: string): Promise<WorkspacePosition | null> {
-    // Busca nicho do workspace
-    const { data: ws } = await this.db
-      .from("workspaces")
-      .select("niche")
-      .eq("id", workspaceId)
-      .maybeSingle();
-
-    const nicho = ws?.niche ?? "geral";
+    const workspace = await this.getWorkspace(workspaceId);
+    const nicho = workspace?.niche ?? "geral";
 
     // Métricas do workspace na última semana
     const since = new Date();
@@ -178,8 +314,14 @@ export class NetworkIntelligenceService {
     const myCpls = (snaps ?? []).filter(s => s.cpl > 0 && s.cpl < 9999).map(s => s.cpl);
     const myRoass = (snaps ?? []).filter(s => s.roas > 0).map(s => s.roas);
 
-    const myCpl = myCpls.length ? avg(myCpls) : null;
-    const myRoas = myRoass.length ? avg(myRoass) : null;
+    let myCpl = myCpls.length ? avg(myCpls) : null;
+    let myRoas = myRoass.length ? avg(myRoass) : null;
+
+    if (!myCpl || !myRoas) {
+      const ownStats = await this.getOwnStats(workspaceId);
+      myCpl = myCpl ?? ownStats.avgCpl;
+      myRoas = myRoas ?? ownStats.avgRoas;
+    }
 
     // Busca benchmark da rede
     const insight = await this.getLatestForNiche(nicho);

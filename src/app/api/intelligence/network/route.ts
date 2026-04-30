@@ -17,13 +17,28 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
   const workspaceId = ws?.workspace_id ?? auth.user.id;
 
-  const [position, wsData] = await Promise.all([
+  const [position, wsData, ownStats] = await Promise.all([
     svc.getWorkspacePosition(workspaceId),
     db.from("workspaces").select("niche").eq("id", workspaceId).maybeSingle(),
+    svc.getOwnStats(workspaceId),
   ]);
 
   const nicho = wsData?.data?.niche ?? "geral";
   const nicheInsight = await svc.getLatestForNiche(nicho);
+  const readiness = {
+    hasOwnData: ownStats.campaignsWithSpend > 0,
+    hasNetworkBenchmark: Boolean(nicheInsight),
+    requiredWorkspaces: 2,
+    currentWorkspaces: nicheInsight?.nWorkspaces ?? 0,
+    source: nicheInsight
+      ? (new Date(nicheInsight.computedAt).getTime() > Date.now() - 10 * 60 * 1000 ? "live" : "weekly")
+      : "unavailable",
+    message: nicheInsight
+      ? "Benchmark real disponivel para este nicho."
+      : ownStats.campaignsWithSpend > 0
+        ? "Sua conta tem dados reais, mas a rede ainda nao tem pelo menos 2 workspaces reais neste nicho."
+        : "Sincronize campanhas reais do Meta Ads para calcular seus benchmarks.",
+  };
 
-  return NextResponse.json({ ok: true, position, nicheInsight });
+  return NextResponse.json({ ok: true, position, nicheInsight, ownStats, readiness });
 }

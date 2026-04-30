@@ -1,313 +1,467 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { getSupabase } from "@/lib/supabase";
-import { Loader2, TrendingDown, TrendingUp, Minus, BarChart2, Globe } from "lucide-react";
-import { RedeInteligencia } from "@/components/dados/RedeInteligencia";
-import type { NicheInsight, WorkspacePosition } from "@/services/network-intelligence-service";
+import {
+  AlertTriangle,
+  BarChart2,
+  CheckCircle2,
+  Globe,
+  Loader2,
+  Minus,
+  RefreshCw,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
+import type {
+  NetworkReadiness,
+  NicheInsight,
+  OwnBenchmarkStats,
+  WorkspacePosition,
+} from "@/services/network-intelligence-service";
 
-interface Campanha {
+interface CampaignRow {
   id: string;
   nome_campanha: string;
   gasto_total: number;
   contatos: number;
+  receita_estimada: number;
   ctr: number;
+  cpm: number | null;
+  cpc: number | null;
+  frequencia: number | null;
   impressoes: number;
   status: string;
+  data_atualizacao: string | null;
 }
 
 interface NetworkResponse {
   ok: boolean;
   position: WorkspacePosition | null;
   nicheInsight: NicheInsight | null;
+  ownStats: OwnBenchmarkStats | null;
+  readiness: NetworkReadiness | null;
 }
 
 type Status = "winning" | "median" | "attention" | "unknown";
 
-const fmtBRL = (v: number) =>
-  `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtPct = (v: number) => `${v.toFixed(2)}%`;
-const fmtX = (v: number) => `${v.toFixed(2)}x`;
+const ACTIVE_STATUSES = ["ATIVO", "ACTIVE", "ATIVA"];
 
-function avg(values: number[]) {
-  if (!values.length) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function compareCost(value: number | null, p25: number | null, p75: number | null): Status {
-  if (value === null || p25 === null || p75 === null) return "unknown";
-  if (value <= p25) return "winning";
-  if (value >= p75) return "attention";
-  return "median";
-}
-
-function compareRate(value: number | null, p25: number | null, p75: number | null): Status {
-  if (value === null || p25 === null || p75 === null) return "unknown";
-  if (value >= p25) return "winning";
-  if (value <= p75) return "attention";
-  return "median";
-}
-
-const STATUS_CONFIG: Record<Status, { label: string; text: string; border: string }> = {
+const statusConfig: Record<Status, { label: string; text: string; border: string }> = {
   winning: {
-    label: "melhor que a rede",
+    label: "acima da referencia",
     text: "text-emerald-400",
     border: "border-emerald-500/20 bg-emerald-500/10",
   },
   median: {
-    label: "na faixa da rede",
-    text: "text-white/50",
+    label: "na faixa esperada",
+    text: "text-white/60",
     border: "border-white/[0.07] bg-white/[0.03]",
   },
   attention: {
-    label: "pede atenção",
+    label: "pede atencao",
     text: "text-red-400",
     border: "border-red-500/20 bg-red-500/10",
   },
   unknown: {
-    label: "sem referência suficiente",
-    text: "text-white/25",
+    label: "sem base suficiente",
+    text: "text-white/30",
     border: "border-white/[0.05] bg-white/[0.02]",
   },
 };
 
+function fmtBRL(value: number | null | undefined) {
+  if (!value || !Number.isFinite(value)) return "-";
+  return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function fmtPct(value: number | null | undefined) {
+  if (!value || !Number.isFinite(value)) return "-";
+  return `${value.toFixed(2)}%`;
+}
+
+function fmtX(value: number | null | undefined) {
+  if (!value || !Number.isFinite(value)) return "-";
+  return `${value.toFixed(2)}x`;
+}
+
+function average(values: number[]) {
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function compareLowerIsBetter(value: number | null, good: number | null, bad: number | null): Status {
+  if (value === null || good === null || bad === null) return "unknown";
+  if (value <= good) return "winning";
+  if (value >= bad) return "attention";
+  return "median";
+}
+
+function compareHigherIsBetter(value: number | null, good: number | null, bad: number | null): Status {
+  if (value === null || good === null || bad === null) return "unknown";
+  if (value >= good) return "winning";
+  if (value <= bad) return "attention";
+  return "median";
+}
+
 function StatusIcon({ status, inverse = false }: { status: Status; inverse?: boolean }) {
   if (status === "winning") {
-    return inverse ? <TrendingDown size={12} className="text-emerald-400" /> : <TrendingUp size={12} className="text-emerald-400" />;
+    return inverse
+      ? <TrendingDown size={13} className="text-emerald-400" />
+      : <TrendingUp size={13} className="text-emerald-400" />;
   }
   if (status === "attention") {
-    return inverse ? <TrendingUp size={12} className="text-red-400" /> : <TrendingDown size={12} className="text-red-400" />;
+    return inverse
+      ? <TrendingUp size={13} className="text-red-400" />
+      : <TrendingDown size={13} className="text-red-400" />;
   }
-  return <Minus size={12} className="text-white/25" />;
+  return <Minus size={13} className="text-white/25" />;
+}
+
+function MetricCard({
+  label,
+  value,
+  sub,
+  status = "median",
+  inverse = false,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  status?: Status;
+  inverse?: boolean;
+}) {
+  const cfg = statusConfig[status];
+  return (
+    <div className={`rounded-xl border p-4 ${cfg.border}`}>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[10px] uppercase tracking-wider text-white/30">{label}</p>
+        <StatusIcon status={status} inverse={inverse} />
+      </div>
+      <p className={`text-base font-bold ${cfg.text}`}>{value}</p>
+      <p className="mt-1 text-[10px] leading-relaxed text-white/25">{sub}</p>
+      <p className={`mt-2 text-[10px] ${cfg.text}`}>{cfg.label}</p>
+    </div>
+  );
 }
 
 export default function BenchmarksPage() {
   const supabase = useMemo(() => getSupabase(), []);
-  const [campanhas, setCampanhas] = useState<Campanha[]>([]);
+  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [network, setNetwork] = useState<NetworkResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-        const [{ data }, networkRes] = await Promise.all([
-          supabase
-            .from("metricas_ads")
-            .select("id,nome_campanha,gasto_total,contatos,ctr,impressoes,status")
-            .eq("user_id", user.id)
-            .in("status", ["ATIVO", "ACTIVE", "ATIVA"]),
-          fetch("/api/intelligence/network").then((res) => res.json()).catch(() => null),
-        ]);
+      const [{ data }, networkRes] = await Promise.all([
+        supabase
+          .from("metricas_ads")
+          .select("id,nome_campanha,gasto_total,contatos,receita_estimada,ctr,cpm,cpc,frequencia,impressoes,status,data_atualizacao")
+          .eq("user_id", user.id)
+          .in("status", ACTIVE_STATUSES),
+        fetch("/api/intelligence/network", { cache: "no-store" })
+          .then((res) => res.json())
+          .catch(() => null),
+      ]);
 
-        setCampanhas((data ?? []) as Campanha[]);
-        setNetwork(networkRes?.ok ? networkRes as NetworkResponse : null);
-      } finally {
-        setLoading(false);
-      }
+      setCampaigns((data ?? []) as CampaignRow[]);
+      setNetwork(networkRes?.ok ? networkRes as NetworkResponse : null);
+    } finally {
+      setLoading(false);
     }
-
-    void load();
   }, [supabase]);
 
-  const minhas = useMemo(() => {
-    const ativas = campanhas.filter((c) => c.gasto_total > 0 && c.impressoes > 0);
-    if (!ativas.length) return null;
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-    const comLead = ativas.filter((c) => c.contatos > 0);
+  async function syncMetaAds() {
+    setSyncing(true);
+    try {
+      await fetch("/api/ads-sync", { cache: "no-store" });
+      await load();
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  const localStats = useMemo(() => {
+    const withSpend = campaigns.filter((campaign) => Number(campaign.gasto_total ?? 0) > 0);
+    const withLeads = withSpend.filter((campaign) => Number(campaign.contatos ?? 0) > 0);
+    const withCtr = withSpend.filter((campaign) => Number(campaign.ctr ?? 0) > 0);
+    const totalSpend = withSpend.reduce((sum, campaign) => sum + Number(campaign.gasto_total ?? 0), 0);
+    const totalLeads = withLeads.reduce((sum, campaign) => sum + Number(campaign.contatos ?? 0), 0);
+    const totalRevenue = withSpend.reduce((sum, campaign) => sum + Number(campaign.receita_estimada ?? 0), 0);
 
     return {
-      total: ativas.length,
-      cpl: comLead.length ? avg(comLead.map((c) => c.gasto_total / c.contatos)) : null,
-      ctr: avg(ativas.map((c) => Number(c.ctr ?? 0)).filter((v) => v > 0)),
+      activeCampaigns: campaigns.length,
+      campaignsWithSpend: withSpend.length,
+      campaignsWithLeads: withLeads.length,
+      totalSpend,
+      totalLeads,
+      avgCpl: totalLeads > 0 ? totalSpend / totalLeads : null,
+      avgCtr: average(withCtr.map((campaign) => Number(campaign.ctr ?? 0))),
+      avgRoas: totalSpend > 0 && totalRevenue > 0 ? totalRevenue / totalSpend : null,
     };
-  }, [campanhas]);
+  }, [campaigns]);
 
+  const ownStats = network?.ownStats ?? null;
+  const readiness = network?.readiness ?? null;
   const insight = network?.nicheInsight ?? null;
   const position = network?.position ?? null;
 
-  const cards = useMemo(() => {
-    if (!insight) return [];
+  const effectiveStats = {
+    activeCampaigns: ownStats?.activeCampaigns ?? localStats.activeCampaigns,
+    campaignsWithSpend: ownStats?.campaignsWithSpend ?? localStats.campaignsWithSpend,
+    campaignsWithLeads: ownStats?.campaignsWithLeads ?? localStats.campaignsWithLeads,
+    totalSpend: ownStats?.totalSpend ?? localStats.totalSpend,
+    totalLeads: ownStats?.totalLeads ?? localStats.totalLeads,
+    avgCpl: ownStats?.avgCpl ?? localStats.avgCpl,
+    avgCtr: ownStats?.avgCtr ?? localStats.avgCtr,
+    avgRoas: ownStats?.avgRoas ?? localStats.avgRoas,
+    nicho: ownStats?.nicho ?? position?.nicho ?? insight?.nicho ?? "geral",
+    lastSyncAt: ownStats?.lastSyncAt ?? campaigns.map((campaign) => campaign.data_atualizacao).filter(Boolean).sort().at(-1) ?? null,
+  };
 
-    return [
-      {
-        label: "CPL da rede",
-        value: insight.cplP50 ? fmtBRL(insight.cplP50) : "—",
-        sub: insight.cplP25 && insight.cplP75 ? `p25 ${fmtBRL(insight.cplP25)} · p75 ${fmtBRL(insight.cplP75)}` : "rede ainda sem quartis suficientes",
-        status: compareCost(minhas?.cpl ?? null, insight.cplP25, insight.cplP75) as Status,
-        inverse: true,
-      },
-      {
-        label: "ROAS da rede",
-        value: insight.roasP50 ? fmtX(insight.roasP50) : "—",
-        sub: insight.roasP25 && insight.roasP75 ? `top ${fmtX(insight.roasP25)} · base ${fmtX(insight.roasP75)}` : "rede ainda sem quartis suficientes",
-        status: compareRate(position?.suaRoas ?? null, insight.roasP25, insight.roasP75) as Status,
-        inverse: false,
-      },
-      {
-        label: "CTR da rede",
-        value: insight.ctrP50 ? fmtPct(insight.ctrP50) : "—",
-        sub: minhas?.ctr ? `sua média ${fmtPct(minhas.ctr)}` : "sem CTR suficiente no workspace",
-        status: (insight.ctrP50 && minhas?.ctr
-          ? minhas.ctr >= insight.ctrP50 ? "winning" : "attention"
-          : "unknown") as Status,
-        inverse: false,
-      },
-    ];
-  }, [insight, minhas?.cpl, minhas?.ctr, position?.suaRoas]);
+  const networkCards = [
+    {
+      label: insight ? "CPL da rede" : "Seu CPL real",
+      value: insight?.cplP50 ? fmtBRL(insight.cplP50) : fmtBRL(effectiveStats.avgCpl),
+      sub: insight?.cplP25 && insight.cplP75
+        ? `p25 ${fmtBRL(insight.cplP25)} | p75 ${fmtBRL(insight.cplP75)}`
+        : `${effectiveStats.campaignsWithLeads} campanhas reais com leads`,
+      status: insight
+        ? compareLowerIsBetter(effectiveStats.avgCpl, insight.cplP25, insight.cplP75)
+        : effectiveStats.avgCpl ? "median" as Status : "unknown" as Status,
+      inverse: true,
+    },
+    {
+      label: insight ? "ROAS da rede" : "Seu ROAS real",
+      value: insight?.roasP50 ? fmtX(insight.roasP50) : fmtX(effectiveStats.avgRoas),
+      sub: insight?.roasP25 && insight.roasP75
+        ? `top ${fmtX(insight.roasP25)} | base ${fmtX(insight.roasP75)}`
+        : "usa receita real/estimada gravada no sync",
+      status: insight
+        ? compareHigherIsBetter(position?.suaRoas ?? effectiveStats.avgRoas, insight.roasP25, insight.roasP75)
+        : effectiveStats.avgRoas ? "median" as Status : "unknown" as Status,
+      inverse: false,
+    },
+    {
+      label: insight ? "CTR da rede" : "Seu CTR real",
+      value: insight?.ctrP50 ? fmtPct(insight.ctrP50) : fmtPct(effectiveStats.avgCtr),
+      sub: effectiveStats.avgCtr ? `sua media ${fmtPct(effectiveStats.avgCtr)}` : "sem CTR real sincronizado",
+      status: insight?.ctrP50 && effectiveStats.avgCtr
+        ? effectiveStats.avgCtr >= insight.ctrP50 ? "winning" : "attention"
+        : effectiveStats.avgCtr ? "median" as Status : "unknown" as Status,
+      inverse: false,
+    },
+  ];
 
-  const campanhasComparadas = useMemo(() => {
-    if (!insight) return [];
-
-    return campanhas
-      .filter((c) => c.gasto_total > 0 && c.impressoes > 0)
-      .map((c) => {
-        const cpl = c.contatos > 0 ? c.gasto_total / c.contatos : null;
-        const ctr = Number(c.ctr ?? 0) || null;
-        const cplStatus = compareCost(cpl, insight.cplP25, insight.cplP75) as Status;
-        const ctrStatus = (insight.ctrP50 && ctr
-          ? ctr >= insight.ctrP50 ? "winning" : "attention"
-          : "unknown") as Status;
+  const comparedCampaigns = useMemo(() => {
+    return campaigns
+      .filter((campaign) => Number(campaign.gasto_total ?? 0) > 0)
+      .map((campaign) => {
+        const spend = Number(campaign.gasto_total ?? 0);
+        const leads = Number(campaign.contatos ?? 0);
+        const revenue = Number(campaign.receita_estimada ?? 0);
+        const cpl = leads > 0 ? spend / leads : null;
+        const roas = spend > 0 && revenue > 0 ? revenue / spend : null;
+        const ctr = Number(campaign.ctr ?? 0) || null;
 
         return {
-          ...c,
+          ...campaign,
           cpl,
+          roas,
           ctr,
-          cplStatus,
-          ctrStatus,
+          cplStatus: insight
+            ? compareLowerIsBetter(cpl, insight.cplP25, insight.cplP75)
+            : cpl && effectiveStats.avgCpl ? (cpl <= effectiveStats.avgCpl ? "winning" : "attention") as Status : "unknown" as Status,
+          ctrStatus: (insight?.ctrP50 ?? effectiveStats.avgCtr) && ctr
+            ? ctr >= (insight?.ctrP50 ?? effectiveStats.avgCtr ?? 0) ? "winning" as Status : "attention" as Status
+            : "unknown" as Status,
         };
-      });
-  }, [campanhas, insight]);
+      })
+      .sort((a, b) => Number(b.gasto_total ?? 0) - Number(a.gasto_total ?? 0));
+  }, [campaigns, effectiveStats.avgCpl, effectiveStats.avgCtr, insight]);
 
   return (
     <>
       <Sidebar />
-      <div className="md:ml-[60px] pb-20 md:pb-0 min-h-screen bg-[#040406] text-white">
-        <div className="max-w-5xl mx-auto px-6 py-8">
-          <div className="mb-8">
-            <p className="text-[11px] text-fuchsia-400 font-semibold uppercase tracking-wider mb-1">Inteligência de Mercado</p>
-            <h1 className="text-2xl font-bold text-white">Benchmarks da Rede</h1>
-            <p className="text-sm text-white/40 mt-1">
-              Esta tela agora só usa benchmark vivo da rede Erizon. Se a rede ainda não tiver base suficiente, ela assume isso em vez de inventar mercado.
-            </p>
-          </div>
-
-          <div className="mb-6">
-            <RedeInteligencia />
-          </div>
+      <main className="md:ml-[60px] min-h-screen bg-[#040406] pb-20 text-white md:pb-0">
+        <div className="mx-auto max-w-6xl px-6 py-8">
+          <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-fuchsia-400">Inteligencia de Mercado</p>
+              <h1 className="text-2xl font-bold text-white">Benchmarks da Rede</h1>
+              <p className="mt-1 max-w-2xl text-sm text-white/40">
+                Dados reais da sua conta e, quando houver amostra suficiente, comparacao anonima com a rede Erizon do mesmo nicho.
+              </p>
+            </div>
+            <button
+              onClick={syncMetaAds}
+              disabled={syncing}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-[12px] font-semibold text-white/70 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
+            >
+              {syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              Sincronizar Meta Ads
+            </button>
+          </header>
 
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 size={20} className="animate-spin text-fuchsia-400" />
-            </div>
-          ) : !insight ? (
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8 text-center">
-              <Globe size={24} className="text-white/20 mx-auto mb-3" />
-              <p className="text-white/40 text-sm font-semibold">Benchmark real ainda indisponível</p>
-              <p className="text-white/25 text-[12px] mt-2 leading-relaxed">
-                A rede ainda não tem dados suficientes do seu nicho para gerar referência real. Quando houver base suficiente em `network_weekly_insights`, esta tela passa a comparar automaticamente.
-              </p>
+            <div className="flex items-center justify-center py-24">
+              <Loader2 size={22} className="animate-spin text-fuchsia-400" />
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
-                <div className="flex items-center gap-2 mb-4">
+              <section className={`rounded-2xl border p-5 ${readiness?.hasOwnData || effectiveStats.campaignsWithSpend > 0 ? "border-emerald-500/15 bg-emerald-500/[0.04]" : "border-amber-500/20 bg-amber-500/[0.04]"}`}>
+                <div className="flex items-start gap-3">
+                  {readiness?.hasOwnData || effectiveStats.campaignsWithSpend > 0
+                    ? <CheckCircle2 size={17} className="mt-0.5 text-emerald-400" />
+                    : <AlertTriangle size={17} className="mt-0.5 text-amber-300" />}
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {insight ? "Benchmark de rede ativo" : effectiveStats.campaignsWithSpend > 0 ? "Benchmark interno real ativo" : "Aguardando campanhas reais"}
+                    </p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-white/45">
+                      {readiness?.message ?? "Sincronize campanhas reais do Meta Ads para preencher esta tela."}
+                    </p>
+                    {effectiveStats.lastSyncAt && (
+                      <p className="mt-2 text-[10px] text-white/25">
+                        Ultimo dado real: {new Date(effectiveStats.lastSyncAt).toLocaleString("pt-BR")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+                <div className="mb-4 flex items-center gap-2">
                   <BarChart2 size={16} className="text-fuchsia-400" />
                   <p className="text-sm font-semibold text-white">
-                    Rede real do nicho
-                    <span className="text-white/35 font-normal ml-2 capitalize">· {insight.nicho}</span>
+                    {insight ? "Rede real do nicho" : "Sua base real"}
+                    <span className="ml-2 font-normal capitalize text-white/35">| {effectiveStats.nicho}</span>
                   </p>
-                  <span className="text-[10px] text-white/20 ml-auto">
-                    semana {new Date(insight.semanaInicio).toLocaleDateString("pt-BR")} · {insight.nWorkspaces} workspaces
+                  <span className="ml-auto text-[10px] text-white/20">
+                    {insight
+                      ? `${readiness?.source === "live" ? "ao vivo" : "semana"} ${new Date(insight.semanaInicio).toLocaleDateString("pt-BR")} | ${insight.nWorkspaces} workspaces`
+                      : `${effectiveStats.campaignsWithSpend} campanhas com investimento`}
                   </span>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {cards.map((card) => {
-                    const cfg = STATUS_CONFIG[card.status];
-                    return (
-                      <div key={card.label} className={`rounded-xl border p-4 ${cfg.border}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-[10px] text-white/30 uppercase tracking-wider">{card.label}</p>
-                          <StatusIcon status={card.status} inverse={card.inverse} />
-                        </div>
-                        <p className={`text-base font-bold ${cfg.text}`}>{card.value}</p>
-                        <p className="text-[10px] text-white/20 mt-1">{card.sub}</p>
-                        <p className={`text-[10px] mt-2 ${cfg.text}`}>{cfg.label}</p>
-                      </div>
-                    );
-                  })}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  {networkCards.map((card) => (
+                    <MetricCard key={card.label} {...card} />
+                  ))}
                 </div>
-              </div>
+              </section>
 
-              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
-                <p className="text-sm font-semibold text-white mb-2">Sua posição na rede</p>
-                <p className="text-[12px] text-white/50 leading-relaxed">
-                  {position?.insight ?? "A posição do workspace ainda não pôde ser calculada com segurança."}
+              <section className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <MetricCard
+                  label="Campanhas ativas"
+                  value={String(effectiveStats.activeCampaigns)}
+                  sub={`${effectiveStats.campaignsWithSpend} com investimento real`}
+                  status={effectiveStats.activeCampaigns > 0 ? "median" : "unknown"}
+                />
+                <MetricCard
+                  label="Investimento real"
+                  value={fmtBRL(effectiveStats.totalSpend)}
+                  sub="soma das campanhas ativas sincronizadas"
+                  status={effectiveStats.totalSpend > 0 ? "median" : "unknown"}
+                />
+                <MetricCard
+                  label="Leads reais"
+                  value={String(effectiveStats.totalLeads)}
+                  sub={`${effectiveStats.campaignsWithLeads} campanhas com leads`}
+                  status={effectiveStats.totalLeads > 0 ? "median" : "unknown"}
+                />
+                <MetricCard
+                  label="Base de rede"
+                  value={insight ? `${insight.nWorkspaces} workspaces` : "Indisponivel"}
+                  sub={insight ? "amostra anonima real" : "precisa de 2 workspaces reais no nicho"}
+                  status={insight ? "winning" : "unknown"}
+                />
+              </section>
+
+              {insight && (
+                <section className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Globe size={15} className="text-fuchsia-300" />
+                    <p className="text-sm font-semibold text-white">Sua posicao na rede</p>
+                  </div>
+                  <p className="text-[12px] leading-relaxed text-white/50">
+                    {position?.insight ?? "A posicao do workspace ainda nao pode ser calculada com seguranca."}
+                  </p>
+                </section>
+              )}
+
+              <section>
+                <p className="mb-3 text-sm font-semibold text-white">
+                  Campanhas vs {insight ? "rede real" : "media real da sua conta"}
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-                  <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
-                    <p className="text-[10px] text-white/25 uppercase tracking-wider mb-1">Seu CPL médio</p>
-                    <p className="text-[16px] font-bold text-white">{position?.suaCpl ? fmtBRL(position.suaCpl) : "—"}</p>
+                {comparedCampaigns.length === 0 ? (
+                  <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8 text-center">
+                    <Globe size={24} className="mx-auto mb-3 text-white/20" />
+                    <p className="text-sm font-semibold text-white/45">Nenhuma campanha real sincronizada ainda</p>
+                    <p className="mt-2 text-[12px] text-white/25">Conecte o Meta Ads ou rode a sincronizacao para preencher os benchmarks.</p>
                   </div>
-                  <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
-                    <p className="text-[10px] text-white/25 uppercase tracking-wider mb-1">Seu ROAS médio</p>
-                    <p className="text-[16px] font-bold text-white">{position?.suaRoas ? fmtX(position.suaRoas) : "—"}</p>
-                  </div>
-                </div>
-              </div>
-
-              {campanhasComparadas.length > 0 && (
-                <div>
-                  <p className="text-sm font-semibold text-white mb-3">Campanhas vs rede real</p>
+                ) : (
                   <div className="space-y-3">
-                    {campanhasComparadas.map((c) => {
-                      const cplCfg = STATUS_CONFIG[c.cplStatus];
-                      const ctrCfg = STATUS_CONFIG[c.ctrStatus];
-
+                    {comparedCampaigns.map((campaign) => {
+                      const cplCfg = statusConfig[campaign.cplStatus];
+                      const ctrCfg = statusConfig[campaign.ctrStatus];
                       return (
-                        <div key={c.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-                          <p className="text-sm font-medium text-white mb-3 truncate">{c.nome_campanha}</p>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <article key={campaign.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                          <p className="mb-3 truncate text-sm font-medium text-white">{campaign.nome_campanha}</p>
+                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                             <div className={`rounded-lg border p-3 ${cplCfg.border}`}>
-                              <div className="flex items-center justify-between mb-1">
-                                <p className="text-[9px] text-white/25 uppercase">CPL</p>
-                                <StatusIcon status={c.cplStatus} inverse />
+                              <div className="mb-1 flex items-center justify-between">
+                                <p className="text-[9px] uppercase text-white/25">CPL</p>
+                                <StatusIcon status={campaign.cplStatus} inverse />
                               </div>
-                              <p className={`text-sm font-bold ${cplCfg.text}`}>{c.cpl ? fmtBRL(c.cpl) : "—"}</p>
-                              <p className={`text-[9px] mt-1 ${cplCfg.text}`}>{cplCfg.label}</p>
+                              <p className={`text-sm font-bold ${cplCfg.text}`}>{fmtBRL(campaign.cpl)}</p>
+                              <p className={`mt-1 text-[9px] ${cplCfg.text}`}>{cplCfg.label}</p>
                             </div>
                             <div className={`rounded-lg border p-3 ${ctrCfg.border}`}>
-                              <div className="flex items-center justify-between mb-1">
-                                <p className="text-[9px] text-white/25 uppercase">CTR</p>
-                                <StatusIcon status={c.ctrStatus} />
+                              <div className="mb-1 flex items-center justify-between">
+                                <p className="text-[9px] uppercase text-white/25">CTR</p>
+                                <StatusIcon status={campaign.ctrStatus} />
                               </div>
-                              <p className={`text-sm font-bold ${ctrCfg.text}`}>{c.ctr ? fmtPct(c.ctr) : "—"}</p>
-                              <p className={`text-[9px] mt-1 ${ctrCfg.text}`}>{ctrCfg.label}</p>
+                              <p className={`text-sm font-bold ${ctrCfg.text}`}>{fmtPct(campaign.ctr)}</p>
+                              <p className={`mt-1 text-[9px] ${ctrCfg.text}`}>{ctrCfg.label}</p>
+                            </div>
+                            <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3 md:col-span-2">
+                              <div className="grid grid-cols-2 gap-3 text-[10px] text-white/35 md:grid-cols-4">
+                                <div><span className="block uppercase text-white/18">Gasto</span>{fmtBRL(campaign.gasto_total)}</div>
+                                <div><span className="block uppercase text-white/18">Leads</span>{campaign.contatos}</div>
+                                <div><span className="block uppercase text-white/18">ROAS</span>{fmtX(campaign.roas)}</div>
+                                <div><span className="block uppercase text-white/18">Impressoes</span>{Number(campaign.impressoes ?? 0).toLocaleString("pt-BR")}</div>
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        </article>
                       );
                     })}
                   </div>
-                </div>
-              )}
+                )}
+              </section>
 
-              <div className="rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
-                <p className="text-[10px] text-white/20 uppercase tracking-wider mb-2">Como interpretar agora</p>
+              <section className="rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
+                <p className="mb-2 text-[10px] uppercase tracking-wider text-white/20">Garantia contra dado falso</p>
                 <div className="space-y-1 text-[11px] text-white/30">
-                  <p>Esta tela só compara sua operação com a rede anonimizada da própria Erizon.</p>
-                  <p>Quando a rede ainda não tem amostra suficiente, o benchmark fica indisponível em vez de cair para referência estática antiga.</p>
-                  <p>CPM e CPC ficaram de fora por enquanto porque a rede semanal atual ainda não publica essas medianas com confiança suficiente.</p>
+                  <p>Esta tela le apenas `metricas_ads`, `workspaces`, `network_participation` e `network_weekly_insights`.</p>
+                  <p>Se nao houver rede suficiente, a comparacao vira benchmark interno real da sua conta, nao uma media inventada.</p>
+                  <p>A rede anonima so aparece com pelo menos 2 workspaces reais do mesmo nicho.</p>
                 </div>
-              </div>
+              </section>
             </div>
           )}
         </div>
-      </div>
+      </main>
     </>
   );
 }
