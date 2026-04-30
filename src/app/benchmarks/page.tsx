@@ -15,10 +15,14 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type {
-  NetworkReadiness,
-  NicheInsight,
-  OwnBenchmarkStats,
-  WorkspacePosition,
+  CampaignBenchmarkComparison,
+  MarketBenchmark,
+} from "@/services/benchmark-market-intelligence-service";
+import type {
+  NetworkReadiness as NetworkReadinessType,
+  NicheInsight as NicheInsightType,
+  OwnBenchmarkStats as OwnBenchmarkStatsType,
+  WorkspacePosition as WorkspacePositionType,
 } from "@/services/network-intelligence-service";
 
 interface CampaignRow {
@@ -38,10 +42,13 @@ interface CampaignRow {
 
 interface NetworkResponse {
   ok: boolean;
-  position: WorkspacePosition | null;
-  nicheInsight: NicheInsight | null;
-  ownStats: OwnBenchmarkStats | null;
-  readiness: NetworkReadiness | null;
+  position: WorkspacePositionType | null;
+  nicheInsight: NicheInsightType | null;
+  ownStats: OwnBenchmarkStatsType | null;
+  readiness: NetworkReadinessType | null;
+  marketBenchmark: MarketBenchmark | null;
+  campaignComparisons: CampaignBenchmarkComparison[];
+  detectedNiches: Array<{ niche: string; campaigns: number; confidence: number }>;
 }
 
 type Status = "winning" | "median" | "attention" | "unknown";
@@ -215,6 +222,9 @@ export default function BenchmarksPage() {
   const readiness = network?.readiness ?? null;
   const insight = network?.nicheInsight ?? null;
   const position = network?.position ?? null;
+  const marketBenchmark = network?.marketBenchmark ?? null;
+  const apiCampaignComparisons = network?.campaignComparisons ?? [];
+  const detectedNiches = network?.detectedNiches ?? [];
 
   const effectiveStats = {
     activeCampaigns: ownStats?.activeCampaigns ?? localStats.activeCampaigns,
@@ -263,7 +273,57 @@ export default function BenchmarksPage() {
     },
   ];
 
+  const marketCards = [
+    {
+      label: "CPL de mercado",
+      value: fmtBRL(marketBenchmark?.metrics.cpl.p50),
+      sub: marketBenchmark
+        ? `${marketBenchmark.sourceName} | ${marketBenchmark.periodEnd ? marketBenchmark.periodEnd.slice(0, 4) : "periodo informado"}`
+        : "cadastre fontes reais em market_benchmarks",
+      status: marketBenchmark?.metrics.cpl.p50 ? compareLowerIsBetter(effectiveStats.avgCpl, marketBenchmark.metrics.cpl.p25, marketBenchmark.metrics.cpl.p75) : "unknown" as Status,
+      inverse: true,
+    },
+    {
+      label: "ROAS de mercado",
+      value: fmtX(marketBenchmark?.metrics.roas.p50),
+      sub: marketBenchmark?.sourceNote ?? "somente exibido com fonte externa rastreavel",
+      status: marketBenchmark?.metrics.roas.p50 ? compareHigherIsBetter(effectiveStats.avgRoas, marketBenchmark.metrics.roas.p25, marketBenchmark.metrics.roas.p75) : "unknown" as Status,
+      inverse: false,
+    },
+    {
+      label: "CTR de mercado",
+      value: fmtPct(marketBenchmark?.metrics.ctr.p50),
+      sub: marketBenchmark ? `confianca ${(marketBenchmark.confidence * 100).toFixed(0)}%` : "sem benchmark externo para este nicho",
+      status: marketBenchmark?.metrics.ctr.p50 && effectiveStats.avgCtr
+        ? compareHigherIsBetter(effectiveStats.avgCtr, marketBenchmark.metrics.ctr.p25, marketBenchmark.metrics.ctr.p75)
+        : "unknown" as Status,
+      inverse: false,
+    },
+  ];
+
   const comparedCampaigns = useMemo(() => {
+    if (apiCampaignComparisons.length > 0) {
+      return apiCampaignComparisons
+        .map((campaign) => ({
+          id: campaign.id,
+          nome_campanha: campaign.nomeCampanha,
+          gasto_total: campaign.metrics.spend,
+          contatos: campaign.metrics.leads,
+          impressoes: 0,
+          cpl: campaign.metrics.cpl,
+          roas: campaign.metrics.roas,
+          ctr: campaign.metrics.ctr,
+          cplStatus: campaign.market.available ? campaign.market.cplStatus : campaign.internal.cplStatus,
+          ctrStatus: campaign.market.available ? campaign.market.ctrStatus : campaign.internal.ctrStatus,
+          niche: campaign.niche,
+          campaignType: campaign.campaignType,
+          confidence: campaign.confidence,
+          marketAvailable: campaign.market.available,
+          sourceLabel: campaign.market.sourceLabel,
+        }))
+        .sort((a, b) => Number(b.gasto_total ?? 0) - Number(a.gasto_total ?? 0));
+    }
+
     return campaigns
       .filter((campaign) => Number(campaign.gasto_total ?? 0) > 0)
       .map((campaign) => {
@@ -285,10 +345,15 @@ export default function BenchmarksPage() {
           ctrStatus: (insight?.ctrP50 ?? effectiveStats.avgCtr) && ctr
             ? ctr >= (insight?.ctrP50 ?? effectiveStats.avgCtr ?? 0) ? "winning" as Status : "attention" as Status
             : "unknown" as Status,
+          niche: effectiveStats.nicho,
+          campaignType: "all",
+          confidence: 0.35,
+          marketAvailable: false,
+          sourceLabel: null,
         };
       })
       .sort((a, b) => Number(b.gasto_total ?? 0) - Number(a.gasto_total ?? 0));
-  }, [campaigns, effectiveStats.avgCpl, effectiveStats.avgCtr, insight]);
+  }, [apiCampaignComparisons, campaigns, effectiveStats.avgCpl, effectiveStats.avgCtr, effectiveStats.nicho, insight]);
 
   return (
     <>
@@ -298,9 +363,9 @@ export default function BenchmarksPage() {
           <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-fuchsia-400">Inteligencia de Mercado</p>
-              <h1 className="text-2xl font-bold text-white">Benchmarks da Rede</h1>
+              <h1 className="text-2xl font-bold text-white">Benchmarks Internos e Mercado</h1>
               <p className="mt-1 max-w-2xl text-sm text-white/40">
-                Dados reais da sua conta e, quando houver amostra suficiente, comparacao anonima com a rede Erizon do mesmo nicho.
+                Dados reais da sua conta, rede Erizon anonimizada e mercado externo somente quando houver fonte cadastrada.
               </p>
             </div>
             <button
@@ -344,7 +409,7 @@ export default function BenchmarksPage() {
                 <div className="mb-4 flex items-center gap-2">
                   <BarChart2 size={16} className="text-fuchsia-400" />
                   <p className="text-sm font-semibold text-white">
-                    {insight ? "Rede real do nicho" : "Sua base real"}
+                    {insight ? "Rede Erizon do nicho" : "Benchmark interno real"}
                     <span className="ml-2 font-normal capitalize text-white/35">| {effectiveStats.nicho}</span>
                   </p>
                   <span className="ml-auto text-[10px] text-white/20">
@@ -358,6 +423,35 @@ export default function BenchmarksPage() {
                     <MetricCard key={card.label} {...card} />
                   ))}
                 </div>
+              </section>
+
+              <section className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+                <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center">
+                  <div className="flex items-center gap-2">
+                    <Globe size={16} className="text-sky-300" />
+                    <p className="text-sm font-semibold text-white">
+                      Mercado externo rastreavel
+                      <span className="ml-2 font-normal capitalize text-white/35">
+                        | {marketBenchmark?.niche ?? detectedNiches[0]?.niche ?? effectiveStats.nicho}
+                      </span>
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-white/25 md:ml-auto">
+                    {marketBenchmark
+                      ? `${marketBenchmark.sourceName} | ${marketBenchmark.country} | ${marketBenchmark.sampleSize ?? "amostra nao informada"} amostras`
+                      : "sem fonte externa cadastrada para este nicho"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  {marketCards.map((card) => (
+                    <MetricCard key={card.label} {...card} />
+                  ))}
+                </div>
+                {!marketBenchmark && (
+                  <p className="mt-3 text-[11px] leading-relaxed text-white/30">
+                    Para ativar esta camada, alimente `market_benchmarks` com fonte, periodo, nicho e metricas reais. A tela nao usa fallback estatico.
+                  </p>
+                )}
               </section>
 
               <section className="grid grid-cols-1 gap-3 md:grid-cols-4">
@@ -401,7 +495,7 @@ export default function BenchmarksPage() {
 
               <section>
                 <p className="mb-3 text-sm font-semibold text-white">
-                  Campanhas vs {insight ? "rede real" : "media real da sua conta"}
+                  Campanhas vs {marketBenchmark ? "mercado externo" : insight ? "rede Erizon" : "media real da sua conta"}
                 </p>
                 {comparedCampaigns.length === 0 ? (
                   <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8 text-center">
@@ -416,7 +510,12 @@ export default function BenchmarksPage() {
                       const ctrCfg = statusConfig[campaign.ctrStatus];
                       return (
                         <article key={campaign.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-                          <p className="mb-3 truncate text-sm font-medium text-white">{campaign.nome_campanha}</p>
+                          <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                            <p className="truncate text-sm font-medium text-white">{campaign.nome_campanha}</p>
+                            <p className="text-[10px] uppercase tracking-wide text-white/25">
+                              {campaign.niche} | {campaign.campaignType} | conf. {(campaign.confidence * 100).toFixed(0)}%
+                            </p>
+                          </div>
                           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                             <div className={`rounded-lg border p-3 ${cplCfg.border}`}>
                               <div className="mb-1 flex items-center justify-between">
@@ -439,7 +538,7 @@ export default function BenchmarksPage() {
                                 <div><span className="block uppercase text-white/18">Gasto</span>{fmtBRL(campaign.gasto_total)}</div>
                                 <div><span className="block uppercase text-white/18">Leads</span>{campaign.contatos}</div>
                                 <div><span className="block uppercase text-white/18">ROAS</span>{fmtX(campaign.roas)}</div>
-                                <div><span className="block uppercase text-white/18">Impressoes</span>{Number(campaign.impressoes ?? 0).toLocaleString("pt-BR")}</div>
+                                <div><span className="block uppercase text-white/18">Fonte</span>{campaign.sourceLabel ?? (campaign.marketAvailable ? "Mercado" : "Interno")}</div>
                               </div>
                             </div>
                           </div>
@@ -453,9 +552,9 @@ export default function BenchmarksPage() {
               <section className="rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
                 <p className="mb-2 text-[10px] uppercase tracking-wider text-white/20">Garantia contra dado falso</p>
                 <div className="space-y-1 text-[11px] text-white/30">
-                  <p>Esta tela le apenas `metricas_ads`, `workspaces`, `network_participation` e `network_weekly_insights`.</p>
-                  <p>Se nao houver rede suficiente, a comparacao vira benchmark interno real da sua conta, nao uma media inventada.</p>
-                  <p>A rede anonima so aparece com pelo menos 2 workspaces reais do mesmo nicho.</p>
+                  <p>Esta tela le `metricas_ads`, `workspaces`, `clientes`, `network_participation`, `network_weekly_insights` e `market_benchmarks`.</p>
+                  <p>Se nao houver mercado externo com fonte cadastrada, a camada de mercado fica indisponivel.</p>
+                  <p>O nicho da campanha vem de override manual, cliente vinculado, palavras da campanha ou nicho do workspace, sempre com confianca exibida.</p>
                 </div>
               </section>
             </div>

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth-guard";
 import { NetworkIntelligenceService } from "@/services/network-intelligence-service";
+import { BenchmarkMarketIntelligenceService } from "@/services/benchmark-market-intelligence-service";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 const svc = new NetworkIntelligenceService();
+const marketSvc = new BenchmarkMarketIntelligenceService();
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -17,10 +19,11 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
   const workspaceId = ws?.workspace_id ?? auth.user.id;
 
-  const [position, wsData, ownStats] = await Promise.all([
+  const [position, wsData, ownStats, marketData] = await Promise.all([
     svc.getWorkspacePosition(workspaceId),
     db.from("workspaces").select("niche").eq("id", workspaceId).maybeSingle(),
     svc.getOwnStats(workspaceId),
+    marketSvc.getCampaignComparisons(workspaceId),
   ]);
 
   const nicho = wsData?.data?.niche ?? "geral";
@@ -40,5 +43,14 @@ export async function GET(req: NextRequest) {
         : "Sincronize campanhas reais do Meta Ads para calcular seus benchmarks.",
   };
 
-  return NextResponse.json({ ok: true, position, nicheInsight, ownStats, readiness });
+  return NextResponse.json({
+    ok: true,
+    position,
+    nicheInsight,
+    ownStats,
+    readiness,
+    marketBenchmark: marketData.marketBenchmark,
+    campaignComparisons: marketData.campaignComparisons,
+    detectedNiches: marketData.detectedNiches,
+  });
 }
