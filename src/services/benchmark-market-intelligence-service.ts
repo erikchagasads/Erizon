@@ -284,7 +284,7 @@ export class BenchmarkMarketIntelligenceService {
       if (!marketCache.has(marketKey)) {
         marketCache.set(
           marketKey,
-          await this.getMarketBenchmark({
+          await this.getGlobalBenchmarkForNiche({
             niche: classification.niche,
             campaignType: classification.campaignType,
             platform,
@@ -349,7 +349,7 @@ export class BenchmarkMarketIntelligenceService {
       const groupComparisons = comparisons
         .filter((comparison) => comparison.niche === item.niche)
         .sort((a, b) => b.metrics.spend - a.metrics.spend);
-      const explicitMarket = await this.getMarketBenchmark({ niche: item.niche, campaignType: "all", platform: "meta" });
+      const explicitMarket = await this.getGlobalBenchmarkForNiche({ niche: item.niche, campaignType: "all", platform: "meta" });
       const campaignMarket = groupComparisons.find((comparison) => comparison.market.benchmark)?.market.benchmark ?? null;
 
       return {
@@ -363,10 +363,10 @@ export class BenchmarkMarketIntelligenceService {
     }));
 
     const marketBenchmark = groups.find((group) => group.niche === primary)?.marketBenchmark
-      ?? await this.getMarketBenchmark({ niche: primary, campaignType: "all", platform: "meta" });
+      ?? await this.getGlobalBenchmarkForNiche({ niche: primary, campaignType: "all", platform: "meta" });
     const selectedMarketBenchmark = selectedMarketNiche === primary
       ? marketBenchmark
-      : await this.getMarketBenchmark({ niche: selectedMarketNiche, campaignType: "all", platform: "meta" });
+      : await this.getGlobalBenchmarkForNiche({ niche: selectedMarketNiche, campaignType: "all", platform: "meta" });
     const globalNiches = await this.listAvailableGlobalNiches();
 
     return {
@@ -432,6 +432,7 @@ export class BenchmarkMarketIntelligenceService {
     campaignType?: string;
     platform?: string;
     country?: string;
+    allowFallback?: boolean;
   }): Promise<MarketBenchmark | null> {
     const niche = params.niche || "geral";
     const campaignType = params.campaignType || "all";
@@ -441,9 +442,14 @@ export class BenchmarkMarketIntelligenceService {
     const attempts = [
       { niche, campaign_type: campaignType },
       { niche, campaign_type: "all" },
-      { niche: "geral", campaign_type: campaignType },
-      { niche: "geral", campaign_type: "all" },
     ];
+
+    if (params.allowFallback !== false) {
+      attempts.push(
+        { niche: "geral", campaign_type: campaignType },
+        { niche: "geral", campaign_type: "all" },
+      );
+    }
 
     for (const attempt of attempts) {
       const { data, error } = await this.db
@@ -463,6 +469,53 @@ export class BenchmarkMarketIntelligenceService {
     }
 
     return null;
+  }
+
+  private async getGlobalBenchmarkForNiche(params: {
+    niche: string;
+    campaignType?: string;
+    platform?: string;
+    country?: string;
+  }): Promise<MarketBenchmark | null> {
+    const market = await this.getMarketBenchmark({ ...params, allowFallback: false });
+    if (market) return market;
+    return this.getNetworkBenchmarkForNiche(params.niche, params.platform ?? "meta", params.country ?? "BR");
+  }
+
+  private async getNetworkBenchmarkForNiche(niche: string, platform: string, country: string): Promise<MarketBenchmark | null> {
+    const normalizedNiche = normalize(niche) || "geral";
+    const { data } = await this.db
+      .from("network_weekly_insights")
+      .select("*")
+      .eq("nicho", normalizedNiche)
+      .order("semana_inicio", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!data) return null;
+
+    const row = data as Record<string, unknown>;
+    return {
+      niche: normalizedNiche,
+      campaignType: "all",
+      platform,
+      country,
+      periodStart: row.semana_inicio ? String(row.semana_inicio) : null,
+      periodEnd: row.semana_inicio ? String(row.semana_inicio) : null,
+      sampleSize: row.n_workspaces === null || row.n_workspaces === undefined ? null : Number(row.n_workspaces),
+      confidence: 0.7,
+      sourceName: "Rede Erizon anonimizada",
+      sourceUrl: null,
+      sourceNote: "Base calculada com contas reais sincronizadas no Erizon para este nicho.",
+      metrics: {
+        cpl: { p25: this.num(row.cpl_p25), p50: this.num(row.cpl_p50), p75: this.num(row.cpl_p75), unit: "BRL" },
+        roas: { p25: this.num(row.roas_p25), p50: this.num(row.roas_p50), p75: this.num(row.roas_p75), unit: "x" },
+        ctr: { p25: null, p50: this.num(row.ctr_p50), p75: null, unit: "%" },
+        cpm: { p25: null, p50: null, p75: null, unit: "BRL" },
+        cpc: { p25: null, p50: null, p75: null, unit: "BRL" },
+        frequency: { p25: null, p50: null, p75: null, unit: "x" },
+      },
+    };
   }
 
   private classifyCampaign(

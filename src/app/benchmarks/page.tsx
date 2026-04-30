@@ -358,21 +358,21 @@ export default function BenchmarksPage() {
       value: fmtBRL(marketBenchmark?.metrics.cpl.p50),
       sub: marketBenchmark
         ? `${marketBenchmark.sourceName} | ${marketBenchmark.periodEnd ? marketBenchmark.periodEnd.slice(0, 4) : "periodo informado"}`
-        : "cadastre fontes reais em market_benchmarks",
+        : "sem base global suficiente para este nicho",
       status: marketBenchmark?.metrics.cpl.p50 ? compareLowerIsBetter(effectiveStats.avgCpl, marketBenchmark.metrics.cpl.p25, marketBenchmark.metrics.cpl.p75) : "unknown" as Status,
       inverse: true,
     },
     {
       label: "ROAS de mercado",
       value: fmtX(marketBenchmark?.metrics.roas.p50),
-      sub: marketBenchmark?.sourceNote ?? "somente exibido com fonte externa rastreavel",
+      sub: marketBenchmark?.sourceNote ?? "aparece quando houver amostra confiavel",
       status: marketBenchmark?.metrics.roas.p50 ? compareHigherIsBetter(effectiveStats.avgRoas, marketBenchmark.metrics.roas.p25, marketBenchmark.metrics.roas.p75) : "unknown" as Status,
       inverse: false,
     },
     {
       label: "CTR de mercado",
       value: fmtPct(marketBenchmark?.metrics.ctr.p50),
-      sub: marketBenchmark ? `confianca ${(marketBenchmark.confidence * 100).toFixed(0)}%` : "sem benchmark externo para este nicho",
+      sub: marketBenchmark ? `confianca ${(marketBenchmark.confidence * 100).toFixed(0)}%` : "sem amostra suficiente neste nicho",
       status: marketBenchmark?.metrics.ctr.p50 && effectiveStats.avgCtr
         ? compareHigherIsBetter(effectiveStats.avgCtr, marketBenchmark.metrics.ctr.p25, marketBenchmark.metrics.ctr.p75)
         : "unknown" as Status,
@@ -410,7 +410,9 @@ export default function BenchmarksPage() {
     {
       label: "CPL global",
       value: fmtBRL(selectedMarketBenchmark?.metrics.cpl.p50),
-      sub: selectedMarketBenchmark ? `${selectedMarketBenchmark.sourceName} | ${selectedMarketBenchmark.sampleSize ?? "amostra n/i"} amostras` : "sem fonte externa neste nicho",
+      sub: selectedMarketBenchmark
+        ? `${selectedMarketBenchmark.sourceName} | ${selectedMarketBenchmark.sampleSize ?? "amostra n/i"} contas`
+        : `Ainda nao ha base global para ${labelNiche(globalNicheValue || "geral")}`,
       status: selectedMarketBenchmark?.metrics.cpl.p50
         ? compareLowerIsBetter(selectedAccountInternal?.avgCpl ?? null, selectedMarketBenchmark.metrics.cpl.p25, selectedMarketBenchmark.metrics.cpl.p75)
         : "unknown" as Status,
@@ -419,7 +421,7 @@ export default function BenchmarksPage() {
     {
       label: "ROAS global",
       value: fmtX(selectedMarketBenchmark?.metrics.roas.p50),
-      sub: selectedMarketBenchmark?.sourceNote ?? "sem base externa rastreavel",
+      sub: selectedMarketBenchmark?.sourceNote ?? "Tente outro nicho ou volte apos mais contas sincronizadas.",
       status: selectedMarketBenchmark?.metrics.roas.p50
         ? compareHigherIsBetter(selectedAccountInternal?.avgRoas ?? null, selectedMarketBenchmark.metrics.roas.p25, selectedMarketBenchmark.metrics.roas.p75)
         : "unknown" as Status,
@@ -428,7 +430,7 @@ export default function BenchmarksPage() {
     {
       label: "CTR global",
       value: fmtPct(selectedMarketBenchmark?.metrics.ctr.p50),
-      sub: selectedMarketBenchmark ? `confianca ${(selectedMarketBenchmark.confidence * 100).toFixed(0)}%` : "cadastre market_benchmarks para comparar",
+      sub: selectedMarketBenchmark ? `confianca ${(selectedMarketBenchmark.confidence * 100).toFixed(0)}%` : "Sem amostra suficiente para comparar com seguranca.",
       status: selectedMarketBenchmark?.metrics.ctr.p50
         ? compareHigherIsBetter(selectedAccountInternal?.avgCtr ?? null, selectedMarketBenchmark.metrics.ctr.p25, selectedMarketBenchmark.metrics.ctr.p75)
         : "unknown" as Status,
@@ -545,7 +547,7 @@ export default function BenchmarksPage() {
                   <div>
                     <p className="text-sm font-semibold text-white">Comparativo selecionado</p>
                     <p className="mt-1 text-[12px] text-white/35">
-                      Escolha um nicho da sua conta e compare contra qualquer nicho global com base externa cadastrada.
+                      Escolha o nicho da sua operacao e compare com a base global disponivel para o mesmo mercado.
                     </p>
                   </div>
                   <div className="grid w-full grid-cols-1 gap-3 md:w-auto md:grid-cols-2">
@@ -616,9 +618,16 @@ export default function BenchmarksPage() {
                       </p>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      {selectedExternalCards.length > 0
+                      {selectedMarketBenchmark
                         ? selectedExternalCards.map((card) => <MetricCard key={card.label} {...card} />)
-                        : <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4 text-[12px] text-white/30 sm:col-span-3">Nenhum benchmark global disponivel.</div>}
+                        : (
+                          <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-4 sm:col-span-3">
+                            <p className="text-[12px] font-semibold text-amber-200">Base global em formacao</p>
+                            <p className="mt-1 text-[11px] leading-relaxed text-white/40">
+                              Ainda nao temos amostra suficiente para {labelNiche(globalNicheValue || "este nicho")}. O comparativo interno continua ativo e a base global aparece automaticamente quando houver dados confiaveis.
+                            </p>
+                          </div>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -649,7 +658,7 @@ export default function BenchmarksPage() {
                   <div className="flex items-center gap-2">
                     <Globe size={16} className="text-sky-300" />
                     <p className="text-sm font-semibold text-white">
-                      Mercado externo rastreavel
+                      Base global do mercado
                       <span className="ml-2 font-normal capitalize text-white/35">
                         | {marketBenchmark?.niche ?? detectedNiches[0]?.niche ?? effectiveStats.nicho}
                       </span>
@@ -658,18 +667,22 @@ export default function BenchmarksPage() {
                   <span className="text-[10px] text-white/25 md:ml-auto">
                     {marketBenchmark
                       ? `${marketBenchmark.sourceName} | ${marketBenchmark.country} | ${marketBenchmark.sampleSize ?? "amostra nao informada"} amostras`
-                      : "sem fonte externa cadastrada para este nicho"}
+                      : "aguardando amostra suficiente para este nicho"}
                   </span>
                 </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  {marketCards.map((card) => (
-                    <MetricCard key={card.label} {...card} />
-                  ))}
-                </div>
-                {!marketBenchmark && (
-                  <p className="mt-3 text-[11px] leading-relaxed text-white/30">
-                    Para ativar esta camada, alimente `market_benchmarks` com fonte, periodo, nicho e metricas reais. A tela nao usa fallback estatico.
-                  </p>
+                {marketBenchmark ? (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    {marketCards.map((card) => (
+                      <MetricCard key={card.label} {...card} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-4">
+                    <p className="text-[12px] font-semibold text-amber-200">Sem base global confiavel para este nicho ainda</p>
+                    <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-white/40">
+                      A tela nao inventa numero quando nao existe amostra suficiente. Quando mais contas reais forem sincronizadas neste nicho, os benchmarks globais aparecem aqui.
+                    </p>
+                  </div>
                 )}
               </section>
 
@@ -678,7 +691,7 @@ export default function BenchmarksPage() {
                   <div>
                     <p className="text-sm font-semibold text-white">Benchmarks por nicho detectado</p>
                     <p className="mt-1 text-[12px] text-white/35">
-                      Cada nicho usa apenas as campanhas classificadas nele para o benchmark interno. O externo busca fonte cadastrada no mesmo nicho.
+                      Cada nicho usa apenas campanhas classificadas nele. Quando nao houver base global suficiente, a tela mostra isso claramente.
                     </p>
                   </div>
 
@@ -711,7 +724,7 @@ export default function BenchmarksPage() {
                       {
                         label: "CPL externo",
                         value: fmtBRL(external?.metrics.cpl.p50),
-                        sub: external ? `${external.sourceName} | ${external.sampleSize ?? "amostra n/i"} amostras` : "sem fonte externa neste nicho",
+                        sub: external ? `${external.sourceName} | ${external.sampleSize ?? "amostra n/i"} contas` : "ainda sem base global suficiente neste nicho",
                         status: external?.metrics.cpl.p50
                           ? compareLowerIsBetter(group.internal.avgCpl, external.metrics.cpl.p25, external.metrics.cpl.p75)
                           : "unknown" as Status,
@@ -720,7 +733,7 @@ export default function BenchmarksPage() {
                       {
                         label: "ROAS externo",
                         value: fmtX(external?.metrics.roas.p50),
-                        sub: external?.sourceNote ?? "sem base externa rastreavel",
+                        sub: external?.sourceNote ?? "aparece quando houver amostra confiavel",
                         status: external?.metrics.roas.p50
                           ? compareHigherIsBetter(group.internal.avgRoas, external.metrics.roas.p25, external.metrics.roas.p75)
                           : "unknown" as Status,
@@ -729,7 +742,7 @@ export default function BenchmarksPage() {
                       {
                         label: "CTR externo",
                         value: fmtPct(external?.metrics.ctr.p50),
-                        sub: external ? `confianca ${(external.confidence * 100).toFixed(0)}%` : "cadastre market_benchmarks para comparar",
+                        sub: external ? `confianca ${(external.confidence * 100).toFixed(0)}%` : "sem comparativo seguro por enquanto",
                         status: external?.metrics.ctr.p50
                           ? compareHigherIsBetter(group.internal.avgCtr, external.metrics.ctr.p25, external.metrics.ctr.p75)
                           : "unknown" as Status,
@@ -769,9 +782,18 @@ export default function BenchmarksPage() {
                               <Globe size={14} className="text-sky-300" />
                               <p className="text-[11px] font-semibold uppercase tracking-wider text-white/35">Mercado externo</p>
                             </div>
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                              {externalCards.map((card) => <MetricCard key={card.label} {...card} />)}
-                            </div>
+                            {external ? (
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                {externalCards.map((card) => <MetricCard key={card.label} {...card} />)}
+                              </div>
+                            ) : (
+                              <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-4">
+                                <p className="text-[12px] font-semibold text-amber-200">Base global em formacao</p>
+                                <p className="mt-1 text-[11px] leading-relaxed text-white/40">
+                                  Ainda nao ha amostra suficiente para comparar este nicho com seguranca.
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </article>
@@ -876,11 +898,11 @@ export default function BenchmarksPage() {
               </section>
 
               <section className="rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
-                <p className="mb-2 text-[10px] uppercase tracking-wider text-white/20">Garantia contra dado falso</p>
-                <div className="space-y-1 text-[11px] text-white/30">
-                  <p>Esta tela le `metricas_ads`, `workspaces`, `clientes`, `network_participation`, `network_weekly_insights` e `market_benchmarks`.</p>
-                  <p>Se nao houver mercado externo com fonte cadastrada, a camada de mercado fica indisponivel.</p>
-                  <p>O nicho da campanha vem de override manual, cliente vinculado, palavras da campanha ou nicho do workspace, sempre com confianca exibida.</p>
+                <p className="mb-2 text-[10px] uppercase tracking-wider text-white/20">Como ler estes dados</p>
+                <div className="space-y-1 text-[11px] text-white/35">
+                  <p>Interno: usa suas campanhas reais sincronizadas no Meta Ads.</p>
+                  <p>Global: aparece quando existe amostra suficiente para o nicho escolhido, pela rede Erizon ou por fonte externa curada.</p>
+                  <p>Quando um nicho ainda nao tem amostra, a tela evita inventar numero e mostra que a base ainda esta em formacao.</p>
                 </div>
               </section>
             </div>
