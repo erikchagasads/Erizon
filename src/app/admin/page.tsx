@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   Users, Zap, Bell, CheckCircle2,
   TrendingUp, Activity, ShieldAlert,
-  RefreshCw, Eye, EyeOff,
+  RefreshCw, Eye, EyeOff, Sparkles, Database,
 } from "lucide-react";
+import Link from "next/link";
 
 type Stats = {
   totais: {
@@ -141,14 +142,30 @@ export default function AdminPage() {
             <p className="text-[10px] text-white/20 uppercase tracking-widest mb-1">Admin</p>
             <h1 className="text-[22px] font-black text-white">Painel de Controle</h1>
           </div>
-          <button
-            onClick={carregar}
-            disabled={refreshing}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-[12px] text-white/40 hover:text-white hover:bg-white/[0.06] transition-all disabled:opacity-30"
-          >
-            <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
-            Atualizar
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/blog"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-[12px] text-cyan-100 hover:bg-cyan-300/15 transition-all"
+            >
+              <Sparkles size={12} />
+              Blog Inteligente
+            </Link>
+            <Link
+              href="/admin/database-health"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-emerald-300/20 bg-emerald-300/10 text-[12px] text-emerald-100 hover:bg-emerald-300/15 transition-all"
+            >
+              <Database size={12} />
+              Saúde do banco
+            </Link>
+            <button
+              onClick={carregar}
+              disabled={refreshing}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/[0.08] bg-white/[0.03] text-[12px] text-white/40 hover:text-white hover:bg-white/[0.06] transition-all disabled:opacity-30"
+            >
+              <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+              Atualizar
+            </button>
+          </div>
         </div>
 
         {/* Cards de totais */}
