@@ -50,7 +50,7 @@ export async function GET() {
 
     // Busca o token Meta salvo nas configurações do usuário
     const { data: config } = await supabase
-      .from("user_configs")
+      .from("user_settings")
       .select("meta_access_token")
       .eq("user_id", user.id)
       .maybeSingle();

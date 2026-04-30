@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import PlanGate from "@/components/PlanGate";
 import {
   Users, TrendingUp, Target, DollarSign,
   Loader2, ExternalLink, Copy, Check,
@@ -368,7 +369,8 @@ export default function PortalPage() {
   useEffect(() => { if (clienteId) carregarPortal(clienteId); }, [clienteId]);
 
   return (
-    <>
+    <PlanGate minPlan="command" feature="Portal do Cliente">
+      <>
       <Sidebar />
       <div className="md:ml-[60px] pb-20 md:pb-0 min-h-screen bg-[#040406] text-white">
         <div className="max-w-5xl mx-auto px-6 py-8">
@@ -418,6 +420,7 @@ export default function PortalPage() {
           )}
         </div>
       </div>
-    </>
+      </>
+    </PlanGate>
   );
 }

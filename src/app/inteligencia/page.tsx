@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
+import PlanGate from "@/components/PlanGate";
 
 import { getSupabase } from "@/lib/supabase";
 import { TrendingUp, TrendingDown, Minus, Globe } from "lucide-react";
@@ -143,7 +144,8 @@ export default function InteligenciaPage() {
   const totalImpressoes = campanhas.reduce((s, c) => s + c.impressoes, 0);
 
   return (
-    <>
+    <PlanGate minPlan="pro" feature="Network Intelligence">
+      <>
       <Sidebar />
       <div className="md:ml-[60px] pb-20 md:pb-0 min-h-screen bg-[#040406] text-white">
         <div className="max-w-5xl mx-auto px-6 py-8">
@@ -226,6 +228,7 @@ export default function InteligenciaPage() {
           ) : null}
         </div>
       </div>
-    </>
+      </>
+    </PlanGate>
   );
 }

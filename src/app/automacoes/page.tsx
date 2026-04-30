@@ -6,6 +6,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
+import PlanGate from "@/components/PlanGate";
 import { SkeletonPage } from "@/components/ops/AppShell";
 import { getSupabase } from "@/lib/supabase";
 import { toast } from "@/components/Toast";
@@ -554,7 +555,8 @@ export default function AutomacoesPage() {
   if (loading) return <SkeletonPage cols={4} />;
 
   return (
-    <div className="flex min-h-screen bg-[#060609] text-white">
+    <PlanGate minPlan="command" feature="Automações">
+      <div className="flex min-h-screen bg-[#060609] text-white">
       <Sidebar/>
       <main className="md:ml-[60px] pb-20 md:pb-0 flex-1 flex flex-col">
 
@@ -725,6 +727,7 @@ export default function AutomacoesPage() {
           onFechar={() => setShowModal(false)}
         />
       )}
-    </div>
+      </div>
+    </PlanGate>
   );
 }

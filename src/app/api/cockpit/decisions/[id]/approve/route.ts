@@ -38,18 +38,12 @@ export async function POST(
     const overrideValue = body.override_value ? Number(body.override_value) : undefined;
 
     // Busca token de acesso do usuário para executar no Meta
-    const { data: settings } = await supabase
-      .from("user_settings")
-      .select("access_token")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
     const cockpit = new CockpitService(supabase as unknown as SupabaseClient);
     try {
       const result = await cockpit.approve(
         id,
         user.id,
-        settings?.access_token ?? "",
+        "",
         overrideValue
       );
       return NextResponse.json(result);

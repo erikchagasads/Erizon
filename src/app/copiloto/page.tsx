@@ -10,6 +10,7 @@ import {
   TrendingUp, Users, Wallet, Activity
 } from "lucide-react";
 import ChatShell, { type Mensagem } from "@/components/ChatShell";
+import PlanGate from "@/components/PlanGate";
 import { getSupabase } from "@/lib/supabase";
 import { useCliente } from "@/app/hooks/useCliente";
 
@@ -247,7 +248,8 @@ export default function StudioPage() {
   };
 
   return (
-    <ChatShell
+    <PlanGate minPlan="pro" feature="Copiloto IA">
+      <ChatShell
       tabelaSupabase="conversas_studio"
       sidebarLabel="Nova Conversa"
       headerLabel="Studio IA"
@@ -271,6 +273,7 @@ export default function StudioPage() {
         </div>
       ) : null}
       emptyState={<EmptyState onSelect={() => {}} />}
-    />
+      />
+    </PlanGate>
   );
 }

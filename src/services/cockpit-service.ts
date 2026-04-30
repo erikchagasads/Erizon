@@ -99,7 +99,10 @@ export class CockpitService {
     try {
       const payload = { ...row.meta_payload };
       if (overrideValue && payload.action === "UPDATE_BUDGET") {
-        payload.newBudget = overrideValue;
+        payload.value = overrideValue;
+      } else if (payload.action === "UPDATE_BUDGET" && typeof payload.newBudget === "number") {
+        payload.value = payload.newBudget;
+        delete payload.newBudget;
       }
 
       const metaRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/meta-actions`, {

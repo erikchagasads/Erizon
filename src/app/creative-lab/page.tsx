@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
+import PlanGate from "@/components/PlanGate";
 import { getSupabase } from "@/lib/supabase";
 import {
   Sparkles, Loader2, Copy, Check, ChevronDown,
@@ -124,7 +125,8 @@ export default function CreativeLabPage() {
   const tipoAtual = TIPOS_COPY.find(t => t.id === tipoCopy)!;
 
   return (
-    <>
+    <PlanGate minPlan="command" feature="Creative Lab">
+      <>
       <Sidebar />
       <div className="md:ml-[60px] pb-20 md:pb-0 min-h-screen bg-[#040406] text-white">
         <div className="max-w-4xl mx-auto px-6 py-8">
@@ -270,6 +272,7 @@ export default function CreativeLabPage() {
           )}
         </div>
       </div>
-    </>
+      </>
+    </PlanGate>
   );
 }

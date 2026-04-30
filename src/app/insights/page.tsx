@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
+import PlanGate from "@/components/PlanGate";
 import { getSupabase } from "@/lib/supabase";
 import {
   Instagram, Eye, Heart, MessageCircle, Bookmark,
@@ -424,7 +425,8 @@ export default function InsightsPage() {
   const clienteAtual = clientes.find(c => c.id === clienteId);
 
   return (
-    <div className="flex min-h-screen bg-[#090909] text-white">
+    <PlanGate minPlan="command" feature="Insights Instagram">
+      <div className="flex min-h-screen bg-[#090909] text-white">
       <style jsx global>{`
         @media print {
           body { background: #fff !important; color: #111 !important; }
@@ -499,6 +501,7 @@ export default function InsightsPage() {
           ) : null}
         </div>
       </main>
-    </div>
+      </div>
+    </PlanGate>
   );
 }

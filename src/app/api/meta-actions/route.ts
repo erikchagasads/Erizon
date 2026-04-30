@@ -126,10 +126,10 @@ export async function POST(req: Request) {
     if (authError || !user) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
 
     const { data: conta } = await supabase
-      .from("user_settings").select("access_token")
-      .eq("user_id", user.id).eq("ativo", true).maybeSingle();
+      .from("user_settings").select("meta_access_token")
+      .eq("user_id", user.id).maybeSingle();
 
-    const ACCESS_TOKEN = conta?.access_token ?? "";
+    const ACCESS_TOKEN = conta?.meta_access_token ?? "";
     if (!ACCESS_TOKEN) {
       return NextResponse.json({ error: "Nenhuma conta Meta ativa. Configure em Configurações → Integrações." }, { status: 400 });
     }

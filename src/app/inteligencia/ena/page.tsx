@@ -13,6 +13,7 @@ import {
   BarChart2, Target, Zap, Brain,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
+import PlanGate from "@/components/PlanGate";
 import { SkeletonPage } from "@/components/ops/AppShell";
 import { useSessionGuard } from "@/app/hooks/useSessionGuard";
 import { TrackRecordPanel } from "@/components/ena/TrackRecordPanel";
@@ -321,7 +322,8 @@ export default function ENAPage() {
   if (loading) return <SkeletonPage cols={3} />;
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-b from-[#0a0a0a] via-[#0b0b0d] to-[#0a0a0a] text-white">
+    <PlanGate minPlan="pro" feature="ENA · Atribuição">
+      <div className="flex min-h-screen bg-gradient-to-b from-[#0a0a0a] via-[#0b0b0d] to-[#0a0a0a] text-white">
       <Sidebar />
       <main className="flex-1 ml-0 md:ml-24 px-5 md:px-10 xl:px-14 py-10 max-w-[1400px] mx-auto w-full">
 
@@ -392,6 +394,7 @@ export default function ENAPage() {
         )}
 
       </main>
-    </div>
+      </div>
+    </PlanGate>
   );
 }

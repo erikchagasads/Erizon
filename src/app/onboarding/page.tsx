@@ -4,7 +4,7 @@
 // CORRIGIDO: adicionado Passo 2.5 — seleção de nicho que salva em workspaces.niche
 // Isso alimenta o Network Intelligence com dados reais por segmento
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import { trackProductEvent } from "@/lib/product-events";
@@ -410,6 +410,19 @@ function Passo3({ onNext, onPular }: { onNext: () => void; onPular: () => void }
         </p>
       </div>
 
+      <a
+        href="/api/auth/meta-ads?return_to=/onboarding?meta=connected"
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-[#1877F2] hover:bg-[#2b83f3] text-[14px] font-semibold text-white transition-all"
+      >
+        <Zap size={15} /> Conectar via OAuth da Meta
+      </a>
+
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-white/[0.06]" />
+        <span className="text-[10px] uppercase tracking-wider text-white/20">ou token manual</span>
+        <div className="h-px flex-1 bg-white/[0.06]" />
+      </div>
+
       <div className="space-y-3">
         <div>
           <label className="text-[11px] text-white/35 block mb-1.5">Token de acesso</label>
@@ -509,6 +522,7 @@ function Passo4({ nomeCliente }: { nomeCliente: string }) {
 export default function OnboardingPage() {
   const [passo, setPasso]             = useState(1);
   const [nomeCliente, setNomeCliente] = useState("");
+  const [finalizandoOAuth, setFinalizandoOAuth] = useState(false);
   const router = useRouter();
 
   const TOTAL = 4; // agora são 4 passos (adicionado passo de nicho)
@@ -531,6 +545,18 @@ export default function OnboardingPage() {
     setPasso(5);
     setTimeout(() => router.push("/pulse?tour=1"), 2200);
   }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("meta") !== "connected" || finalizandoOAuth) return;
+
+    setFinalizandoOAuth(true);
+    void trackProductEvent("meta_connected_onboarding", "onboarding", { oauth: true });
+    void trackProductEvent("first_sync_requested", "onboarding");
+    fetch("/api/ads-sync").catch(() => null).finally(() => {
+      void concluir();
+    });
+  }, [finalizandoOAuth]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#09090b] via-[#0b0b0e] to-[#09090b] text-white flex items-center justify-center p-5">

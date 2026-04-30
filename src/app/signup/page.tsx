@@ -23,6 +23,10 @@ export default function SignupPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
+  async function garantirTrial() {
+    await fetch("/api/billing/trial", { method: "POST" }).catch(() => null);
+  }
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -34,6 +38,7 @@ export default function SignupPage() {
       const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
       if (error) throw error;
       if (data.session) {
+        await garantirTrial();
         router.push("/onboarding");
       } else {
         setSuccess(true);

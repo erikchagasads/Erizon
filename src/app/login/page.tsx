@@ -90,6 +90,10 @@ export default function LoginPage() {
     return () => clearTimeout(t);
   }, [reenvioTimer]);
 
+  async function garantirTrial() {
+    await fetch("/api/billing/trial", { method: "POST" }).catch(() => null);
+  }
+
   // ── Login normal → verifica se tem 2FA ativo ──────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,6 +135,7 @@ export default function LoginPage() {
         if (trusted) {
           // Aparelho confiável → pula 2FA
           setAttempts(0); setBlockedUntil(null);
+          await garantirTrial();
           router.push("/pulse"); router.refresh();
           return;
         }
@@ -143,7 +148,8 @@ export default function LoginPage() {
       } else {
         // Sem 2FA — login direto
         setAttempts(0); setBlockedUntil(null);
-      router.push("/pulse"); router.refresh();
+        await garantirTrial();
+        router.push("/pulse"); router.refresh();
       }
     } catch (err: unknown) {
       const newAttempts = attempts + 1;
@@ -194,6 +200,7 @@ export default function LoginPage() {
         });
       }
       setAttempts(0); setBlockedUntil(null);
+      await garantirTrial();
       router.push("/pulse"); router.refresh();
     } catch (err: unknown) {
       setMfaErro(err instanceof Error ? err.message : "Código inválido. Tente novamente.");

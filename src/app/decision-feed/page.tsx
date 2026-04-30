@@ -6,6 +6,7 @@
 import { useEffect, useState, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
 import { StrategicMoatPanel } from "@/components/StrategicMoatPanel";
+import PlanGate from "@/components/PlanGate";
 
 import { getSupabase } from "@/lib/supabase";
 import { TrendingUp, AlertTriangle, Pause, ArrowUpRight, Eye, ChevronDown, ChevronUp, ShieldCheck, Zap } from "lucide-react";
@@ -241,7 +242,8 @@ export default function DecisionFeedPage() {
   const altas    = decisoes.filter(d => d.prioridade === "Alta").length;
 
   return (
-    <>
+    <PlanGate minPlan="pro" feature="Decision Feed">
+      <>
       <Sidebar />
       <div className="md:ml-[60px] pb-20 md:pb-0 min-h-screen bg-[#040406] text-white">
         <div className="max-w-4xl mx-auto px-4 py-6 md:px-6 md:py-8">
@@ -345,6 +347,7 @@ export default function DecisionFeedPage() {
           ) : null}
         </div>
       </div>
-    </>
+      </>
+    </PlanGate>
   );
 }

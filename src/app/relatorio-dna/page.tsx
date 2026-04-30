@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Sidebar from "@/components/Sidebar";
+import PlanGate from "@/components/PlanGate";
 import { Loader2 } from "lucide-react";
 import RelatorioDNAClient from "./RelatorioDNAClient";
 
@@ -18,8 +19,10 @@ function RelatorioDNAFallback() {
 
 export default function RelatorioDNAPage() {
   return (
-    <Suspense fallback={<RelatorioDNAFallback />}>
-      <RelatorioDNAClient />
-    </Suspense>
+    <PlanGate minPlan="command" feature="Profit DNA Report">
+      <Suspense fallback={<RelatorioDNAFallback />}>
+        <RelatorioDNAClient />
+      </Suspense>
+    </PlanGate>
   );
 }

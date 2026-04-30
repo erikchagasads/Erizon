@@ -35,6 +35,10 @@ function confidence(score: number, dataPoints: number): ConfidenceLevel {
   return "low";
 }
 
+function metaCampaignId(campaign: { id?: string; meta_campaign_id?: string | null }): string | undefined {
+  return campaign.meta_campaign_id ?? campaign.id;
+}
+
 export function generateDecisions(
   workspaceId: string,
   engine: EngineResult,
@@ -75,7 +79,7 @@ export function generateDecisions(
       confidence: confidence(campaign.scoreCampanha, campaign.leadsSimulados + 1),
       meta_payload: {
         action: "PAUSE",
-        campaignId: campaign.id,
+        campaignId: metaCampaignId(campaign),
         campaignName: campaign.nome_campanha,
       },
     }));
@@ -102,16 +106,16 @@ export function generateDecisions(
       confidence: confidence(100 - campaign.scoreCampanha, campaign.leadsSimulados),
       meta_payload: {
         action: "UPDATE_BUDGET",
-        campaignId: campaign.id,
+        campaignId: metaCampaignId(campaign),
         campaignName: campaign.nome_campanha,
-        newBudget,
+        value: newBudget,
       },
     }));
   }
 
   const scaleCandidates = engine.campanhas.filter((campaign) =>
     campaign.roas >= 2.5 &&
-    campaign.scoreCampanha >= 70 &&
+    campaign.scoreCampanha >= 80 &&
     campaign.gastoSimulado > 0
   );
 
@@ -130,9 +134,9 @@ export function generateDecisions(
       confidence: confidence(campaign.scoreCampanha, campaign.leadsSimulados),
       meta_payload: {
         action: "UPDATE_BUDGET",
-        campaignId: campaign.id,
+        campaignId: metaCampaignId(campaign),
         campaignName: campaign.nome_campanha,
-        newBudget,
+        value: newBudget,
       },
     }));
   }
@@ -160,9 +164,9 @@ export function generateDecisions(
 export function resolveCockpitMode(
   engine: EngineResult,
   pendingCount: number
-): "ALERTA" | "DECISÃƒO" | "PAZ" {
+): "ALERTA" | "DECISÃO" | "PAZ" {
   if (engine.roasGlobal < 1.0 || engine.capitalEmRisco > engine.totalGasto * 0.4) return "ALERTA";
-  if (pendingCount > 0) return "DECISÃƒO";
+  if (pendingCount > 0) return "DECISÃO";
   return "PAZ";
 }
 

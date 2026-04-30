@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
+import PlanGate from "@/components/PlanGate";
 import { SkeletonPage } from "@/components/ops/AppShell";
 import { getSupabase } from "@/lib/supabase";
 import { ShieldAlert, AlertTriangle, TrendingDown, Eye, Cpu, Users, Palette, Zap } from "lucide-react";
@@ -241,7 +242,8 @@ export default function RiskRadarPage() {
   if (loading) return <SkeletonPage cols={3} />;
 
   return (
-    <>
+    <PlanGate minPlan="pro" feature="Risk Radar">
+      <>
       <Sidebar />
       <div className="md:ml-[60px] pb-20 md:pb-0 min-h-screen bg-[#040406] text-white">
         <div className="max-w-5xl mx-auto px-6 py-8">
@@ -374,6 +376,7 @@ export default function RiskRadarPage() {
           ) : null}
         </div>
       </div>
-    </>
+      </>
+    </PlanGate>
   );
 }

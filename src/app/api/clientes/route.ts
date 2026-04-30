@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { normalizePlan } from "@/lib/plans";
 
 async function getSupabaseUser() {
   const cookieStore = await cookies();
@@ -108,6 +109,28 @@ export async function POST(req: NextRequest) {
 
     if (!nome?.trim()) {
       return NextResponse.json({ error: "Nome é obrigatório." }, { status: 400 });
+    }
+
+    const [{ data: subscription }, { count: clientesAtivos }] = await Promise.all([
+      supabase
+        .from("subscriptions")
+        .select("plano")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("clientes")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("ativo", true),
+    ]);
+
+    const plano = normalizePlan(subscription?.plano) ?? "core";
+    const limiteClientes = plano === "command" ? Infinity : plano === "pro" ? 15 : 3;
+    if ((clientesAtivos ?? 0) >= limiteClientes) {
+      return NextResponse.json({
+        error: `Seu plano permite ate ${limiteClientes} clientes ativos. Faca upgrade para adicionar mais.`,
+        upgrade_required: plano === "core" ? "pro" : "command",
+      }, { status: 402 });
     }
 
     const { data, error } = await supabase
