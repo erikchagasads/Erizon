@@ -70,6 +70,30 @@ export type CampaignBenchmarkComparison = {
   };
 };
 
+export type InternalBenchmarkStats = {
+  activeCampaigns: number;
+  campaignsWithSpend: number;
+  campaignsWithLeads: number;
+  totalSpend: number;
+  totalLeads: number;
+  totalRevenue: number;
+  avgCpl: number | null;
+  avgRoas: number | null;
+  avgCtr: number | null;
+  avgCpm: number | null;
+  avgCpc: number | null;
+  avgFrequency: number | null;
+};
+
+export type BenchmarkNicheGroup = {
+  niche: string;
+  campaigns: number;
+  confidence: number;
+  internal: InternalBenchmarkStats;
+  marketBenchmark: MarketBenchmark | null;
+  campaignComparisons: CampaignBenchmarkComparison[];
+};
+
 type CampaignRow = {
   id: string;
   nome_campanha: string | null;
@@ -173,6 +197,7 @@ export class BenchmarkMarketIntelligenceService {
     marketBenchmark: MarketBenchmark | null;
     campaignComparisons: CampaignBenchmarkComparison[];
     detectedNiches: Array<{ niche: string; campaigns: number; confidence: number }>;
+    benchmarkGroups: BenchmarkNicheGroup[];
   }> {
     const workspace = await this.getWorkspace(workspaceId);
     const ownerUserId = workspace?.owner_user_id ?? workspaceId;
@@ -196,11 +221,8 @@ export class BenchmarkMarketIntelligenceService {
     const overrideById = new Map(overrides.filter((item) => item.campaign_metric_id).map((item) => [String(item.campaign_metric_id), item]));
     const overrideByMetaId = new Map(overrides.filter((item) => item.meta_campaign_id).map((item) => [String(item.meta_campaign_id), item]));
 
-    const metrics = this.internalMetrics(rows);
     const marketCache = new Map<string, MarketBenchmark | null>();
-    const comparisons: CampaignBenchmarkComparison[] = [];
-
-    for (const campaign of rows) {
+    const classified = rows.map((campaign) => {
       const override = overrideById.get(campaign.id) ?? overrideByMetaId.get(String(campaign.meta_campaign_id ?? ""));
       const client = campaign.cliente_id ? clientMap.get(campaign.cliente_id) : undefined;
       const classification = this.classifyCampaign(campaign, {
@@ -209,8 +231,28 @@ export class BenchmarkMarketIntelligenceService {
         overrideNiche: override?.niche ?? null,
         overrideType: override?.campaign_type ?? null,
       });
+
+      return { campaign, classification };
+    });
+
+    const internalByNiche = new Map<string, InternalBenchmarkStats>();
+    for (const niche of new Set(classified.map((item) => item.classification.niche))) {
+      internalByNiche.set(
+        niche,
+        this.internalMetrics(
+          classified
+            .filter((item) => item.classification.niche === niche)
+            .map((item) => item.campaign)
+        )
+      );
+    }
+
+    const comparisons: CampaignBenchmarkComparison[] = [];
+
+    for (const { campaign, classification } of classified) {
       const platform = normalize(campaign.plataforma || "meta") || "meta";
       const marketKey = `${classification.niche}:${classification.campaignType}:${platform}`;
+      const internalMetrics = internalByNiche.get(classification.niche) ?? this.emptyInternalStats();
 
       if (!marketCache.has(marketKey)) {
         marketCache.set(
@@ -242,9 +284,9 @@ export class BenchmarkMarketIntelligenceService {
         confidence: classification.confidence,
         metrics: { spend, leads, revenue, cpl, roas, ctr, cpm, cpc, frequency },
         internal: {
-          cplStatus: statusAgainstAverage(cpl, metrics.avgCpl, true),
-          ctrStatus: statusAgainstAverage(ctr, metrics.avgCtr, false),
-          roasStatus: statusAgainstAverage(roas, metrics.avgRoas, false),
+          cplStatus: statusAgainstAverage(cpl, internalMetrics.avgCpl, true),
+          ctrStatus: statusAgainstAverage(ctr, internalMetrics.avgCtr, false),
+          roasStatus: statusAgainstAverage(roas, internalMetrics.avgRoas, false),
         },
         market: {
           available: Boolean(market),
@@ -275,9 +317,27 @@ export class BenchmarkMarketIntelligenceService {
       .sort((a, b) => b.campaigns - a.campaigns);
 
     const primary = detectedNiches[0]?.niche ?? workspaceNiche;
-    const marketBenchmark = await this.getMarketBenchmark({ niche: primary, campaignType: "all", platform: "meta" });
+    const groups = await Promise.all(detectedNiches.map(async (item) => {
+      const groupComparisons = comparisons
+        .filter((comparison) => comparison.niche === item.niche)
+        .sort((a, b) => b.metrics.spend - a.metrics.spend);
+      const explicitMarket = await this.getMarketBenchmark({ niche: item.niche, campaignType: "all", platform: "meta" });
+      const campaignMarket = groupComparisons.find((comparison) => comparison.market.benchmark)?.market.benchmark ?? null;
 
-    return { marketBenchmark, campaignComparisons: comparisons, detectedNiches };
+      return {
+        niche: item.niche,
+        campaigns: item.campaigns,
+        confidence: item.confidence,
+        internal: internalByNiche.get(item.niche) ?? this.emptyInternalStats(),
+        marketBenchmark: explicitMarket ?? campaignMarket,
+        campaignComparisons: groupComparisons,
+      };
+    }));
+
+    const marketBenchmark = groups.find((group) => group.niche === primary)?.marketBenchmark
+      ?? await this.getMarketBenchmark({ niche: primary, campaignType: "all", platform: "meta" });
+
+    return { marketBenchmark, campaignComparisons: comparisons, detectedNiches, benchmarkGroups: groups };
   }
 
   async getMarketBenchmark(params: {
@@ -416,7 +476,12 @@ export class BenchmarkMarketIntelligenceService {
     return "all";
   }
 
-  private internalMetrics(rows: CampaignRow[]) {
+  private internalMetrics(rows: CampaignRow[]): InternalBenchmarkStats {
+    const withSpend = rows.filter((row) => Number(row.gasto_total ?? 0) > 0);
+    const withLeads = withSpend.filter((row) => Number(row.contatos ?? 0) > 0);
+    const totalSpend = withSpend.reduce((sum, row) => sum + Number(row.gasto_total ?? 0), 0);
+    const totalLeads = withLeads.reduce((sum, row) => sum + Number(row.contatos ?? 0), 0);
+    const totalRevenue = withSpend.reduce((sum, row) => sum + Number(row.receita_estimada ?? 0), 0);
     const values = rows.map((row) => {
       const spend = Number(row.gasto_total ?? 0);
       const leads = Number(row.contatos ?? 0);
@@ -425,13 +490,42 @@ export class BenchmarkMarketIntelligenceService {
         cpl: spend > 0 && leads > 0 ? spend / leads : null,
         roas: spend > 0 && revenue > 0 ? revenue / spend : null,
         ctr: Number(row.ctr ?? 0) || null,
+        cpm: Number(row.cpm ?? 0) || null,
+        cpc: Number(row.cpc ?? 0) || null,
+        frequency: Number(row.frequencia ?? 0) || null,
       };
     });
 
     return {
+      activeCampaigns: rows.length,
+      campaignsWithSpend: withSpend.length,
+      campaignsWithLeads: withLeads.length,
+      totalSpend,
+      totalLeads,
+      totalRevenue,
       avgCpl: avg(values.map((item) => item.cpl).filter((value): value is number => value !== null)),
       avgRoas: avg(values.map((item) => item.roas).filter((value): value is number => value !== null)),
       avgCtr: avg(values.map((item) => item.ctr).filter((value): value is number => value !== null)),
+      avgCpm: avg(values.map((item) => item.cpm).filter((value): value is number => value !== null)),
+      avgCpc: avg(values.map((item) => item.cpc).filter((value): value is number => value !== null)),
+      avgFrequency: avg(values.map((item) => item.frequency).filter((value): value is number => value !== null)),
+    };
+  }
+
+  private emptyInternalStats(): InternalBenchmarkStats {
+    return {
+      activeCampaigns: 0,
+      campaignsWithSpend: 0,
+      campaignsWithLeads: 0,
+      totalSpend: 0,
+      totalLeads: 0,
+      totalRevenue: 0,
+      avgCpl: null,
+      avgRoas: null,
+      avgCtr: null,
+      avgCpm: null,
+      avgCpc: null,
+      avgFrequency: null,
     };
   }
 

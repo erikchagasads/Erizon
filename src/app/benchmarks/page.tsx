@@ -15,6 +15,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type {
+  BenchmarkNicheGroup,
   CampaignBenchmarkComparison,
   MarketBenchmark,
 } from "@/services/benchmark-market-intelligence-service";
@@ -49,6 +50,7 @@ interface NetworkResponse {
   marketBenchmark: MarketBenchmark | null;
   campaignComparisons: CampaignBenchmarkComparison[];
   detectedNiches: Array<{ niche: string; campaigns: number; confidence: number }>;
+  benchmarkGroups?: BenchmarkNicheGroup[];
 }
 
 type Status = "winning" | "median" | "attention" | "unknown";
@@ -225,6 +227,7 @@ export default function BenchmarksPage() {
   const marketBenchmark = network?.marketBenchmark ?? null;
   const apiCampaignComparisons = network?.campaignComparisons ?? [];
   const detectedNiches = network?.detectedNiches ?? [];
+  const benchmarkGroups = network?.benchmarkGroups ?? [];
 
   const effectiveStats = {
     activeCampaigns: ownStats?.activeCampaigns ?? localStats.activeCampaigns,
@@ -453,6 +456,113 @@ export default function BenchmarksPage() {
                   </p>
                 )}
               </section>
+
+              {benchmarkGroups.length > 0 && (
+                <section className="space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Benchmarks por nicho detectado</p>
+                    <p className="mt-1 text-[12px] text-white/35">
+                      Cada nicho usa apenas as campanhas classificadas nele para o benchmark interno. O externo busca fonte cadastrada no mesmo nicho.
+                    </p>
+                  </div>
+
+                  {benchmarkGroups.map((group) => {
+                    const external = group.marketBenchmark;
+                    const internalCards = [
+                      {
+                        label: "CPL interno",
+                        value: fmtBRL(group.internal.avgCpl),
+                        sub: `${group.internal.campaignsWithLeads} campanhas com leads | ${fmtBRL(group.internal.totalSpend)} investidos`,
+                        status: group.internal.avgCpl ? "median" as Status : "unknown" as Status,
+                        inverse: true,
+                      },
+                      {
+                        label: "ROAS interno",
+                        value: fmtX(group.internal.avgRoas),
+                        sub: `${fmtBRL(group.internal.totalRevenue)} em receita estimada`,
+                        status: group.internal.avgRoas ? "median" as Status : "unknown" as Status,
+                        inverse: false,
+                      },
+                      {
+                        label: "CTR interno",
+                        value: fmtPct(group.internal.avgCtr),
+                        sub: `${group.internal.campaignsWithSpend} campanhas com investimento`,
+                        status: group.internal.avgCtr ? "median" as Status : "unknown" as Status,
+                        inverse: false,
+                      },
+                    ];
+                    const externalCards = [
+                      {
+                        label: "CPL externo",
+                        value: fmtBRL(external?.metrics.cpl.p50),
+                        sub: external ? `${external.sourceName} | ${external.sampleSize ?? "amostra n/i"} amostras` : "sem fonte externa neste nicho",
+                        status: external?.metrics.cpl.p50
+                          ? compareLowerIsBetter(group.internal.avgCpl, external.metrics.cpl.p25, external.metrics.cpl.p75)
+                          : "unknown" as Status,
+                        inverse: true,
+                      },
+                      {
+                        label: "ROAS externo",
+                        value: fmtX(external?.metrics.roas.p50),
+                        sub: external?.sourceNote ?? "sem base externa rastreavel",
+                        status: external?.metrics.roas.p50
+                          ? compareHigherIsBetter(group.internal.avgRoas, external.metrics.roas.p25, external.metrics.roas.p75)
+                          : "unknown" as Status,
+                        inverse: false,
+                      },
+                      {
+                        label: "CTR externo",
+                        value: fmtPct(external?.metrics.ctr.p50),
+                        sub: external ? `confianca ${(external.confidence * 100).toFixed(0)}%` : "cadastre market_benchmarks para comparar",
+                        status: external?.metrics.ctr.p50
+                          ? compareHigherIsBetter(group.internal.avgCtr, external.metrics.ctr.p25, external.metrics.ctr.p75)
+                          : "unknown" as Status,
+                        inverse: false,
+                      },
+                    ];
+
+                    return (
+                      <article key={group.niche} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+                        <div className="mb-4 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold capitalize text-white">{group.niche}</p>
+                            <p className="text-[11px] text-white/30">
+                              {group.campaigns} campanhas | confianca media {(group.confidence * 100).toFixed(0)}%
+                            </p>
+                          </div>
+                          <p className="text-[10px] text-white/25">
+                            {external
+                              ? `Externo: ${external.sourceName}${external.periodEnd ? ` | ${external.periodEnd.slice(0, 4)}` : ""}`
+                              : "Externo indisponivel para este nicho"}
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                          <div>
+                            <div className="mb-2 flex items-center gap-2">
+                              <BarChart2 size={14} className="text-fuchsia-300" />
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-white/35">Interno</p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                              {internalCards.map((card) => <MetricCard key={card.label} {...card} />)}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="mb-2 flex items-center gap-2">
+                              <Globe size={14} className="text-sky-300" />
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-white/35">Mercado externo</p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                              {externalCards.map((card) => <MetricCard key={card.label} {...card} />)}
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </section>
+              )}
 
               <section className="grid grid-cols-1 gap-3 md:grid-cols-4">
                 <MetricCard
