@@ -25,10 +25,46 @@ function getAdmin() {
   );
 }
 
+async function garantirWorkspace(
+  admin: ReturnType<typeof getAdmin>,
+  userId: string
+) {
+  const { data: existing } = await admin
+    .from("workspaces")
+    .select("id")
+    .eq("owner_user_id", userId)
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  const { data: ws, error } = await admin
+    .from("workspaces")
+    .insert({ owner_user_id: userId, name: "Meu Workspace" })
+    .select("id")
+    .single();
+
+  if (error || !ws) {
+    console.error("[webhook] Erro ao criar workspace:", error?.message);
+    return null;
+  }
+
+  await admin.from("workspace_members").insert({
+    workspace_id: ws.id,
+    user_id: userId,
+    role: "owner",
+  });
+
+  console.log(`[webhook] Workspace criado: ${ws.id} para user=${userId}`);
+  return ws.id;
+}
+
 function planoFromPriceId(priceId: string): string {
-  if (priceId === process.env.STRIPE_PRICE_GESTOR)  return "gestor";
-  if (priceId === process.env.STRIPE_PRICE_AGENCIA) return "agencia";
-  return "desconhecido";
+  const map: Record<string, string> = {
+    [process.env.STRIPE_PRICE_CORE    ?? "__none__"]: "core",
+    [process.env.STRIPE_PRICE_PRO     ?? "__none__"]: "pro",
+    [process.env.STRIPE_PRICE_COMMAND ?? "__none__"]: "command",
+  };
+  return map[priceId] ?? "pro";
 }
 
 export async function POST(req: Request) {
@@ -61,7 +97,7 @@ export async function POST(req: Request) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId  = session.metadata?.supabase_user_id;
-        const plano   = session.metadata?.plano ?? "gestor";
+        const plano   = session.metadata?.plano ?? "pro";
 
         if (!userId) break;
 
@@ -73,6 +109,8 @@ export async function POST(req: Request) {
           status: "trialing",
           updated_at: new Date().toISOString(),
         }, { onConflict: "user_id" });
+
+        await garantirWorkspace(admin, userId);
 
         console.log(`[webhook] Checkout completo: user=${userId} plano=${plano}`);
         break;

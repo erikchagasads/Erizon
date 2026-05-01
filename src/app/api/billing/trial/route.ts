@@ -29,35 +29,91 @@ export async function POST() {
   );
 
   const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (error || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const admin = getAdminClient();
+
+  // ── 1. Garantir subscription de trial ────────────────────────────────────
   const { data: existing } = await admin
     .from("subscriptions")
     .select("plano, status, trial_end, current_period_end")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (existing) {
-    return NextResponse.json({ ok: true, created: false, subscription: existing });
+  let subscription = existing;
+
+  if (!existing) {
+    const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const newSub = {
+      user_id: user.id,
+      plano: "pro",
+      status: "trialing",
+      trial_end: trialEnd,
+      current_period_end: trialEnd,
+    };
+
+    const { error: insertError } = await admin
+      .from("subscriptions")
+      .insert(newSub);
+
+    if (insertError) {
+      console.error("[trial] Erro ao criar subscription:", insertError.message);
+      return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
+
+    subscription = newSub;
   }
 
-  const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  const subscription = {
-    user_id: user.id,
-    plano: "pro",
-    status: "trialing",
-    trial_end: trialEnd,
-    current_period_end: trialEnd,
-  };
+  // ── 2. Garantir workspace ─────────────────────────────────────────────────
+  const { data: wsExisting } = await admin
+    .from("workspaces")
+    .select("id")
+    .eq("owner_user_id", user.id)
+    .maybeSingle();
 
-  const { error: insertError } = await admin
-    .from("subscriptions")
-    .insert(subscription);
+  let workspaceId = wsExisting?.id;
 
-  if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
+  if (!wsExisting) {
+    const displayName =
+      user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      user.email?.split("@")[0] ||
+      "Meu Workspace";
+
+    const { data: ws, error: wsError } = await admin
+      .from("workspaces")
+      .insert({ owner_user_id: user.id, name: `Workspace de ${displayName}` })
+      .select("id")
+      .single();
+
+    if (wsError || !ws) {
+      console.error("[trial] Erro ao criar workspace:", wsError?.message);
+      return NextResponse.json({
+        ok: true,
+        created: true,
+        subscription,
+        workspace_id: null,
+        warning: "Workspace será criado no onboarding",
+      });
+    }
+
+    workspaceId = ws.id;
+
+    await admin.from("workspace_members").insert({
+      workspace_id: ws.id,
+      user_id: user.id,
+      role: "owner",
+    });
+
+    console.log(`[trial] Workspace criado: ${ws.id} user=${user.id}`);
   }
 
-  return NextResponse.json({ ok: true, created: true, subscription });
+  return NextResponse.json({
+    ok: true,
+    created: !existing,
+    subscription,
+    workspace_id: workspaceId,
+  });
 }

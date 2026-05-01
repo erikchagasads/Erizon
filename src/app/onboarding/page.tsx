@@ -54,7 +54,15 @@ function ProgressBar({ passo, total }: { passo: number; total: number }) {
 }
 
 // ── Passo 1: Boas-vindas + primeiro cliente ────────────────────────────────────
-function Passo1({ onNext }: { onNext: (nomeCliente: string, cor: string) => void }) {
+function Passo1({
+  billingSuccess,
+  planoPago,
+  onNext,
+}: {
+  billingSuccess: boolean;
+  planoPago: string | null;
+  onNext: (nomeCliente: string, cor: string) => void;
+}) {
   const [nome, setNome] = useState("");
   const [cor, setCor]   = useState(CORES[0]);
   const [salvando, setSalvando] = useState(false);
@@ -85,6 +93,15 @@ function Passo1({ onNext }: { onNext: (nomeCliente: string, cor: string) => void
 
   return (
     <div className="space-y-6">
+      {billingSuccess && planoPago && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+          <CheckCircle2 size={14} className="text-emerald-400" />
+          <p className="text-[12px] text-emerald-300">
+            Plano <strong>{planoPago.charAt(0).toUpperCase() + planoPago.slice(1)}</strong> ativado com sucesso!
+          </p>
+        </div>
+      )}
+
       <div>
         <h2 className="text-[22px] font-bold text-white mb-1">Bem-vindo ao Erizon</h2>
         <p className="text-[14px] text-white/40 leading-relaxed">
@@ -523,6 +540,10 @@ export default function OnboardingPage() {
   const [passo, setPasso]             = useState(1);
   const [nomeCliente, setNomeCliente] = useState("");
   const [finalizandoOAuth, setFinalizandoOAuth] = useState(false);
+  const [billingInfo, setBillingInfo] = useState<{ success: boolean; plano: string | null }>({
+    success: false,
+    plano: null,
+  });
   const router = useRouter();
 
   const TOTAL = 4; // agora são 4 passos (adicionado passo de nicho)
@@ -548,6 +569,11 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    setBillingInfo({
+      success: params.get("billing") === "success",
+      plano: params.get("plano"),
+    });
+
     if (params.get("meta") !== "connected" || finalizandoOAuth) return;
 
     setFinalizandoOAuth(true);
@@ -580,6 +606,8 @@ export default function OnboardingPage() {
         <div className="bg-[#111114] border border-white/[0.07] rounded-[24px] p-7">
           {passo === 1 && (
             <Passo1
+              billingSuccess={billingInfo.success}
+              planoPago={billingInfo.plano}
               onNext={(nome, cor) => {
                 setNomeCliente(nome);
                 void cor;

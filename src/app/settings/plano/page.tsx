@@ -80,6 +80,16 @@ export default function PlanoPage() {
   const [cancelando, setCancelando] = useState(false);
   const [cancelOk, setCancelOk]   = useState(false);
 
+  const diasRestantes = billing?.trial_ends_at
+    ? Math.max(0, Math.ceil(
+        (new Date(billing.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      ))
+    : null;
+
+  const isPastDue = billing?.status === "past_due";
+  const isTrialing = billing?.status === "trialing";
+  const isTrialExpirando = isTrialing && diasRestantes !== null && diasRestantes <= 2;
+
   useEffect(() => {
     fetch("/api/billing")
       .then(r => r.json())
@@ -139,7 +149,6 @@ export default function PlanoPage() {
 
   const planoAtual   = billing?.plano ?? null;
   const isAtivo      = billing?.ativo ?? false;
-  const isTrialing   = billing?.status === "trialing";
   const isCanceling  = billing?.cancel_at_period_end;
   const periodoFim   = fmtData(billing?.current_period_end);
   const trialFim     = fmtData(billing?.trial_ends_at);
@@ -260,6 +269,44 @@ export default function PlanoPage() {
             {cancelOk && (
               <div className="flex items-center gap-2 text-[12px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">
                 <CheckCircle2 size={13} /> Cancelamento agendado com sucesso.
+              </div>
+            )}
+
+            {isPastDue && (
+              <div className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
+                <AlertTriangle size={16} className="text-red-400 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-[13px] font-medium text-red-400">Pagamento não processado</p>
+                  <p className="text-[12px] text-white/40 mt-0.5">
+                    Seu acesso será suspenso em breve. Atualize seu cartão para continuar.
+                  </p>
+                </div>
+                <button
+                  onClick={abrirPortal}
+                  className="text-[12px] font-medium text-red-400 border border-red-500/30 rounded-lg px-3 py-1.5 hover:bg-red-500/10 transition-colors"
+                >
+                  Atualizar cartão
+                </button>
+              </div>
+            )}
+
+            {isTrialExpirando && (
+              <div className="mb-6 flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+                <AlertTriangle size={16} className="text-amber-400 flex-shrink-0" />
+                <p className="text-[13px] text-amber-300 flex-1">
+                  Seu trial encerra em <strong>{diasRestantes} {diasRestantes === 1 ? "dia" : "dias"}</strong>.
+                  Escolha um plano abaixo para não perder o acesso.
+                </p>
+              </div>
+            )}
+
+            {isTrialing && !isTrialExpirando && diasRestantes !== null && (
+              <div className="mb-6 flex items-center gap-3 rounded-xl border border-purple-500/20 bg-purple-500/5 px-4 py-3">
+                <Zap size={16} className="text-purple-400 flex-shrink-0" />
+                <p className="text-[13px] text-white/60 flex-1">
+                  Trial Pro ativo — <strong className="text-white/80">{diasRestantes} dias restantes</strong>.
+                  Aproveite todas as funcionalidades.
+                </p>
               </div>
             )}
 
