@@ -33,10 +33,32 @@ export interface TrainingStats {
   total: number;
   by_source: Record<string, number>;
   by_quality: Record<string, number>;
+  by_action_type: Record<string, number>;
+  gold_by_action_type: Record<string, number>;
+  action_distribution: Record<string, number>;
+  gold_action_distribution: Record<string, number>;
+  diversity: {
+    distinct_action_types: number;
+    largest_action_share: number;
+    balanced_enough: boolean;
+  };
+  fine_tuning_readiness: {
+    offline_eval_ready: boolean;
+    training_ready: boolean;
+    shadow_ready: boolean;
+    production_rollout_ready: boolean;
+    next_milestone: string;
+  };
   gold_count: number;
   silver_count: number;
   exportable: number;  // gold + silver
 }
+
+type TrainingStatsRow = {
+  source: string;
+  quality: string;
+  action_type: string | null;
+};
 
 export class TrainingDataService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,6 +74,8 @@ export class TrainingDataService {
     campaignContext: Record<string, unknown>;
     executionSuccess: boolean;
     outcome?: "improved" | "degraded" | "neutral";
+    validatorId?: string;
+    humanValidated?: boolean;
   }): Promise<void> {
     const systemPrompt = this.buildDecisionSystemPrompt();
     const userMessage = this.buildDecisionUserMessage(params.campaignContext, params.actionType);
@@ -61,9 +85,11 @@ export class TrainingDataService {
       params.executionSuccess
     );
 
-    const quality: TrainingExample["quality"] = params.outcome
-      ? params.outcome === "improved" ? "gold" : "silver"
-      : "bronze";
+    const quality: TrainingExample["quality"] = params.humanValidated || params.outcome === "improved"
+      ? "gold"
+      : params.outcome
+        ? "silver"
+        : "bronze";
 
     await this.upsertExample({
       workspace_id: params.workspaceId,
@@ -76,7 +102,8 @@ export class TrainingDataService {
       campaign_id: params.campaignId,
       action_type: params.actionType,
       outcome: params.outcome,
-      human_validated: false,
+      human_validated: params.humanValidated ?? false,
+      validator_id: params.validatorId,
     });
   }
 
@@ -174,25 +201,61 @@ export class TrainingDataService {
 
   // ── Stats de coleta ───────────────────────────────────────────────────────
   async getStats(workspaceId?: string): Promise<TrainingStats> {
-    let query = this.db.from("training_examples").select("source, quality");
+    let query = this.db.from("training_examples").select("source, quality, action_type");
     if (workspaceId) query = query.eq("workspace_id", workspaceId);
     const { data } = await query;
-    if (!data) return { total: 0, by_source: {}, by_quality: {}, gold_count: 0, silver_count: 0, exportable: 0 };
+    if (!data) return this.emptyStats();
 
     const by_source: Record<string, number> = {};
     const by_quality: Record<string, number> = {};
-    for (const row of data as { source: string; quality: string }[]) {
+    const by_action_type: Record<string, number> = {};
+    const gold_by_action_type: Record<string, number> = {};
+
+    for (const row of data as TrainingStatsRow[]) {
       by_source[row.source] = (by_source[row.source] ?? 0) + 1;
       by_quality[row.quality] = (by_quality[row.quality] ?? 0) + 1;
+
+      if (row.source === "decision") {
+        const actionType = row.action_type ?? "unknown";
+        by_action_type[actionType] = (by_action_type[actionType] ?? 0) + 1;
+
+        if (row.quality === "gold") {
+          gold_by_action_type[actionType] = (gold_by_action_type[actionType] ?? 0) + 1;
+        }
+      }
     }
+
+    const goldCount = by_quality.gold ?? 0;
+    const silverCount = by_quality.silver ?? 0;
+    const actionDistribution = this.toPercentDistribution(by_action_type);
+    const goldActionDistribution = this.toPercentDistribution(gold_by_action_type);
+    const largestGoldShare = Math.max(0, ...Object.values(goldActionDistribution));
+    const distinctGoldActions = Object.keys(gold_by_action_type).length;
+    const balancedEnough = goldCount >= 200 && distinctGoldActions >= 3 && largestGoldShare <= 0.65;
 
     return {
       total: data.length,
       by_source,
       by_quality,
-      gold_count: by_quality.gold ?? 0,
-      silver_count: by_quality.silver ?? 0,
-      exportable: (by_quality.gold ?? 0) + (by_quality.silver ?? 0),
+      by_action_type,
+      gold_by_action_type,
+      action_distribution: actionDistribution,
+      gold_action_distribution: goldActionDistribution,
+      diversity: {
+        distinct_action_types: distinctGoldActions,
+        largest_action_share: largestGoldShare,
+        balanced_enough: balancedEnough,
+      },
+      fine_tuning_readiness: {
+        offline_eval_ready: goldCount >= 200 && balancedEnough,
+        training_ready: goldCount >= 500 && balancedEnough,
+        shadow_ready: goldCount >= 1000 && balancedEnough,
+        production_rollout_ready: goldCount >= 1000 && balancedEnough,
+        next_milestone: this.nextFineTuningMilestone(goldCount, balancedEnough, distinctGoldActions, largestGoldShare),
+      },
+      gold_count: goldCount,
+      silver_count: silverCount,
+      exportable: goldCount + silverCount,
     };
   }
 
@@ -202,6 +265,71 @@ export class TrainingDataService {
       ...ex,
       created_at: new Date().toISOString(),
     });
+  }
+
+  private emptyStats(): TrainingStats {
+    return {
+      total: 0,
+      by_source: {},
+      by_quality: {},
+      by_action_type: {},
+      gold_by_action_type: {},
+      action_distribution: {},
+      gold_action_distribution: {},
+      diversity: {
+        distinct_action_types: 0,
+        largest_action_share: 0,
+        balanced_enough: false,
+      },
+      fine_tuning_readiness: {
+        offline_eval_ready: false,
+        training_ready: false,
+        shadow_ready: false,
+        production_rollout_ready: false,
+        next_milestone: "Coletar 200 exemplos gold com pelo menos 3 tipos de ação.",
+      },
+      gold_count: 0,
+      silver_count: 0,
+      exportable: 0,
+    };
+  }
+
+  private toPercentDistribution(counts: Record<string, number>): Record<string, number> {
+    const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+    if (total === 0) return {};
+
+    return Object.fromEntries(
+      Object.entries(counts).map(([key, value]) => [key, Number((value / total).toFixed(4))])
+    );
+  }
+
+  private nextFineTuningMilestone(
+    goldCount: number,
+    balancedEnough: boolean,
+    distinctGoldActions: number,
+    largestGoldShare: number
+  ): string {
+    if (distinctGoldActions < 3) {
+      return "Aumentar diversidade: coletar exemplos gold em pelo menos 3 tipos de ação.";
+    }
+
+    if (largestGoldShare > 0.65) {
+      return "Rebalancear exemplos gold: nenhum tipo de ação deve passar de 65% do conjunto.";
+    }
+
+    if (!balancedEnough || goldCount < 200) {
+      return `Coletar ${Math.max(0, 200 - goldCount)} exemplos gold para iniciar avaliação offline.`;
+    }
+
+    if (goldCount < 500) {
+      return `Coletar ${500 - goldCount} exemplos gold para treinar o primeiro candidato.`;
+    }
+
+    if (goldCount < 1000) {
+      return `Coletar ${1000 - goldCount} exemplos gold para liberar shadow mode.`;
+    }
+
+    return "Pronto para shadow mode com holdout fixo e rollout progressivo.";
   }
 
   private buildDecisionSystemPrompt(): string {

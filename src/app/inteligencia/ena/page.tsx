@@ -25,7 +25,15 @@ const fmtBRL = (v: number) =>
   `R$${v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
 // ─── IREScoreCard ─────────────────────────────────────────────────────────────
-function IREScoreCard({ ire, trend }: { ire: IREApiResponse["latest"]; trend: string }) {
+function IREScoreCard({
+  ire,
+  trend,
+  history,
+}: {
+  ire: IREApiResponse["latest"];
+  trend: string;
+  history: IREApiResponse["history"];
+}) {
   if (!ire) return null;
   const score = ire.ireScore;
   const color = score >= 75 ? "emerald" : score >= 30 ? "amber" : "red";
@@ -38,7 +46,10 @@ function IREScoreCard({ ire, trend }: { ire: IREApiResponse["latest"]; trend: st
   }[color];
 
   const trendIcon = trend === "up" ? <TrendingUp size={14} className="text-emerald-400" /> : trend === "down" ? <TrendingDown size={14} className="text-red-400" /> : <Minus size={14} className="text-white/30" />;
-  const sparkline = ire ? [score * 0.85, score * 0.90, score * 0.92, score * 0.96, score].map(v => Math.round(v)) : [];
+  const sparkline = (history?.length ? history : [ire])
+    .filter(Boolean)
+    .slice(-7)
+    .map(row => Math.round(row?.ireScore ?? score));
 
   return (
     <div className={`relative p-7 rounded-[24px] border ${p.border} ${p.bg} overflow-hidden`}>
@@ -114,9 +125,17 @@ function AttributionFunnel({ data }: { data: AttributionSummary }) {
       </div>
 
       {steps.length === 0 ? (
-        <p className="text-[13px] text-white/20 text-center py-6">
-          Nenhum touchpoint registrado ainda. Os leads via WhatsApp aparecem aqui automaticamente.
-        </p>
+        <div className="py-6 text-center">
+          <p className="text-[13px] text-white/25">
+            Nenhum touchpoint registrado ainda.
+          </p>
+          <p className="mx-auto mt-2 max-w-sm text-[11px] leading-relaxed text-white/18">
+            O funil depende dos eventos de WhatsApp/CRM. Configure a Evolution API em Notificações para que cliques, leads e vendas alimentem a atribuição automaticamente.
+          </p>
+          <a href="/settings/notificacoes" className="mt-4 inline-flex items-center gap-2 rounded-xl border border-purple-500/20 bg-purple-500/10 px-4 py-2 text-[11px] font-semibold text-purple-200 transition-colors hover:bg-purple-500/15">
+            Configurar Evolution API <ChevronRight size={11} />
+          </a>
+        </div>
       ) : (
         <div className="space-y-3">
           {steps.map((step) => {
@@ -322,7 +341,7 @@ export default function ENAPage() {
   if (loading) return <SkeletonPage cols={3} />;
 
   return (
-    <PlanGate minPlan="pro" feature="ENA · Atribuição">
+    <PlanGate minPlan="pro" feature="ENA · Atribuição" preview>
       <div className="flex min-h-screen bg-gradient-to-b from-[#0a0a0a] via-[#0b0b0d] to-[#0a0a0a] text-white">
       <Sidebar />
       <main className="flex-1 ml-0 md:ml-24 px-5 md:px-10 xl:px-14 py-10 max-w-[1400px] mx-auto w-full">
@@ -347,7 +366,11 @@ export default function ENAPage() {
         {/* Grid principal */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
           {/* IRE Score */}
-          <IREScoreCard ire={ireData?.latest ?? null} trend={ireData?.trend ?? "stable"} />
+          <IREScoreCard
+            ire={ireData?.latest ?? null}
+            trend={ireData?.trend ?? "stable"}
+            history={ireData?.history ?? []}
+          />
 
           {/* Predictive ROAS */}
           <PredictiveROASCard data={predictiveRoas} />

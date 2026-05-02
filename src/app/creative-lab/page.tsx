@@ -9,7 +9,7 @@ import PlanGate from "@/components/PlanGate";
 import { getSupabase } from "@/lib/supabase";
 import {
   Sparkles, Loader2, Copy, Check, ChevronDown,
-  FileText, Megaphone, Mail, Layout, Video, Type, Wand2, Map,
+  FileText, Megaphone, Mail, Layout, Video, Type, Wand2, Map, Save, History,
 } from "lucide-react";
 import { BriefToCampaign } from "@/components/BriefToCampaign";
 
@@ -21,6 +21,21 @@ interface Campanha {
   receita_estimada: number;
   ctr: number;
 }
+
+interface CreativeAsset {
+  id: string;
+  campaign_id: string | null;
+  name: string | null;
+  format: string | null;
+  generated_copy: string | null;
+  source: string | null;
+  created_at: string | null;
+}
+
+type CreativeAssetsResponse = {
+  data?: CreativeAsset[];
+  error?: string | null;
+};
 
 const TIPOS_COPY = [
   { id: "headline",     label: "Headlines",     icon: Type,      desc: "8-10 headlines prontas para anúncio" },
@@ -36,7 +51,17 @@ type TipoCopy = typeof TIPOS_COPY[number]["id"];
 const fmtBRL = (v: number) =>
   `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-function CopyOutput({ text }: { text: string }) {
+function CopyOutput({
+  text,
+  onSave,
+  saving,
+  saved,
+}: {
+  text: string;
+  onSave: () => void;
+  saving: boolean;
+  saved: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   function copy() {
     navigator.clipboard.writeText(text);
@@ -47,11 +72,18 @@ function CopyOutput({ text }: { text: string }) {
     <div className="relative rounded-2xl border border-white/[0.06] bg-white/[0.02]">
       <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.05]">
         <p className="text-[11px] text-white/40 font-medium uppercase tracking-wider">Output gerado</p>
-        <button onClick={copy}
-          className="flex items-center gap-1.5 text-[11px] text-white/40 hover:text-white transition-colors">
-          {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-          {copied ? "Copiado!" : "Copiar tudo"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={onSave} disabled={saving || saved}
+            className="flex items-center gap-1.5 text-[11px] text-white/40 hover:text-white transition-colors disabled:opacity-40">
+            {saving ? <Loader2 size={12} className="animate-spin" /> : saved ? <Check size={12} className="text-emerald-400" /> : <Save size={12} />}
+            {saving ? "Salvando..." : saved ? "Salvo" : "Salvar"}
+          </button>
+          <button onClick={copy}
+            className="flex items-center gap-1.5 text-[11px] text-white/40 hover:text-white transition-colors">
+            {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+            {copied ? "Copiado!" : "Copiar tudo"}
+          </button>
+        </div>
       </div>
       <div className="px-5 py-4 text-sm text-white/75 leading-relaxed whitespace-pre-wrap font-mono text-[12px]">
         {text}
@@ -68,7 +100,10 @@ export default function CreativeLabPage() {
   const [prompt, setPrompt]             = useState("");
   const [campanhaSel, setCampanhaSel]   = useState("");
   const [resultado, setResultado]       = useState("");
+  const [assets, setAssets]             = useState<CreativeAsset[]>([]);
   const [gerando, setGerando]           = useState(false);
+  const [salvando, setSalvando]         = useState(false);
+  const [salvo, setSalvo]               = useState(false);
   const [erro, setErro]                 = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -83,6 +118,21 @@ export default function CreativeLabPage() {
     }
     load();
   }, [supabase]);
+
+  async function carregarAssets() {
+    try {
+      const res = await fetch("/api/creative-assets", { cache: "no-store" });
+      if (!res.ok) return;
+      const json = (await res.json()) as CreativeAssetsResponse;
+      setAssets(json.data ?? []);
+    } catch {
+      setAssets([]);
+    }
+  }
+
+  useEffect(() => {
+    void carregarAssets();
+  }, []);
 
   // Fecha dropdown ao clicar fora
   useEffect(() => {
@@ -114,11 +164,39 @@ export default function CreativeLabPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Erro na geração");
       setResultado(json.copy ?? "");
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any) {
-      setErro(e.message ?? "Erro ao gerar copy.");
+      setSalvo(false);
+    } catch (e: unknown) {
+      setErro(e instanceof Error ? e.message : "Erro ao gerar copy.");
     } finally {
       setGerando(false);
+    }
+  }
+
+  async function salvarResultado() {
+    if (!resultado.trim()) return;
+    setSalvando(true);
+    setErro(null);
+
+    try {
+      const res = await fetch("/api/creative-assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaign_id: campanhaSelecionada?.id ?? "creative-lab",
+          campaign_name: campanhaSelecionada?.nome_campanha ?? "Creative Lab",
+          copy: resultado,
+          prompt,
+          format: tipoCopy,
+        }),
+      });
+      const json = (await res.json()) as { error?: string | null };
+      if (!res.ok || json.error) throw new Error(json.error ?? "Erro ao salvar copy.");
+      setSalvo(true);
+      await carregarAssets();
+    } catch (e: unknown) {
+      setErro(e instanceof Error ? e.message : "Erro ao salvar copy.");
+    } finally {
+      setSalvando(false);
     }
   }
 
@@ -267,7 +345,50 @@ export default function CreativeLabPage() {
             )}
 
             {/* Output */}
-            {resultado && <CopyOutput text={resultado} />}
+            {resultado && (
+              <CopyOutput
+                text={resultado}
+                onSave={salvarResultado}
+                saving={salvando}
+                saved={salvo}
+              />
+            )}
+
+            {assets.length > 0 && (
+              <section className="rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.05]">
+                  <p className="flex items-center gap-2 text-[11px] text-white/40 font-medium uppercase tracking-wider">
+                    <History size={12} className="text-purple-300" />
+                    Copies salvas
+                  </p>
+                  <span className="text-[10px] text-white/20">{assets.length} recentes</span>
+                </div>
+                <div className="divide-y divide-white/[0.05]">
+                  {assets.slice(0, 6).map(asset => (
+                    <article key={asset.id} className="px-5 py-4">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[12px] font-semibold text-white/75">{asset.name ?? "Copy IA"}</p>
+                          <p className="text-[10px] text-white/25">
+                            {asset.format ?? "copy"} · {asset.created_at ? new Date(asset.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "sem data"}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(asset.generated_copy ?? "")}
+                          className="flex items-center gap-1.5 rounded-lg border border-white/[0.07] px-3 py-1.5 text-[10px] text-white/35 transition-colors hover:text-white"
+                        >
+                          <Copy size={11} />
+                          Copiar
+                        </button>
+                      </div>
+                      <p className="line-clamp-3 whitespace-pre-wrap text-[12px] leading-relaxed text-white/45">
+                        {asset.generated_copy}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
           )}
         </div>

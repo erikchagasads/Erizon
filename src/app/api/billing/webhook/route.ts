@@ -17,6 +17,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2026-02-25.clover",
 });
 
+const REFERRAL_CREDIT_BRL = 10;
+
 function getAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -67,6 +69,48 @@ function planoFromPriceId(priceId: string): string {
   return map[priceId] ?? "pro";
 }
 
+async function registrarReferralPago(
+  admin: ReturnType<typeof getAdmin>,
+  referrerCode: string | null | undefined,
+  referredUserId: string | null | undefined
+) {
+  if (!referrerCode || !referredUserId) return;
+
+  const { data: referrer } = await admin
+    .from("referrals")
+    .select("user_id")
+    .eq("code", referrerCode)
+    .maybeSingle();
+
+  if (!referrer?.user_id || referrer.user_id === referredUserId) return;
+
+  const { data: existing } = await admin
+    .from("referral_events")
+    .select("id")
+    .eq("referrer_code", referrerCode)
+    .eq("referred_user_id", referredUserId)
+    .eq("event", "paid")
+    .maybeSingle();
+
+  if (existing) return;
+
+  await admin.from("referral_events").insert({
+    referrer_code: referrerCode,
+    referrer_user_id: referrer.user_id,
+    referred_user_id: referredUserId,
+    event: "paid",
+    created_at: new Date().toISOString(),
+  });
+
+  await admin.from("referral_credits").insert({
+    user_id: referrer.user_id,
+    amount_brl: REFERRAL_CREDIT_BRL,
+    reason: `Indicação convertida — código ${referrerCode}`,
+    status: "pending",
+    created_at: new Date().toISOString(),
+  });
+}
+
 export async function POST(req: Request) {
   const body      = await req.text();
   const signature = req.headers.get("stripe-signature");
@@ -111,6 +155,7 @@ export async function POST(req: Request) {
         }, { onConflict: "user_id" });
 
         await garantirWorkspace(admin, userId);
+        await registrarReferralPago(admin, session.metadata?.referrer_code, userId);
 
         console.log(`[webhook] Checkout completo: user=${userId} plano=${plano}`);
         break;
@@ -201,6 +246,26 @@ export async function POST(req: Request) {
 
           console.log(`[webhook] Pagamento falhou: sub=${subId}`);
         }
+        break;
+      }
+
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subId = (invoice as unknown as Record<string, unknown>).subscription_details
+          ? ((invoice as unknown as Record<string, unknown>).subscription_details as Record<string, unknown>)?.subscription as string | null
+          : (invoice as unknown as Record<string, unknown>).subscription as string | null;
+
+        if (!subId) break;
+
+        const { data: subRow } = await admin
+          .from("subscriptions")
+          .select("user_id")
+          .eq("stripe_subscription_id", subId)
+          .maybeSingle();
+
+        const stripeSub = await stripe.subscriptions.retrieve(subId);
+        const referrerCode = stripeSub.metadata?.referrer_code;
+        await registrarReferralPago(admin, referrerCode, subRow?.user_id ?? stripeSub.metadata?.supabase_user_id);
         break;
       }
 

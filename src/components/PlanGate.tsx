@@ -10,9 +10,10 @@ interface PlanGateProps {
   minPlan: PlanId;
   feature: string;
   children: React.ReactNode;
+  preview?: boolean;
 }
 
-export default function PlanGate({ minPlan, feature, children }: PlanGateProps) {
+export default function PlanGate({ minPlan, feature, children, preview = false }: PlanGateProps) {
   const plan = usePlan();
 
   if (plan.loading) {
@@ -27,6 +28,36 @@ export default function PlanGate({ minPlan, feature, children }: PlanGateProps) 
   }
 
   if (plan.canAccess(minPlan)) return <>{children}</>;
+
+  if (preview) {
+    return (
+      <div className="relative min-h-screen bg-[#040406] text-white">
+        <div className="pointer-events-none select-none blur-[3px] opacity-45">
+          {children}
+        </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-5 backdrop-blur-[2px]">
+          <section className="w-full max-w-[520px] rounded-2xl border border-white/[0.1] bg-[#111116]/95 p-7 text-center shadow-2xl shadow-black/60">
+            <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-fuchsia-500/20 bg-fuchsia-500/10">
+              <Lock size={20} className="text-fuchsia-300" />
+            </div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-fuchsia-300">
+              Disponível no {PLAN_LABELS[minPlan]}
+            </p>
+            <h1 className="mb-3 text-2xl font-black tracking-tight text-white">{feature}</h1>
+            <p className="mx-auto mb-6 max-w-sm text-sm leading-relaxed text-white/50">
+              Veja a estrutura completa da tela antes do upgrade. Para liberar dados reais, previsões e ações, ative o plano {PLAN_LABELS[minPlan]}.
+            </p>
+            <Link
+              href={`/billing?upgrade=${minPlan}`}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-fuchsia-600 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-fuchsia-500"
+            >
+              <Sparkles size={15} /> Fazer upgrade <ArrowRight size={14} />
+            </Link>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

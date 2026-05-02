@@ -9,7 +9,7 @@ import { StrategicMoatPanel } from "@/components/StrategicMoatPanel";
 import PlanGate from "@/components/PlanGate";
 
 import { getSupabase } from "@/lib/supabase";
-import { TrendingUp, AlertTriangle, Pause, ArrowUpRight, Eye, ChevronDown, ChevronUp, ShieldCheck, Zap } from "lucide-react";
+import { TrendingUp, AlertTriangle, Pause, ArrowUpRight, Eye, ChevronDown, ChevronUp, ShieldCheck, Zap, Brain, Loader2 } from "lucide-react";
 import { useSessionGuard } from "@/app/hooks/useSessionGuard";
 
 interface Campanha {
@@ -44,6 +44,20 @@ interface Decisao {
   tipo: "pausar" | "escalar" | "monitorar";
   gastoDiario: number;
   guiaEscala?: GuiaEscala;
+}
+
+interface Explicacao {
+  summary: string;
+  factors: Array<{
+    name: string;
+    impact: "high" | "medium" | "low";
+    contribution_pct: number;
+  }>;
+  alternatives: Array<{
+    action: string;
+    score: number;
+    why_not_chosen?: string;
+  }>;
 }
 
 const fmtBRL = (v: number) =>
@@ -219,6 +233,8 @@ export default function DecisionFeedPage() {
   const supabase = useMemo(() => getSupabase(), []);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [loading, setLoading]     = useState(true);
+  const [explicacoes, setExplicacoes] = useState<Record<string, Explicacao>>({});
+  const [explicandoId, setExplicandoId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -240,6 +256,61 @@ export default function DecisionFeedPage() {
   const decisoes = useMemo(() => gerarDecisoes(campanhas), [campanhas]);
   const criticas = decisoes.filter(d => d.prioridade === "Crítica").length;
   const altas    = decisoes.filter(d => d.prioridade === "Alta").length;
+
+  async function explicarDecisao(decisao: Decisao) {
+    if (explicacoes[decisao.campanhaId]) return;
+    setExplicandoId(decisao.campanhaId);
+
+    try {
+      const factors = [
+        { name: decisao.motivo, score: decisao.prioridade === "Crítica" ? 45 : 30 },
+        { name: decisao.impacto, score: decisao.tipo === "pausar" ? 35 : 25 },
+        { name: `Confiança operacional de ${decisao.confianca}%`, score: decisao.confianca / 4 },
+      ];
+
+      const alternatives = decisao.tipo === "pausar"
+        ? [
+            { action: "Reduzir orçamento e observar por 48h", score: 62 },
+            { action: "Trocar criativo sem pausar", score: 55 },
+          ]
+        : decisao.tipo === "escalar"
+          ? [
+              { action: "Manter orçamento atual", score: 58 },
+              { action: "Duplicar campanha para escala horizontal", score: 66 },
+            ]
+          : [
+              { action: "Pausar imediatamente", score: 50 },
+              { action: "Aguardar mais dados", score: 57 },
+            ];
+
+      const res = await fetch("/api/explainability/decision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: decisao.titulo,
+          campaign_name: decisao.campanhaNome,
+          factors,
+          alternatives,
+          confidence: decisao.confianca,
+        }),
+      });
+
+      const json = (await res.json()) as { data?: Explicacao; error?: string };
+      if (!res.ok || !json.data) throw new Error(json.error ?? "Falha ao explicar decisao.");
+      setExplicacoes(prev => ({ ...prev, [decisao.campanhaId]: json.data as Explicacao }));
+    } catch {
+      setExplicacoes(prev => ({
+        ...prev,
+        [decisao.campanhaId]: {
+          summary: "Nao consegui acionar a IA agora, mas esta recomendacao foi priorizada pela combinacao entre risco, impacto financeiro e confianca operacional.",
+          factors: [],
+          alternatives: [],
+        },
+      }));
+    } finally {
+      setExplicandoId(null);
+    }
+  }
 
   return (
     <PlanGate minPlan="pro" feature="Decision Feed">
@@ -324,6 +395,33 @@ export default function DecisionFeedPage() {
                           </div>
 
                           {/* Ação rápida para pausar/monitorar */}
+                          <div className="mt-3">
+                            <button
+                              onClick={() => explicarDecisao(d)}
+                              disabled={explicandoId === d.campanhaId}
+                              className="inline-flex h-9 items-center gap-2 rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/[0.06] px-3 text-[12px] font-semibold text-fuchsia-300 transition-all hover:border-fuchsia-500/35 hover:bg-fuchsia-500/[0.1] disabled:opacity-50"
+                            >
+                              {explicandoId === d.campanhaId ? <Loader2 size={13} className="animate-spin" /> : <Brain size={13} />}
+                              Entender
+                            </button>
+                          </div>
+
+                          {explicacoes[d.campanhaId] && (
+                            <div className="mt-3 rounded-xl border border-fuchsia-500/15 bg-fuchsia-500/[0.04] p-3">
+                              <p className="mb-1 text-[9px] uppercase tracking-widest text-fuchsia-300/55">Explicacao da IA</p>
+                              <p className="text-[12px] leading-relaxed text-white/70">{explicacoes[d.campanhaId].summary}</p>
+                              {explicacoes[d.campanhaId].factors.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {explicacoes[d.campanhaId].factors.slice(0, 3).map(factor => (
+                                    <span key={factor.name} className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] text-white/45">
+                                      {factor.name}: {factor.contribution_pct}%
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {d.tipo !== "escalar" && (
                             <div className="mt-3 rounded-xl bg-fuchsia-500/[0.05] border border-fuchsia-500/15 px-3 py-2">
                               <p className="text-[12px] text-white/60">

@@ -80,6 +80,7 @@ export async function POST(req: Request) {
     if (action === "checkout") {
       const priceId = PRICE_MAP[plano];
       if (!priceId) return NextResponse.json({ error: "Plano inválido" }, { status: 400 });
+      const referralCode = cookieStore.get("erizon_ref")?.value;
 
       const { data: sub } = await admin
         .from("subscriptions")
@@ -93,7 +94,10 @@ export async function POST(req: Request) {
       if (!customerId) {
         const customer = await stripe.customers.create({
           email: user.email,
-          metadata: { supabase_user_id: user.id },
+          metadata: {
+            supabase_user_id: user.id,
+            ...(referralCode ? { referrer_code: referralCode } : {}),
+          },
         });
         customerId = customer.id;
         await admin.from("subscriptions").upsert(
@@ -109,11 +113,19 @@ export async function POST(req: Request) {
         line_items: [{ price: priceId, quantity: 1 }],
         subscription_data: {
           trial_period_days: 7,
-          metadata: { supabase_user_id: user.id, plano },
+          metadata: {
+            supabase_user_id: user.id,
+            plano,
+            ...(referralCode ? { referrer_code: referralCode } : {}),
+          },
         },
         success_url: `${APP_URL}/onboarding?billing=success&plano=${plano}`,
         cancel_url:  `${APP_URL}/billing?billing=canceled`,
-        metadata: { supabase_user_id: user.id, plano },
+        metadata: {
+          supabase_user_id: user.id,
+          plano,
+          ...(referralCode ? { referrer_code: referralCode } : {}),
+        },
         allow_promotion_codes: true,
         locale: "pt-BR",
       });

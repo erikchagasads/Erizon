@@ -9,6 +9,7 @@ import {
   Loader2, X, Eye, ArrowUpDown,
   AlertTriangle, CheckCircle, Target, Zap, Clock,
   Sparkles, ImageIcon, ThumbsUp, ThumbsDown, Lightbulb,
+  FileText, Save,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { fetchSafe } from "@/lib/fetchSafe";
@@ -66,6 +67,17 @@ type ClienteRaw = {
 type OrdenarPor = "nome_campanha" | "gasto_total" | "contatos" | "cpl" | "roas" | "ctr" | "score" | "status";
 type FiltroStatus = "todos" | "ativo" | "pausado" | "critico";
 type Periodo = "hoje" | "7d" | "30d" | "90d" | "todos";
+type TipoCopyContextual = "body_ad" | "headline" | "copy_imagem" | "cta";
+
+type CopywriterResponse = {
+  copy?: string;
+  error?: string;
+};
+
+type CreativeAssetResponse = {
+  data?: { id: string };
+  error?: string | null;
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtBRL  = (v: number) => `R$\u00a0${v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -502,6 +514,171 @@ function SecaoCriativo({ campanha }: { campanha: Campanha }) {
   );
 }
 
+function SecaoCopyContextual({ analise }: { analise: AnaliseIndividual }) {
+  const { camp, cpl, roas, score, decisao, titulo, descricao } = analise;
+  const [tipoCopy, setTipoCopy] = useState<TipoCopyContextual>("body_ad");
+  const [copyGerada, setCopyGerada] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvo, setSalvo] = useState(false);
+
+  const sugestao = decisao === "pausar"
+    ? "Criar uma nova abordagem para recuperar performance antes de investir mais."
+    : decisao === "escalar"
+      ? "Criar variações para escalar sem cansar o público atual."
+      : decisao === "monitorar"
+        ? "Criar uma hipótese de copy para reduzir CPL e melhorar CTR."
+        : "Criar uma variação de controle para continuar testando ganhos incrementais.";
+
+  const contextoCampanha = [
+    `Campanha: ${camp.nome_campanha}`,
+    `Cliente/nicho: ${camp.cliente_nome ?? "não informado"}`,
+    `Status: ${camp.status}`,
+    `Decisão da Erizon: ${titulo}`,
+    `Diagnóstico: ${descricao}`,
+    `Investimento: ${fmtBRL2(camp.gasto_total)}`,
+    `Leads: ${camp.contatos}`,
+    `CPL atual: ${cpl > 0 ? fmtBRL2(cpl) : "sem leads registrados"}`,
+    `ROAS atual: ${roas > 0 ? fmtX(roas) : "sem receita registrada"}`,
+    `CTR atual: ${camp.ctr && camp.ctr > 0 ? fmtPct(camp.ctr) : "não informado"}`,
+    `CPM atual: ${camp.cpm && camp.cpm > 0 ? fmtBRL2(camp.cpm) : "não informado"}`,
+    `Score Erizon: ${score}/100`,
+    "Use o DNA de performance e a memória estratégica do cliente quando estiverem disponíveis.",
+    "Não invente resultados, provas ou garantias. Se faltar dado, use uma promessa testável e honesta.",
+  ].join("\n");
+
+  async function gerarCopy() {
+    setLoading(true);
+    setErro(null);
+    setSalvo(false);
+
+    try {
+      const res = await fetch("/api/ai-copywriter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mensagemUsuario: sugestao,
+          tipoCopy,
+          contexto: contextoCampanha,
+          cliente_id: camp.cliente_id,
+        }),
+      });
+      const data = (await res.json()) as CopywriterResponse;
+
+      if (!res.ok || data.error) {
+        setErro(data.error ?? "Não foi possível gerar a copy.");
+        return;
+      }
+
+      setCopyGerada(data.copy ?? "");
+    } catch {
+      setErro("Erro de conexão ao gerar copy.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function salvarCopy() {
+    if (!copyGerada.trim()) return;
+
+    setSalvando(true);
+    setErro(null);
+
+    try {
+      const res = await fetch("/api/creative-assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaign_id: camp.id,
+          campaign_name: camp.nome_campanha,
+          client_id: camp.cliente_id,
+          copy: copyGerada,
+          prompt: contextoCampanha,
+          format: tipoCopy,
+        }),
+      });
+      const data = (await res.json()) as CreativeAssetResponse;
+
+      if (!res.ok || data.error) {
+        setErro(data.error ?? "Não foi possível salvar a copy.");
+        return;
+      }
+
+      setSalvo(true);
+    } catch {
+      setErro("Erro de conexão ao salvar copy.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="px-6 mt-5 shrink-0">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/20 flex items-center gap-1.5">
+          <FileText size={10} className="text-sky-400"/>
+          Copy contextual
+        </p>
+        <select
+          value={tipoCopy}
+          onChange={e => setTipoCopy(e.target.value as TipoCopyContextual)}
+          className="h-7 rounded-lg border border-white/[0.07] bg-white/[0.03] px-2 text-[10px] text-white/45 outline-none hover:text-white/70"
+        >
+          <option value="body_ad">Body ad</option>
+          <option value="headline">Headlines</option>
+          <option value="copy_imagem">Imagem</option>
+          <option value="cta">CTAs</option>
+        </select>
+      </div>
+
+      <div className="rounded-xl border border-sky-500/15 bg-sky-500/[0.035] p-4">
+        <div className="flex items-start gap-2 mb-3">
+          <Lightbulb size={12} className="text-sky-400 mt-0.5 shrink-0"/>
+          <p className="text-[11px] text-sky-200/60 leading-relaxed">{sugestao}</p>
+        </div>
+
+        <button
+          onClick={gerarCopy}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-sky-600/80 hover:bg-sky-500 text-[12px] font-semibold text-white transition-all disabled:opacity-60"
+        >
+          {loading ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12}/>}
+          {loading ? "Gerando copy..." : "Gerar nova copy"}
+        </button>
+
+        {copyGerada && (
+          <div className="mt-3 space-y-2">
+            <textarea
+              value={copyGerada}
+              onChange={e => {
+                setCopyGerada(e.target.value);
+                setSalvo(false);
+              }}
+              rows={10}
+              className="w-full resize-y rounded-xl border border-white/[0.07] bg-black/25 p-3 text-[11px] leading-relaxed text-white/70 outline-none focus:border-sky-400/40"
+            />
+            <button
+              onClick={salvarCopy}
+              disabled={salvando || !copyGerada.trim()}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.07] text-[12px] font-semibold text-white/60 hover:text-white transition-all disabled:opacity-50"
+            >
+              {salvando ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>}
+              {salvando ? "Salvando..." : salvo ? "Salva em creative_assets" : "Salvar em creative_assets"}
+            </button>
+          </div>
+        )}
+
+        {erro && (
+          <div className="mt-3 rounded-lg border border-red-500/20 bg-red-500/[0.04] px-3 py-2 text-[11px] text-red-300/80">
+            {erro}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PainelAnaliseIndividual({ analise, onFechar }: {
   analise: AnaliseIndividual;
   onFechar: () => void;
@@ -633,6 +810,7 @@ function PainelAnaliseIndividual({ analise, onFechar }: {
 
         {/* Análise de Criativo IA */}
         <SecaoCriativo campanha={camp} />
+        <SecaoCopyContextual analise={analise} />
 
         {/* Ações */}
         <div className="px-6 mt-5 mb-6 flex flex-col gap-2 shrink-0">

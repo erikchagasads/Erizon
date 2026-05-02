@@ -152,6 +152,40 @@ export default function BenchmarksDocsPage() {
             </div>
           </section>
 
+          <section className="mt-8 grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+              <h2 className="text-lg font-medium text-white">Codigos de status</h2>
+              <div className="mt-3 space-y-2 text-sm text-zinc-400">
+                <p><code className="rounded bg-zinc-950 px-1.5 py-0.5 text-zinc-200">200</code> consulta processada.</p>
+                <p><code className="rounded bg-zinc-950 px-1.5 py-0.5 text-zinc-200">401</code> key ausente ou invalida.</p>
+                <p><code className="rounded bg-zinc-950 px-1.5 py-0.5 text-zinc-200">429</code> limite horario excedido.</p>
+                <p><code className="rounded bg-zinc-950 px-1.5 py-0.5 text-zinc-200">500</code> erro interno temporario.</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+              <h2 className="text-lg font-medium text-white">Boas praticas</h2>
+              <div className="mt-3 space-y-2 text-sm leading-6 text-zinc-400">
+                <p>Use cache de 15 a 60 minutos para dashboards externos.</p>
+                <p>Evite expor sua API key no navegador; prefira chamadas server-side.</p>
+                <p>Use <code className="rounded bg-zinc-950 px-1.5 py-0.5 text-zinc-200">sample_size</code> para decidir se o benchmark tem massa suficiente.</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="mt-8">
+            <h2 className="text-lg font-medium text-white">Exemplo em TypeScript</h2>
+            <pre className="mt-3 overflow-x-auto rounded-2xl border border-zinc-800 bg-black p-4 text-xs leading-6 text-zinc-300">{`const res = await fetch(
+  "https://app.erizonai.com.br/api/public/benchmarks?niche=imobiliario&period=30d&platform=meta",
+  { headers: { "x-erizon-key": process.env.ERIZON_API_KEY! } }
+);
+
+if (!res.ok) throw new Error("Falha ao buscar benchmark");
+
+const data = await res.json();
+const cplMediano = data.benchmarks[0]?.metrics?.cpl?.p50;`}</pre>
+          </section>
+
           <section className="mt-8 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-100">
             Use esta API para integracoes com n8n, dashboards externos, agentes e automacoes que precisem comparar
             uma conta com a media do nicho sem depender da interface da Erizon.

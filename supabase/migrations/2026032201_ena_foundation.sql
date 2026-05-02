@@ -4,6 +4,19 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- 1. Adicionar colunas de decisão e outcome nas sugestões do autopilot
+CREATE TABLE IF NOT EXISTS autopilot_suggestions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id uuid REFERENCES workspaces(id) ON DELETE CASCADE,
+  campaign_id uuid REFERENCES campaigns(id) ON DELETE CASCADE,
+  suggestion_type text NOT NULL DEFAULT 'generic',
+  title text NOT NULL DEFAULT 'Sugestão do autopilot',
+  description text,
+  priority text NOT NULL DEFAULT 'medium',
+  payload jsonb,
+  status text NOT NULL DEFAULT 'pending',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 ALTER TABLE autopilot_suggestions
   ADD COLUMN IF NOT EXISTS decided_at          timestamptz,
   ADD COLUMN IF NOT EXISTS decided_by          uuid REFERENCES auth.users(id),
@@ -43,6 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_ena_ire_workspace_date
 -- RLS: workspace members podem ler apenas seu próprio histórico
 ALTER TABLE ena_ire_daily ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "workspace members can read ire" ON ena_ire_daily;
 CREATE POLICY "workspace members can read ire"
   ON ena_ire_daily FOR SELECT
   USING (
@@ -51,6 +65,7 @@ CREATE POLICY "workspace members can read ire"
     )
   );
 
+DROP POLICY IF EXISTS "service role can write ire" ON ena_ire_daily;
 CREATE POLICY "service role can write ire"
   ON ena_ire_daily FOR ALL
   USING (auth.role() = 'service_role');

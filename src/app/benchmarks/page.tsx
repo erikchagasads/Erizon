@@ -7,7 +7,9 @@ import {
   AlertTriangle,
   BarChart2,
   CheckCircle2,
+  ExternalLink,
   Globe,
+  KeyRound,
   Loader2,
   Minus,
   RefreshCw,
@@ -538,6 +540,38 @@ export default function BenchmarksPage() {
                         Ultimo dado real: {new Date(effectiveStats.lastSyncAt).toLocaleString("pt-BR")}
                       </p>
                     )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.05] p-5">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-violet-400/20 bg-violet-400/10 text-violet-200">
+                      <KeyRound size={18} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Transforme estes benchmarks em API para clientes e automacoes</p>
+                      <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-white/45">
+                        Exporte CPL, ROAS, CTR, CPM e frequencia por nicho para n8n, dashboards externos, relatorios whitelabel e parceiros usando uma key da Erizon.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                    <a
+                      href="/api-keys"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-2.5 text-[12px] font-semibold text-white transition-all hover:bg-violet-400"
+                    >
+                      <KeyRound size={13} />
+                      Criar API key
+                    </a>
+                    <a
+                      href="/docs/api/benchmarks"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-[12px] font-semibold text-white/70 transition-all hover:border-white/20 hover:text-white"
+                    >
+                      Ver docs
+                      <ExternalLink size={13} />
+                    </a>
                   </div>
                 </div>
               </section>

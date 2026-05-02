@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Activity, CheckCheck, Copy, ExternalLink, Key, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Activity, CheckCheck, Code2, Copy, ExternalLink, Key, Plus, Trash2 } from "lucide-react";
 
 interface ApiKey {
   id: string;
@@ -33,11 +33,7 @@ export default function ApiKeysPage() {
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    void loadKeys();
-  }, []);
-
-  async function loadKeys() {
+  const loadKeys = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -73,7 +69,11 @@ export default function ApiKeysPage() {
     }
 
     setLoading(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    void loadKeys();
+  }, [loadKeys]);
 
   async function createKey() {
     if (!newKeyName.trim()) return;
@@ -184,6 +184,39 @@ export default function ApiKeysPage() {
             <p className="text-xl font-medium text-white">{value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="rounded-xl border border-violet-800/60 bg-violet-950/30 p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-violet-500/30 bg-violet-500/10 text-violet-200">
+              <Code2 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white">Benchmark API pronta para virar produto</p>
+              <p className="mt-1 max-w-xl text-sm leading-relaxed text-zinc-400">
+                Use estas keys para alimentar automacoes, dashboards de clientes e relatorios externos com benchmarks reais da rede Erizon.
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+            <button
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-sm text-white transition-colors hover:bg-violet-500"
+            >
+              <Plus className="h-4 w-4" />
+              Criar key
+            </button>
+            <a
+              href="/docs/api/benchmarks"
+              target="_blank"
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800"
+            >
+              Ver docs
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          </div>
+        </div>
       </div>
 
       {showCreate && (

@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import AgenteChat from "@/components/AgenteChat";
+import AnomalyAlert from "@/components/AnomalyAlert";
 
 // Rotas onde o agente NÃO deve aparecer
 const ROTAS_PUBLICAS = [
@@ -45,5 +46,10 @@ export default function AgenteProvider() {
 
   if (isPublica) return null;
 
-  return <AgenteChat clienteId={clienteId} />;
+  return (
+    <>
+      <AnomalyAlert />
+      <AgenteChat clienteId={clienteId} />
+    </>
+  );
 }

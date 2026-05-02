@@ -8,7 +8,7 @@ import Sidebar from "@/components/Sidebar";
 import PlanGate from "@/components/PlanGate";
 import { SkeletonPage } from "@/components/ops/AppShell";
 import { getSupabase } from "@/lib/supabase";
-import { ShieldAlert, AlertTriangle, TrendingDown, Eye, Cpu, Users, Palette, Zap } from "lucide-react";
+import { ShieldAlert, AlertTriangle, TrendingDown, Eye, Cpu, Users, Palette, Zap, Brain, Loader2 } from "lucide-react";
 import { useSessionGuard } from "@/app/hooks/useSessionGuard";
 
 interface Campanha {
@@ -39,6 +39,20 @@ interface RiskFlag {
   passos: string[];
   gastoDiario: number;
   perdaMensal: number;
+}
+
+interface Explicacao {
+  summary: string;
+  factors: Array<{
+    name: string;
+    impact: "high" | "medium" | "low";
+    contribution_pct: number;
+  }>;
+  alternatives: Array<{
+    action: string;
+    score: number;
+    why_not_chosen?: string;
+  }>;
 }
 
 const fmtBRL = (v: number) =>
@@ -214,6 +228,8 @@ export default function RiskRadarPage() {
 
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [loading, setLoading]     = useState(true);
+  const [explicacoes, setExplicacoes] = useState<Record<string, Explicacao>>({});
+  const [explicandoId, setExplicandoId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -238,6 +254,52 @@ export default function RiskRadarPage() {
     riscos.forEach(r => { map[r.causa_raiz] = (map[r.causa_raiz] ?? 0) + 1; });
     return map;
   }, [riscos]);
+
+  async function explicarRisco(risco: RiskFlag) {
+    if (explicacoes[risco.id]) return;
+    setExplicandoId(risco.id);
+
+    try {
+      const factors = [
+        { name: risco.diagnostico, score: risco.severidade === "Crítico" ? 45 : 32 },
+        { name: `Causa raiz: ${CAUSA_RAIZ_CONFIG[risco.causa_raiz].label}`, score: 30 },
+        { name: risco.perdaMensal > 0 ? `Perda mensal estimada de ${fmtBRL(risco.perdaMensal)}` : "Risco operacional sem perda direta estimada", score: risco.perdaMensal > 0 ? 28 : 14 },
+      ];
+
+      const alternatives = [
+        { action: risco.passos[0] ?? "Investigar campanha", score: 72 },
+        { action: "Aguardar mais dados", score: risco.severidade === "Moderado" ? 55 : 35 },
+        { action: "Pausar sem diagnostico", score: risco.severidade === "Crítico" ? 58 : 38 },
+      ];
+
+      const res = await fetch("/api/explainability/decision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: risco.acao,
+          campaign_name: risco.campanha,
+          factors,
+          alternatives,
+          confidence: risco.severidade === "Crítico" ? 0.88 : risco.severidade === "Alto" ? 0.76 : 0.64,
+        }),
+      });
+
+      const json = (await res.json()) as { data?: Explicacao; error?: string };
+      if (!res.ok || !json.data) throw new Error(json.error ?? "Falha ao explicar risco.");
+      setExplicacoes(prev => ({ ...prev, [risco.id]: json.data as Explicacao }));
+    } catch {
+      setExplicacoes(prev => ({
+        ...prev,
+        [risco.id]: {
+          summary: "Nao consegui acionar a IA agora, mas este risco foi priorizado pela combinacao de severidade, causa raiz e impacto financeiro estimado.",
+          factors: [],
+          alternatives: [],
+        },
+      }));
+    } finally {
+      setExplicandoId(null);
+    }
+  }
 
   if (loading) return <SkeletonPage cols={3} />;
 
@@ -359,6 +421,31 @@ export default function RiskRadarPage() {
                                 ))}
                               </ol>
                             </div>
+
+                            <button
+                              onClick={() => explicarRisco(r)}
+                              disabled={explicandoId === r.id}
+                              className="inline-flex h-9 items-center gap-2 rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/[0.06] px-3 text-[12px] font-semibold text-fuchsia-300 transition-all hover:border-fuchsia-500/35 hover:bg-fuchsia-500/[0.1] disabled:opacity-50"
+                            >
+                              {explicandoId === r.id ? <Loader2 size={13} className="animate-spin" /> : <Brain size={13} />}
+                              Entender
+                            </button>
+
+                            {explicacoes[r.id] && (
+                              <div className="rounded-xl border border-fuchsia-500/15 bg-fuchsia-500/[0.04] p-3">
+                                <p className="mb-1 text-[9px] uppercase tracking-widest text-fuchsia-300/55">Explicacao da IA</p>
+                                <p className="text-[12px] leading-relaxed text-white/70">{explicacoes[r.id].summary}</p>
+                                {explicacoes[r.id].factors.length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {explicacoes[r.id].factors.slice(0, 3).map(factor => (
+                                      <span key={factor.name} className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] text-white/45">
+                                        {factor.name}: {factor.contribution_pct}%
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
 
                             {r.perdaMensal > 0 && (
                               <p className="text-[11px] text-red-400/60 px-1">

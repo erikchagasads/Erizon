@@ -8,7 +8,8 @@
 // ✦ Painel de alertas separado
 // ✦ Geração de PDF automática
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import {
   X, Send, Sparkles, Loader2, ChevronDown,
   FileText, BarChart3, AlertCircle, Zap,
@@ -61,6 +62,66 @@ const SUGESTOES = [
 ];
 
 // ─── Gerador de PDF ────────────────────────────────────────────────────────────
+function getSugestoesContextuais(pathname: string): typeof SUGESTOES {
+  if (pathname.startsWith("/pulse")) {
+    return [
+      { icon: BarChart3, texto: "O que exige minha atenÃ§Ã£o hoje?", prompt: "Analisa minha conta agora e me diz, em ordem de prioridade, o que exige minha atenÃ§Ã£o hoje." },
+      { icon: AlertCircle, texto: "Quais campanhas estÃ£o crÃ­ticas?", prompt: "Quais campanhas estÃ£o em estado crÃ­tico e qual a causa mais provÃ¡vel?" },
+    ];
+  }
+
+  if (pathname.startsWith("/analytics")) {
+    return [
+      { icon: TrendingUp, texto: "Por que a performance mudou?", prompt: "Compare minha performance recente com o histÃ³rico e explique por que ela mudou." },
+      { icon: BarChart3, texto: "Resumo executivo da semana", prompt: "Gere um resumo executivo da semana com ganhos, perdas, riscos e prÃ³ximas aÃ§Ãµes." },
+    ];
+  }
+
+  if (pathname.startsWith("/campanhas")) {
+    return [
+      { icon: Zap, texto: "O que pausar ou escalar?", prompt: "Analise minhas campanhas e diga o que eu deveria pausar, manter ou escalar com seguranÃ§a." },
+      { icon: FileText, texto: "Ideias de copy para campanha", prompt: "Com base nas minhas campanhas, sugira novas copies e Ã¢ngulos criativos para testar." },
+    ];
+  }
+
+  if (pathname.startsWith("/clientes") || pathname.startsWith("/crm")) {
+    return [
+      { icon: Users, texto: "Resumo dos clientes", prompt: "Liste meus clientes com maior urgÃªncia operacional e explique o motivo." },
+      { icon: TrendingUp, texto: "Onde hÃ¡ oportunidade?", prompt: "Quais clientes tÃªm oportunidade clara de escala ou recuperaÃ§Ã£o nesta semana?" },
+    ];
+  }
+
+  if (pathname.startsWith("/decision-feed")) {
+    return [
+      { icon: Shield, texto: "Explique as decisÃµes", prompt: "Explique as decisÃµes mais importantes do feed e diga quais eu devo aprovar primeiro." },
+      { icon: Zap, texto: "Impacto financeiro", prompt: "Priorize as decisÃµes pelo impacto financeiro estimado e pelo risco de nÃ£o agir." },
+    ];
+  }
+
+  if (pathname.startsWith("/risk-radar")) {
+    return [
+      { icon: AlertCircle, texto: "Riscos urgentes", prompt: "Quais riscos exigem aÃ§Ã£o imediata e qual Ã© a causa provÃ¡vel de cada um?" },
+      { icon: Shield, texto: "Plano de contenÃ§Ã£o", prompt: "Monte um plano de contenÃ§Ã£o para reduzir desperdÃ­cio sem cortar campanhas promissoras." },
+    ];
+  }
+
+  if (pathname.startsWith("/automacoes")) {
+    return [
+      { icon: Shield, texto: "Autopilot em preview", prompt: "O que o autopilot teria feito nos Ãºltimos 7 dias e quais limites de seguranÃ§a eu deveria usar?" },
+      { icon: Settings, texto: "Configurar automaÃ§Ãµes", prompt: "Me ajude a configurar automaÃ§Ãµes seguras para pausar perdas e escalar oportunidades." },
+    ];
+  }
+
+  if (pathname.startsWith("/benchmarks")) {
+    return [
+      { icon: BarChart3, texto: "Comparar com benchmark", prompt: "Compare meus CPL, ROAS, CTR, CPM e frequÃªncia com benchmarks do mercado brasileiro." },
+      { icon: TrendingUp, texto: "Oportunidades por nicho", prompt: "Quais nichos ou campanhas parecem fora da curva em relaÃ§Ã£o ao benchmark?" },
+    ];
+  }
+
+  return [];
+}
+
 async function gerarPDF(dados: {
   titulo: string; cliente: string; dataGeracao: string;
   totais: { campanhas: number; investimento: number; leads: number; receita: number; cplMedio: number; roasMedio: number };
@@ -206,6 +267,7 @@ function AlertaCard({ alerta, onPerguntar }: { alerta: Alerta; onPerguntar: (a: 
 
 // ─── Componente principal ──────────────────────────────────────────────────────
 export default function AgenteChat({ clienteId }: Props) {
+  const pathname = usePathname();
   const [aberto, setAberto]         = useState(false);
   const [aba, setAba]               = useState<"chat" | "alertas">("chat");
   const [maximizado, setMaximizado] = useState(false);
@@ -224,6 +286,14 @@ export default function AgenteChat({ clienteId }: Props) {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
+  const sugestoesAtuais = useMemo(() => {
+    const prompts = new Set<string>();
+    return [...getSugestoesContextuais(pathname), ...SUGESTOES].filter(sugestao => {
+      if (prompts.has(sugestao.prompt)) return false;
+      prompts.add(sugestao.prompt);
+      return true;
+    });
+  }, [pathname]);
 
   // ── Carrega memória e alertas ao montar ───────────────────────────────────
   useEffect(() => {
@@ -289,6 +359,24 @@ export default function AgenteChat({ clienteId }: Props) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs]);
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setAberto(true);
+        setAba("chat");
+        setTimeout(() => inputRef.current?.focus(), 80);
+      }
+
+      if (event.key === "Escape" && aberto) {
+        setAberto(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [aberto]);
 
   // ── Marca alertas como lidos ao abrir painel ──────────────────────────────
   async function marcarAlertasLidos() {
@@ -476,6 +564,24 @@ export default function AgenteChat({ clienteId }: Props) {
   }
 
   // ── Botão flutuante ────────────────────────────────────────────────────────
+  useEffect(() => {
+    function handleOpenAgent(event: Event) {
+      const customEvent = event as CustomEvent<{ prompt?: string }>;
+      setAberto(true);
+      setAba("chat");
+
+      const prompt = customEvent.detail?.prompt?.trim();
+      if (prompt) {
+        window.setTimeout(() => enviar(prompt), 120);
+      } else {
+        window.setTimeout(() => inputRef.current?.focus(), 120);
+      }
+    }
+
+    window.addEventListener("erizon:open-agent", handleOpenAgent);
+    return () => window.removeEventListener("erizon:open-agent", handleOpenAgent);
+  }, [enviar]);
+
   if (!aberto) {
     return (
       <button onClick={() => setAberto(true)} className="fixed bottom-6 right-6 z-50 group" aria-label="Abrir Erizon AI">
@@ -681,7 +787,7 @@ export default function AgenteChat({ clienteId }: Props) {
             {msgs.length <= 1 && !loading && (
               <div className="space-y-1.5 pt-1">
                 <p className="text-[10px] text-white/15 text-center uppercase tracking-wider mb-2">Ações rápidas</p>
-                {SUGESTOES.map((s, i) => (
+                {sugestoesAtuais.slice(0, 6).map((s, i) => (
                   <button key={i} onClick={() => enviar(s.prompt)}
                     className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.04] hover:border-purple-500/20 hover:bg-purple-500/[0.03] transition-all text-left group">
                     <s.icon size={12} className="text-white/20 group-hover:text-purple-400 transition-colors shrink-0"/>

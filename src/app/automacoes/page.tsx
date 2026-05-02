@@ -48,6 +48,16 @@ interface LogEntry {
   ts: string;
 }
 
+interface PreviewAction {
+  id: string;
+  campanha: string;
+  tipo: "pausar" | "reduzir" | "escalar" | "monitorar";
+  motivo: string;
+  resultadoEstimado: string;
+  impactoBrl: number;
+  confianca: number;
+}
+
 // ─── Opções de condição ───────────────────────────────────────────────────────
 const CONDICOES: { tipo: CondicaoTipo; label: string; unidade: string; placeholder: string; icon: React.ReactNode }[] = [
   { tipo: "gasto_sem_leads",    label: "Gasto sem leads (R$)",        unidade: "R$",   placeholder: "ex: 100", icon: <DollarSign size={13}/> },
@@ -81,6 +91,77 @@ function calcScore(gasto: number, leads: number, receita: number): number {
 
 function isAtivo(status: string) {
   return ["ATIVO", "ACTIVE", "ATIVA"].includes((status ?? "").toUpperCase());
+}
+
+function gerarPreviewAutopilot(campanhas: Campanha[]): PreviewAction[] {
+  const actions: PreviewAction[] = [];
+
+  for (const campanha of campanhas) {
+    if (!isAtivo(campanha.status) || campanha.gasto_total <= 0) continue;
+
+    const dias = Math.max(campanha.dias_ativo || 1, 1);
+    const gastoDiario = campanha.gasto_total / dias;
+    const gasto7d = gastoDiario * Math.min(dias, 7);
+    const cpl = campanha.contatos > 0 ? campanha.gasto_total / campanha.contatos : 999;
+    const roas = campanha.gasto_total > 0 ? campanha.receita_estimada / campanha.gasto_total : 0;
+    const ctr = campanha.ctr ?? 0;
+
+    if (campanha.contatos === 0 && gasto7d >= 100) {
+      actions.push({
+        id: `${campanha.id}-pausar`,
+        campanha: campanha.nome_campanha,
+        tipo: "pausar",
+        motivo: `${fmtBRL(gasto7d)} gastos nos ultimos 7 dias sem leads.`,
+        resultadoEstimado: `Preservaria ${fmtBRL(gastoDiario * 30)}/mes se a tendencia continuar.`,
+        impactoBrl: gastoDiario * 30,
+        confianca: 88,
+      });
+      continue;
+    }
+
+    if (roas > 0 && roas < 1 && campanha.gasto_total > 200) {
+      const perdaDiaria = Math.max(0, gastoDiario - campanha.receita_estimada / dias);
+      actions.push({
+        id: `${campanha.id}-reduzir`,
+        campanha: campanha.nome_campanha,
+        tipo: "reduzir",
+        motivo: `ROAS ${roas.toFixed(2)}x abaixo do ponto de equilibrio.`,
+        resultadoEstimado: `Reduziria desperdicio em ate ${fmtBRL(perdaDiaria * 30)}/mes antes de nova analise.`,
+        impactoBrl: perdaDiaria * 30,
+        confianca: 82,
+      });
+      continue;
+    }
+
+    if (roas >= 2.5 && cpl < 80 && ctr >= 1 && dias >= 7) {
+      const incremento = gastoDiario * 0.2;
+      actions.push({
+        id: `${campanha.id}-escalar`,
+        campanha: campanha.nome_campanha,
+        tipo: "escalar",
+        motivo: `ROAS ${roas.toFixed(2)}x, CPL ${fmtBRL(cpl)} e CTR ${ctr.toFixed(2)}%.`,
+        resultadoEstimado: `Testaria +20% de budget com potencial de ${fmtBRL(incremento * roas * 30)}/mes em receita incremental.`,
+        impactoBrl: incremento * roas * 30,
+        confianca: 76,
+      });
+      continue;
+    }
+
+    if (cpl > 100 || (ctr > 0 && ctr < 0.6)) {
+      actions.push({
+        id: `${campanha.id}-monitorar`,
+        campanha: campanha.nome_campanha,
+        tipo: "monitorar",
+        motivo: cpl > 100 ? `CPL atual em ${fmtBRL(cpl)}.` : `CTR baixo em ${ctr.toFixed(2)}%.`,
+        resultadoEstimado: "Abriria alerta e pediria revisao de criativo/oferta antes de qualquer execucao.",
+        impactoBrl: 0,
+        confianca: 64,
+      });
+    }
+  }
+
+  const peso = { pausar: 0, reduzir: 1, escalar: 2, monitorar: 3 };
+  return actions.sort((a, b) => peso[a.tipo] - peso[b.tipo] || b.impactoBrl - a.impactoBrl).slice(0, 8);
 }
 
 // Calcula campanhas afetadas por uma regra
@@ -361,6 +442,117 @@ function CardRegra({
 }
 
 // ─── PAGE ─────────────────────────────────────────────────────────────────────
+function AutopilotPreviewPanel({ actions }: { actions: PreviewAction[] }) {
+  const economia = actions
+    .filter(action => action.tipo === "pausar" || action.tipo === "reduzir")
+    .reduce((total, action) => total + action.impactoBrl, 0);
+  const receita = actions
+    .filter(action => action.tipo === "escalar")
+    .reduce((total, action) => total + action.impactoBrl, 0);
+  const execucoes = actions.filter(action => action.tipo !== "monitorar").length;
+
+  const tipoStyle: Record<PreviewAction["tipo"], { label: string; className: string }> = {
+    pausar: { label: "Pausaria", className: "border-red-500/20 bg-red-500/[0.06] text-red-300" },
+    reduzir: { label: "Reduziria", className: "border-amber-500/20 bg-amber-500/[0.06] text-amber-300" },
+    escalar: { label: "Escalaria", className: "border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-300" },
+    monitorar: { label: "Alertaria", className: "border-blue-500/20 bg-blue-500/[0.06] text-blue-300" },
+  };
+
+  return (
+    <section className="mb-6 rounded-[24px] border border-purple-500/18 bg-purple-500/[0.035] p-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-purple-300/55">Preview seguro</p>
+          <h2 className="text-[18px] font-bold text-white">O que o Autopilot teria feito nos ultimos 7 dias</h2>
+          <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-white/35">
+            Simulacao sem execucao real. Valide as decisoes antes de liberar automacao com aprovacao ou autonomia.
+          </p>
+        </div>
+
+        <div className="grid w-full gap-2 sm:grid-cols-3 xl:w-[380px]">
+          {[
+            { label: "Acoes", value: String(execucoes), color: "text-white" },
+            { label: "Economia", value: fmtBRL(economia), color: economia > 0 ? "text-emerald-300" : "text-white/35" },
+            { label: "Receita pot.", value: fmtBRL(receita), color: receita > 0 ? "text-purple-300" : "text-white/35" },
+          ].map(item => (
+            <div key={item.label} className="rounded-2xl border border-white/[0.06] bg-black/20 px-3 py-2.5">
+              <p className="text-[9px] uppercase tracking-wider text-white/25">{item.label}</p>
+              <p className={`mt-1 text-[16px] font-black font-mono ${item.color}`}>{item.value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
+        <div className="space-y-2">
+          {actions.length === 0 ? (
+            <div className="rounded-2xl border border-white/[0.06] bg-black/20 px-4 py-8 text-center">
+              <CheckCircle2 size={22} className="mx-auto mb-2 text-emerald-400/50" />
+              <p className="text-[13px] font-medium text-white/50">Nenhuma acao automatica forte apareceu no preview.</p>
+              <p className="mt-1 text-[11px] text-white/25">O Autopilot ficaria em modo observacao com os dados atuais.</p>
+            </div>
+          ) : (
+            actions.map(action => {
+              const style = tipoStyle[action.tipo];
+              return (
+                <div key={action.id} className="rounded-2xl border border-white/[0.06] bg-black/20 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${style.className}`}>{style.label}</span>
+                        <span className="text-[10px] text-white/25">{action.confianca}% confianca</span>
+                      </div>
+                      <p className="truncate text-[13px] font-semibold text-white/75">{action.campanha}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-white/38">{action.motivo}</p>
+                    </div>
+                    <p className={`shrink-0 text-right text-[12px] font-bold ${action.impactoBrl > 0 ? "text-emerald-300" : "text-white/25"}`}>
+                      {action.impactoBrl > 0 ? fmtBRL(action.impactoBrl) : "sem execucao"}
+                    </p>
+                  </div>
+                  <p className="mt-2 rounded-xl border border-white/[0.05] bg-white/[0.025] px-3 py-2 text-[11px] text-white/45">
+                    {action.resultadoEstimado}
+                  </p>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-white/[0.06] bg-black/20 p-4">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-white/30">Shields ativos</p>
+            {[
+              "Limite de 5 acoes automaticas por dia",
+              "Escala maxima de 20-30% por iteracao",
+              "Sem pausa automatica em campanhas de awareness",
+              "Execucao real continua bloqueada ate aprovacao",
+            ].map(item => (
+              <div key={item} className="mb-2 flex items-start gap-2 text-[11px] text-white/45 last:mb-0">
+                <CheckCircle2 size={12} className="mt-0.5 shrink-0 text-emerald-400" />
+                {item}
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-white/[0.06] bg-black/20 p-4">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-white/30">Ativacao progressiva</p>
+            {[
+              { label: "Sugerir", active: true },
+              { label: "Executar com aprovacao", active: false },
+              { label: "Autonomo com shields", active: false },
+            ].map(step => (
+              <div key={step.label} className="mb-2 flex items-center gap-2 last:mb-0">
+                <span className={`h-2.5 w-2.5 rounded-full ${step.active ? "bg-purple-400" : "bg-white/15"}`} />
+                <span className={`text-[11px] ${step.active ? "text-purple-200" : "text-white/30"}`}>{step.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function AutomacoesPage() {
   const supabase = useMemo(() => getSupabase(), []);
 
@@ -551,6 +743,7 @@ export default function AutomacoesPage() {
     }, 0);
     return { total: regras.length, ativas, inativas, afetadas };
   }, [regras, campanhas]);
+  const autopilotPreview = useMemo(() => gerarPreviewAutopilot(campanhas), [campanhas]);
 
   if (loading) return <SkeletonPage cols={4} />;
 
@@ -594,6 +787,8 @@ export default function AutomacoesPage() {
 
         {/* Conteúdo */}
         <div className="flex-1 overflow-auto px-8 py-6">
+          <AutopilotPreviewPanel actions={autopilotPreview} />
+
           <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
 
             {/* Lista de regras */}

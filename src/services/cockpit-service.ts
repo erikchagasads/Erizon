@@ -91,6 +91,8 @@ export class CockpitService {
         rationale: row.rationale,
         campaignContext: row.meta_payload ?? {},
         executionSuccess: false,
+        validatorId: userId,
+        humanValidated: true,
       }).catch(() => {});
 
       return { decision, executed: false };
@@ -128,6 +130,8 @@ export class CockpitService {
         rationale: row.rationale,
         campaignContext: row.meta_payload ?? {},
         executionSuccess: true,
+        validatorId: userId,
+        humanValidated: true,
       }).catch(() => {});
 
       return { decision: { ...decision, status: "executed" }, executed: true };
