@@ -1,0 +1,17 @@
+.claude/
+.env
+.env.*
+!.env.example
+
+artifacts/
+screenshots/
+supabase/.temp/
+
+.git/
+.next/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
