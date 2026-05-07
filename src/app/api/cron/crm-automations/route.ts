@@ -10,7 +10,15 @@ import { propostaVencidaHtml } from "@/lib/email/templates";
 
 export const runtime = "nodejs";
 
+export async function GET(request: NextRequest) {
+  return runCrmAutomations(request);
+}
+
 export async function POST(request: NextRequest) {
+  return runCrmAutomations(request);
+}
+
+async function runCrmAutomations(request: NextRequest) {
   // Verificar autorização do cron
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;

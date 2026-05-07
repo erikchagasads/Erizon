@@ -7,7 +7,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { requireCronAuth } from "@/lib/auth-guard";
 
+export async function GET(req: NextRequest) {
+  return runDailySnapshot(req);
+}
+
 export async function POST(req: NextRequest) {
+  return runDailySnapshot(req);
+}
+
+async function runDailySnapshot(req: NextRequest) {
   if (!requireCronAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -80,4 +88,3 @@ export async function POST(req: NextRequest) {
 }
 
 // Também aceita GET para Vercel Cron
-export const GET = POST;

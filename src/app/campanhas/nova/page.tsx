@@ -389,6 +389,8 @@ export default function NovaPage() {
   const [velocidade, setVelocidade] = useState("");
   const [temPixel, setTemPixel] = useState(true);
   const [publicoCustom, setPublicoCustom] = useState(false);
+  const [metaPageId, setMetaPageId] = useState("");
+  const [metaPixelId, setMetaPixelId] = useState("");
 
   useEffect(() => {
     if (loadingClientes) return;
@@ -420,6 +422,10 @@ export default function NovaPage() {
       if (creativePreviewUrl) URL.revokeObjectURL(creativePreviewUrl);
     };
   }, [creativePreviewUrl]);
+
+  useEffect(() => {
+    setMetaPixelId(clienteAtual?.facebook_pixel_id ?? "");
+  }, [clienteAtual?.facebook_pixel_id, clienteAtual?.id]);
 
   const audiencePresets = useMemo(() => {
     const baseAudience = suggestions[0]?.audience || (clienteAtual ? `${clienteAtual.nome_cliente ?? clienteAtual.nome}` : "Publico amplo qualificado");
@@ -470,6 +476,7 @@ export default function NovaPage() {
       Boolean(destinationUrl.trim()),
       Boolean(creativeFile || creativeUpload),
       temPixel,
+      objetivo !== "SALES" || Boolean(metaPixelId.trim()),
     ];
 
     return Math.round((checks.filter(Boolean).length / checks.length) * 100);
@@ -484,7 +491,9 @@ export default function NovaPage() {
     headline,
     interests,
     locations,
+    metaPixelId,
     orcamento,
+    objetivo,
     primaryText,
     selectedPlacements.length,
     temPixel,
@@ -544,6 +553,8 @@ export default function NovaPage() {
     setPrimaryText(suggestion.angle || suggestion.rationale || "");
     setHeadline(suggestion.title);
     setDescription(suggestion.rationale || "");
+    setMetaPageId("");
+    setMetaPixelId(suggestionClient?.facebook_pixel_id ?? "");
     setCreativeFile(null);
     setCreativeUpload(null);
     setCreativeUploadError(null);
@@ -622,6 +633,12 @@ export default function NovaPage() {
       urlDestino: destinationUrl.trim() || undefined,
       velocidadeUrl: velocidade ? parseNumber(velocidade) : undefined,
       temPixel,
+      metaPageId: metaPageId.trim() || undefined,
+      metaPixelId: metaPixelId.trim() || undefined,
+      tracking: {
+        metaPageId: metaPageId.trim() || null,
+        metaPixelId: metaPixelId.trim() || null,
+      },
       publicoCustom: customAudience,
       metaCpl: metaCpl ? parseNumber(metaCpl) : undefined,
       launchPackageVersion: 2,
@@ -1236,6 +1253,27 @@ export default function NovaPage() {
                         className={inputClass}
                       />
                     </div>
+                    <div>
+                      <FieldLabel>Facebook Page ID</FieldLabel>
+                      <input
+                        value={metaPageId}
+                        onChange={(event) => setMetaPageId(event.target.value)}
+                        placeholder="123456789012345"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>Meta Pixel ID</FieldLabel>
+                      <input
+                        value={metaPixelId}
+                        onChange={(event) => {
+                          setMetaPixelId(event.target.value);
+                          if (event.target.value.trim()) setTemPixel(true);
+                        }}
+                        placeholder="123456789012345"
+                        className={inputClass}
+                      />
+                    </div>
                     <Toggle checked={temPixel} onChange={() => setTemPixel((value) => !value)} label="Pixel Meta instalado" sub="Conversao e otimizacao" />
                     <Toggle checked={publicoCustom} onChange={() => setPublicoCustom((value) => !value)} label="Usa dados proprios" sub="Custom Audience, CRM ou lookalike" />
                   </div>
@@ -1278,6 +1316,7 @@ export default function NovaPage() {
                       { label: "Publico", value: audiencia ? `${audiencia}k | ${audienceMode}` : audienceMode },
                       { label: "Posicionamento", value: selectedPlacementLabels.slice(0, 2).join(", ") + (selectedPlacementLabels.length > 2 ? ` +${selectedPlacementLabels.length - 2}` : "") },
                       { label: "Criativo", value: uploadedOrSelectedFile ? uploadedOrSelectedFile.fileName : "Pendente" },
+                      { label: "Tracking", value: metaPixelId ? "Pixel informado" : metaPageId ? "Page informada" : "Auto" },
                     ].map((item) => (
                       <div key={item.label} className="rounded-xl border border-white/[0.05] bg-black/18 px-3 py-2">
                         <p className="text-[9px] uppercase tracking-wider text-white/22">{item.label}</p>

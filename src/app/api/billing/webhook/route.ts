@@ -111,6 +111,89 @@ async function registrarReferralPago(
   });
 }
 
+function customerIdFromSubscription(sub: Stripe.Subscription) {
+  return typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
+}
+
+function periodEndFromSubscription(sub: Stripe.Subscription) {
+  const itemPeriodEnd = (sub.items.data[0] as unknown as Record<string, unknown> | undefined)?.current_period_end;
+  const subscriptionPeriodEnd = (sub as unknown as Record<string, unknown>).current_period_end;
+  const periodEnd = typeof itemPeriodEnd === "number"
+    ? itemPeriodEnd
+    : typeof subscriptionPeriodEnd === "number"
+      ? subscriptionPeriodEnd
+      : null;
+
+  return periodEnd ? new Date(periodEnd * 1000).toISOString() : null;
+}
+
+function subscriptionIdFromInvoice(invoice: Stripe.Invoice) {
+  const raw = invoice as unknown as Record<string, unknown>;
+  const direct = raw.subscription;
+  if (typeof direct === "string") return direct;
+
+  const details = raw.subscription_details as Record<string, unknown> | undefined;
+  if (typeof details?.subscription === "string") return details.subscription;
+
+  const parent = raw.parent as Record<string, unknown> | undefined;
+  const parentDetails = parent?.subscription_details as Record<string, unknown> | undefined;
+  if (typeof parentDetails?.subscription === "string") return parentDetails.subscription;
+
+  return null;
+}
+
+async function resolveSubscriptionUserId(
+  admin: ReturnType<typeof getAdmin>,
+  sub: Stripe.Subscription
+) {
+  if (sub.metadata?.supabase_user_id) return sub.metadata.supabase_user_id;
+
+  const { data: bySubscription } = await admin
+    .from("subscriptions")
+    .select("user_id")
+    .eq("stripe_subscription_id", sub.id)
+    .maybeSingle();
+
+  if (bySubscription?.user_id) return bySubscription.user_id;
+
+  const customerId = customerIdFromSubscription(sub);
+  if (!customerId) return null;
+
+  const { data: byCustomer } = await admin
+    .from("subscriptions")
+    .select("user_id")
+    .eq("stripe_customer_id", customerId)
+    .maybeSingle();
+
+  return byCustomer?.user_id ?? null;
+}
+
+async function syncSubscriptionRow(
+  admin: ReturnType<typeof getAdmin>,
+  sub: Stripe.Subscription,
+  statusOverride?: string
+) {
+  const userId = await resolveSubscriptionUserId(admin, sub);
+  const customerId = customerIdFromSubscription(sub);
+  if (!userId || !customerId) return null;
+
+  const priceId = sub.items.data[0]?.price.id ?? "";
+  const plano = sub.metadata?.plano ?? planoFromPriceId(priceId);
+
+  await admin.from("subscriptions").upsert({
+    user_id: userId,
+    stripe_customer_id: customerId,
+    stripe_subscription_id: sub.id,
+    plano,
+    status: statusOverride ?? sub.status,
+    trial_end: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
+    current_period_end: periodEndFromSubscription(sub),
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+
+  return userId;
+}
+
 export async function POST(req: Request) {
   const body      = await req.text();
   const signature = req.headers.get("stripe-signature");
@@ -229,11 +312,7 @@ export async function POST(req: Request) {
       // ── Pagamento falhou ──────────────────────────────────────────────────
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
-
-        // Na API 2026-02-25.clover, o subscription ID fica em subscription_details
-        const subId = (invoice as unknown as Record<string, unknown>).subscription_details
-          ? ((invoice as unknown as Record<string, unknown>).subscription_details as Record<string, unknown>)?.subscription as string | null
-          : (invoice as unknown as Record<string, unknown>).subscription as string | null;
+        const subId = subscriptionIdFromInvoice(invoice);
 
         if (subId) {
           await admin
@@ -249,23 +328,18 @@ export async function POST(req: Request) {
         break;
       }
 
+      case "invoice.payment_succeeded":
       case "invoice.paid": {
         const invoice = event.data.object as Stripe.Invoice;
-        const subId = (invoice as unknown as Record<string, unknown>).subscription_details
-          ? ((invoice as unknown as Record<string, unknown>).subscription_details as Record<string, unknown>)?.subscription as string | null
-          : (invoice as unknown as Record<string, unknown>).subscription as string | null;
+        const subId = subscriptionIdFromInvoice(invoice);
 
         if (!subId) break;
 
-        const { data: subRow } = await admin
-          .from("subscriptions")
-          .select("user_id")
-          .eq("stripe_subscription_id", subId)
-          .maybeSingle();
-
         const stripeSub = await stripe.subscriptions.retrieve(subId);
+        const userId = await syncSubscriptionRow(admin, stripeSub, stripeSub.status === "trialing" ? "trialing" : "active");
         const referrerCode = stripeSub.metadata?.referrer_code;
-        await registrarReferralPago(admin, referrerCode, subRow?.user_id ?? stripeSub.metadata?.supabase_user_id);
+        await registrarReferralPago(admin, referrerCode, userId ?? stripeSub.metadata?.supabase_user_id);
+        console.log(`[webhook] Pagamento confirmado: sub=${subId}`);
         break;
       }
 

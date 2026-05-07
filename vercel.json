@@ -39,6 +39,22 @@
     {
       "path": "/api/cron/crm-automations",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/autopilot/run",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/google-ads-sync",
+      "schedule": "15 */6 * * *"
+    },
+    {
+      "path": "/api/tiktok-ads-sync",
+      "schedule": "30 */6 * * *"
+    },
+    {
+      "path": "/api/linkedin-ads-sync",
+      "schedule": "45 */6 * * *"
     }
   ]
 }

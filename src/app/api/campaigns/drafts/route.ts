@@ -15,6 +15,8 @@ type DraftPayload = {
   duracaoSegundos?: number | string | null;
   velocidadeUrl?: number | string | null;
   temPixel?: boolean;
+  metaPageId?: string | null;
+  metaPixelId?: string | null;
   publicoCustom?: boolean;
   metaCpl?: number | string | null;
   plataforma?: string;

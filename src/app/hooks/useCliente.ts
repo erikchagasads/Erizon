@@ -17,6 +17,8 @@ export interface Cliente {
   logo_url?: string;
   fb_ad_account_id?: string;
   meta_account_id?: string;
+  ig_user_id?: string | null;
+  facebook_pixel_id?: string | null;
   total_campanhas?: number;
   campanhas_ativas?: number;
   gasto_total?: number;

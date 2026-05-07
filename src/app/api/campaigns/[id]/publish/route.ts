@@ -350,7 +350,8 @@ async function getClientLaunchData(
 
 async function resolvePageContext(
   accessToken: string,
-  preferredInstagramId: string | null
+  preferredInstagramId: string | null,
+  preferredPageId: string | null
 ): Promise<PageContext> {
   const pages = await getMeta(
     "me/accounts",
@@ -368,6 +369,24 @@ async function resolvePageContext(
     return {
       ok: false,
       error: "Nenhuma Facebook Page acessivel pelo token. Conecte uma Page ao Business Manager antes de publicar anuncios.",
+    };
+  }
+
+  if (preferredPageId) {
+    const selected = data.find((page) => String(page.id ?? "") === preferredPageId);
+    if (!selected) {
+      return {
+        ok: false,
+        error: "A Facebook Page informada nao esta acessivel pelo token Meta conectado.",
+      };
+    }
+
+    const instagram = asObject(selected.instagram_business_account);
+    return {
+      ok: true,
+      pageId: String(selected.id),
+      pageName: String(selected.name ?? "Facebook Page"),
+      instagramActorId: preferredInstagramId || (instagram.id ? String(instagram.id) : null),
     };
   }
 
@@ -850,7 +869,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: credentials.error }, { status: 400 });
   }
 
-  const page = await resolvePageContext(credentials.accessToken, client?.ig_user_id ?? null);
+  const tracking = asObject(draft.tracking);
+  const requestedPageId = asString(draft.metaPageId) || asString(tracking.metaPageId) || null;
+  const page = await resolvePageContext(credentials.accessToken, client?.ig_user_id ?? null, requestedPageId);
   if (page.ok === false) {
     await recordPublishError(db, id, auth.user.id, page.error);
     return NextResponse.json({ error: page.error }, { status: 400 });
@@ -862,7 +883,11 @@ export async function POST(req: NextRequest, context: RouteContext) {
     typedCampaign.nome_campanha?.trim() ||
     asString(draft.campaignName) ||
     `Campanha Erizon ${new Date().toLocaleDateString("pt-BR")}`;
-  const pixelId = asString(client?.facebook_pixel_id) || null;
+  const pixelId =
+    asString(draft.metaPixelId) ||
+    asString(tracking.metaPixelId) ||
+    asString(client?.facebook_pixel_id) ||
+    null;
   const destinationUrl = normalizeUrl(creative.destinationUrl ?? draft.urlDestino);
 
   if (["OUTCOME_LEADS", "OUTCOME_SALES", "OUTCOME_TRAFFIC"].includes(metaObjective) && !destinationUrl) {

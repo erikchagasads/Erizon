@@ -1,8 +1,14 @@
-// POST /api/google-ads-sync — sincroniza campanhas Google Ads
+// POST /api/google-ads-sync - manual sync
+// GET  /api/google-ads-sync - Vercel cron sync for all connected users
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { GoogleAdsConnector } from "@/connectors/google-ads/GoogleAdsConnector";
+import { isCronAuthorized } from "@/lib/cron-auth";
+import { createServerSupabase } from "@/lib/supabase/server";
+import {
+  syncAllGoogleAds,
+  syncGoogleAdsForUser,
+} from "@/services/platform-ads-sync-service";
 
 export async function POST(_req: NextRequest) {
   const cookieStore = await cookies();
@@ -13,72 +19,36 @@ export async function POST(_req: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
 
-  const { data: settings } = await supabase
+  const { data: settings, error } = await supabase
     .from("user_settings")
-    .select("google_ads_access_token, google_ads_refresh_token, google_ads_customer_id, google_ads_developer_token")
+    .select("user_id, google_ads_access_token, google_ads_refresh_token, google_ads_customer_id, google_ads_developer_token")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!settings?.google_ads_access_token) {
-    return NextResponse.json({ error: "Google Ads não conectado" }, { status: 400 });
-  }
-
-  let accessToken = settings.google_ads_access_token;
-
-  // Tenta renovar token se necessário
-  if (settings.google_ads_refresh_token) {
-    try {
-      accessToken = await GoogleAdsConnector.refreshAccessToken(settings.google_ads_refresh_token);
-      await supabase.from("user_settings").update({ google_ads_access_token: accessToken }).eq("user_id", user.id);
-    } catch {
-      // usa token atual
-    }
-  }
-
-  const connector = new GoogleAdsConnector({
-    accessToken,
-    refreshToken: settings.google_ads_refresh_token ?? "",
-    developerToken: settings.google_ads_developer_token ?? process.env.GOOGLE_ADS_DEVELOPER_TOKEN ?? "",
-    customerId: settings.google_ads_customer_id ?? process.env.GOOGLE_ADS_CUSTOMER_ID ?? "",
-  });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!settings) return NextResponse.json({ error: "Google Ads nao conectado" }, { status: 400 });
 
   try {
-    const campanhas = await connector.fetchCampaigns("LAST_30_DAYS");
+    const result = await syncGoogleAdsForUser(supabase, settings);
+    return NextResponse.json({ synced: result.synced, message: result.message });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Erro ao sincronizar";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
 
-    if (campanhas.length === 0) {
-      return NextResponse.json({ synced: 0, message: "Nenhuma campanha encontrada" });
-    }
+export async function GET(req: NextRequest) {
+  if (!isCronAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-    // DELETE + INSERT (evita conflito de índice parcial)
-    await supabase.from("metricas_ads").delete()
-      .eq("user_id", user.id).eq("plataforma", "google");
-
-    const rows = campanhas.map(c => ({
-      user_id:          user.id,
-      nome_campanha:    c.nome_campanha,
-      status:           c.status,
-      gasto_total:      c.gasto_total,
-      orcamento:        c.orcamento,
-      impressoes:       c.impressoes,
-      alcance:          c.alcance,
-      cliques:          c.cliques,
-      ctr:              c.ctr,
-      contatos:         c.contatos,
-      plataforma:       "google",
-      objective:        c.objective,
-      data_inicio:      c.data_inicio,
-      data_atualizacao: c.data_atualizacao,
-    }));
-
-    const { error } = await supabase.from("metricas_ads").insert(rows);
-
-    if (error) throw error;
-
-    return NextResponse.json({ synced: campanhas.length });
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Erro ao sincronizar";
+  try {
+    const result = await syncAllGoogleAds(createServerSupabase());
+    return NextResponse.json(result);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Erro ao sincronizar Google Ads";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
