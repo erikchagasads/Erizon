@@ -22,7 +22,11 @@ async function runBlogCron(request: NextRequest) {
   const service = new IntelligentBlogService(createServerSupabase());
   const now = new Date();
   const results: Record<string, unknown> = {
-    daily: await service.generateDailyBlogDraft(),
+    daily: await service.generateDailyBlogDraft({
+      forcePublish: true,
+      preferMarketNews: true,
+      skipIfPublishedRecently: true,
+    }),
   };
 
   const weekday = new Intl.DateTimeFormat("en-US", {

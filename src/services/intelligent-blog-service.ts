@@ -66,6 +66,17 @@ type MarketSource = {
   checked_at: string;
 };
 
+type DailyBlogOptions = {
+  forcePublish?: boolean;
+  preferMarketNews?: boolean;
+  skipIfPublishedRecently?: boolean;
+};
+
+type GeneratePostOptions = {
+  forcePublish?: boolean;
+  usedSourceUrls?: Set<string>;
+};
+
 type InternalMetricRow = {
   snapshot_date?: string | null;
   spend?: number | string | null;
@@ -87,6 +98,10 @@ const DEFAULT_MARKET_RSS_FEEDS = [
   "OpenAI News|https://openai.com/news/rss.xml",
   "Meta Newsroom|https://about.fb.com/news/category/product-news/feed/",
   "Google Ads & Commerce|https://blog.google/products/ads-commerce/rss/",
+  "Google Search Central|https://developers.google.com/search/blog/atom.xml",
+  "Search Engine Land|https://searchengineland.com/feed",
+  "HubSpot Marketing Blog|https://blog.hubspot.com/marketing/rss.xml",
+  "Social Media Today|https://www.socialmediatoday.com/feeds/news/",
 ];
 
 const CONTENT_TYPE_LABELS: Record<BlogContentType, string> = {
@@ -370,53 +385,63 @@ export function calculateIdentificationRisk(content: string): {
 export class MarketNewsService {
   constructor(private readonly supabase: SupabaseClient) {}
 
-  async getLatestVerifiedSource(): Promise<MarketSource | null> {
+  async getLatestVerifiedSource(excludedUrls = new Set<string>()): Promise<MarketSource | null> {
     const [manualSource, rssSource] = await Promise.all([
-      this.getLatestManualSource(),
-      this.getLatestRssSource(),
+      this.getLatestManualSources(),
+      this.getLatestRssSources(),
     ]);
 
-    const sources = [manualSource, rssSource]
-      .filter((source): source is MarketSource => Boolean(source))
+    const sources = [...manualSource, ...rssSource]
       .filter(isSourceFromCurrentBlogYear)
+      .filter((source) => !excludedUrls.has(normalizeSourceUrl(source.source_url)))
       .sort((a, b) => new Date(b.source_published_at ?? b.checked_at).getTime() - new Date(a.source_published_at ?? a.checked_at).getTime());
 
     return sources[0] ?? null;
   }
 
-  private async getLatestManualSource(): Promise<MarketSource | null> {
+  private async getLatestManualSources(): Promise<MarketSource[]> {
     const { data, error } = await this.supabase
       .from("blog_market_sources")
       .select("title, summary, source_name, source_url, source_published_at, checked_at, approved")
       .eq("approved", true)
       .order("source_published_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(10);
 
-    if (error) return null;
-    if (!data?.source_url || !data?.source_name) return null;
-    return {
-      title: data.title,
-      summary: data.summary,
-      source_name: data.source_name,
-      source_url: data.source_url,
-      source_published_at: data.source_published_at,
-      checked_at: data.checked_at ?? new Date().toISOString(),
-    };
+    if (error) return [];
+    return (data ?? [])
+      .filter((row) => row.source_url && row.source_name)
+      .map((row) => ({
+        title: row.title,
+        summary: row.summary,
+        source_name: row.source_name,
+        source_url: row.source_url,
+        source_published_at: row.source_published_at,
+        checked_at: row.checked_at ?? new Date().toISOString(),
+      }));
   }
 
-  private async getLatestRssSource(): Promise<MarketSource | null> {
+  private async getLatestRssSources(): Promise<MarketSource[]> {
     const feeds = getConfiguredRssFeeds();
-    if (feeds.length === 0) return null;
+    if (feeds.length === 0) return [];
 
     const results = await Promise.allSettled(feeds.map((feed) => fetchRssFeed(feed)));
     const sources = results
-      .filter((result): result is PromiseFulfilledResult<MarketSource | null> => result.status === "fulfilled")
-      .map((result) => result.value)
-      .filter((source): source is MarketSource => Boolean(source))
+      .filter((result): result is PromiseFulfilledResult<MarketSource[]> => result.status === "fulfilled")
+      .flatMap((result) => result.value)
       .sort((a, b) => new Date(b.source_published_at ?? b.checked_at).getTime() - new Date(a.source_published_at ?? a.checked_at).getTime());
 
-    return sources[0] ?? null;
+    return sources;
+  }
+}
+
+function normalizeSourceUrl(value: string) {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    url.search = "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return value.trim().replace(/\/$/, "");
   }
 }
 
@@ -448,7 +473,7 @@ function pickTag(xml: string, tag: string) {
   return match ? decodeXml(match[1]) : "";
 }
 
-async function fetchRssFeed(feed: { name: string; url: string }): Promise<MarketSource | null> {
+async function fetchRssFeed(feed: { name: string; url: string }): Promise<MarketSource[]> {
   const response = await fetch(feed.url, {
     headers: {
       accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
@@ -457,7 +482,7 @@ async function fetchRssFeed(feed: { name: string; url: string }): Promise<Market
     next: { revalidate: 1800 },
   });
 
-  if (!response.ok) return null;
+  if (!response.ok) return [];
 
   const xml = await response.text();
   const items = xml.match(/<item[\s\S]*?<\/item>/gi) ?? xml.match(/<entry[\s\S]*?<\/entry>/gi) ?? [];
@@ -482,7 +507,8 @@ async function fetchRssFeed(feed: { name: string; url: string }): Promise<Market
 
   return parsed
     .filter((source): source is MarketSource => Boolean(source))
-    .sort((a, b) => new Date(b.source_published_at ?? b.checked_at).getTime() - new Date(a.source_published_at ?? a.checked_at).getTime())[0] ?? null;
+    .sort((a, b) => new Date(b.source_published_at ?? b.checked_at).getTime() - new Date(a.source_published_at ?? a.checked_at).getTime())
+    .slice(0, 5);
 }
 
 function fallbackArticle(type: BlogContentType, safeData?: SafeCampaignData, source?: MarketSource | null): ArticleDraft {
@@ -693,11 +719,39 @@ function typeForToday(date = new Date()): BlogContentType {
   return map[day] ?? "seo_educational";
 }
 
-function canAutoPublish(risk: IdentificationRiskLevel, content: string) {
+function canAutoPublish(risk: IdentificationRiskLevel, content: string, forcePublish = false) {
   const autoPublishEnabled = process.env.BLOG_AUTO_PUBLISH === "true" || process.env.auto_publish_enabled === "true";
-  if (!autoPublishEnabled) return false;
-  if (risk !== "Baixo") return false;
+  if (!autoPublishEnabled && !forcePublish) return false;
+  if (risk === "Alto") return false;
   return !PROHIBITED_COPY.some((term) => content.toLowerCase().includes(term));
+}
+
+async function getPublishedSourceUrls(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("blog_posts")
+    .select("source_url")
+    .not("source_url", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(80);
+
+  if (error) return new Set<string>();
+  return new Set((data ?? []).map((row) => normalizeSourceUrl(String(row.source_url ?? ""))).filter(Boolean));
+}
+
+async function getRecentPublishedAutoPost(supabase: SupabaseClient) {
+  const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("blog_posts")
+    .select("id, slug, title, published_at, source_name, source_url")
+    .eq("published", true)
+    .eq("gerado_por_ia", true)
+    .gte("published_at", since)
+    .order("published_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return null;
+  return data ?? null;
 }
 
 async function saveGenerationLog(supabase: SupabaseClient, payload: Record<string, unknown>) {
@@ -707,36 +761,61 @@ async function saveGenerationLog(supabase: SupabaseClient, payload: Record<strin
 export class IntelligentBlogService {
   constructor(private readonly supabase: SupabaseClient) {}
 
-  async generateDailyBlogDraft() {
+  async generateDailyBlogDraft(options: DailyBlogOptions = {}) {
+    if (options.skipIfPublishedRecently) {
+      const recent = await getRecentPublishedAutoPost(this.supabase);
+      if (recent) {
+        return {
+          post: recent,
+          skipped: true,
+          reason: "Ja existe post automatico publicado nas ultimas 20 horas.",
+        };
+      }
+    }
+
+    const usedSourceUrls = await getPublishedSourceUrls(this.supabase);
+    if (options.preferMarketNews) {
+      const news = await this.generateMarketNewsPost({
+        forcePublish: options.forcePublish,
+        usedSourceUrls,
+      });
+      if (news?.post) return news;
+    }
+
     const requestedType = typeForToday();
     if (requestedType === "market_news") {
-      const news = await this.generateMarketNewsPost();
+      const news = await this.generateMarketNewsPost({
+        forcePublish: options.forcePublish,
+        usedSourceUrls,
+      });
       if (news?.post) return news;
-      return this.generatePost("seo_educational");
+      return this.generatePost("seo_educational", 14, null, { forcePublish: options.forcePublish });
     }
     if (requestedType === "anonymous_case_study") {
-      const study = await this.generateAnonymousCaseStudy();
+      const study = await this.generateAnonymousCaseStudy({ forcePublish: options.forcePublish });
       if (study?.post) return study;
-      return this.generatePost("seo_educational");
+      return this.generatePost("seo_educational", 14, null, { forcePublish: options.forcePublish });
     }
-    return this.generatePost(requestedType);
+    const generated = await this.generatePost(requestedType, 14, null, { forcePublish: options.forcePublish });
+    if (generated?.post || requestedType === "seo_educational" || requestedType === "performance_insight") return generated;
+    return this.generatePost("seo_educational", 14, null, { forcePublish: options.forcePublish });
   }
 
-  async generateAnonymousCaseStudy() {
-    return this.generatePost("anonymous_case_study");
+  async generateAnonymousCaseStudy(options: GeneratePostOptions = {}) {
+    return this.generatePost("anonymous_case_study", 14, null, options);
   }
 
-  async generateWeeklyReport() {
-    return this.generatePost("weekly_report", 7);
+  async generateWeeklyReport(options: GeneratePostOptions = {}) {
+    return this.generatePost("weekly_report", 7, null, options);
   }
 
-  async generateMonthlyReport() {
-    return this.generatePost("monthly_report", 31);
+  async generateMonthlyReport(options: GeneratePostOptions = {}) {
+    return this.generatePost("monthly_report", 31, null, options);
   }
 
-  async generateMarketNewsPost() {
+  async generateMarketNewsPost(options: GeneratePostOptions = {}) {
     const newsService = new MarketNewsService(this.supabase);
-    const source = await newsService.getLatestVerifiedSource();
+    const source = await newsService.getLatestVerifiedSource(options.usedSourceUrls);
     if (!source) {
       await saveGenerationLog(this.supabase, {
         action: "generate_market_news",
@@ -746,10 +825,10 @@ export class IntelligentBlogService {
       });
       return { post: null, skipped: true, reason: "Nenhuma fonte real aprovada disponível." };
     }
-    return this.generatePost("market_news", 7, source);
+    return this.generatePost("market_news", 7, source, options);
   }
 
-  private async generatePost(type: BlogContentType, daysBack = 14, source?: MarketSource | null) {
+  private async generatePost(type: BlogContentType, daysBack = 14, source?: MarketSource | null, options: GeneratePostOptions = {}) {
     const safeData = ["anonymous_case_study", "weekly_report", "monthly_report", "performance_insight"].includes(type)
       ? await getInternalSafeData(this.supabase, daysBack)
       : undefined;
@@ -770,13 +849,13 @@ export class IntelligentBlogService {
     }
 
     if (type === "performance_insight" && !safeData) {
-      return this.generatePost("seo_educational");
+      return this.generatePost("seo_educational", 14, null, options);
     }
 
     const aiDraft = await generateWithGroq(type, safeData, source);
     const draft = aiDraft ?? fallbackArticle(type, safeData, source);
     const risk = calculateIdentificationRisk(`${draft.title}\n${draft.excerpt}\n${draft.content}`);
-    const publish = canAutoPublish(risk.level, draft.content);
+    const publish = canAutoPublish(risk.level, draft.content, options.forcePublish);
     const status: BlogPostStatus = publish ? "published" : "waiting_review";
     const now = new Date().toISOString();
     const slug = `${slugify(draft.slug || draft.title)}-${Date.now().toString(36)}`;
