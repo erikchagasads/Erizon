@@ -11,6 +11,7 @@ export type NicheInsight = {
   roasP75: number | null;
   ctrP50: number | null;
   nWorkspaces: number;
+  nCampaigns: number;
   topPattern: string | null;
   marketTrend: "rising" | "stable" | "falling" | null;
   trendNote: string | null;
@@ -50,6 +51,21 @@ export type NetworkReadiness = {
   message: string;
 };
 
+export const NETWORK_INTELLIGENCE_MIN_WORKSPACES = 5;
+export const NETWORK_INTELLIGENCE_MIN_CAMPAIGNS = 10;
+
+export function meetsNetworkIntelligenceThreshold(sample: {
+  nWorkspaces?: number | null;
+  nCampaigns?: number | null;
+}) {
+  const nWorkspaces = Number(sample.nWorkspaces ?? 0);
+  const nCampaigns = Number(sample.nCampaigns ?? 0);
+  return (
+    nWorkspaces >= NETWORK_INTELLIGENCE_MIN_WORKSPACES &&
+    nCampaigns >= NETWORK_INTELLIGENCE_MIN_CAMPAIGNS
+  );
+}
+
 function percentile(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
   const idx = Math.max(0, Math.floor((p / 100) * sorted.length) - 1);
@@ -64,7 +80,7 @@ function avg(arr: number[]): number {
 export class NetworkIntelligenceService {
   private db = createServerSupabase();
 
-  private activeStatuses = ["ATIVO", "ACTIVE", "ATIVA"];
+  private activeStatuses = ["ATIVO", "ACTIVE", "ATIVA", "ativo", "ativa", "active"];
 
   private async getWorkspace(workspaceId: string): Promise<{ id: string; niche: string; owner_user_id: string } | null> {
     const { data } = await this.db
@@ -134,7 +150,7 @@ export class NetworkIntelligenceService {
 
     const eligible = (workspaces ?? []).filter((workspace) => !excludedIds.has(String(workspace.id)));
     const ownerIds = Array.from(new Set(eligible.map((workspace) => String(workspace.owner_user_id)).filter(Boolean)));
-    if (ownerIds.length < 2) return null;
+    if (ownerIds.length < NETWORK_INTELLIGENCE_MIN_WORKSPACES) return null;
 
     const { data: campaigns } = await this.db
       .from("metricas_ads")
@@ -160,7 +176,13 @@ export class NetworkIntelligenceService {
       if (ctr > 0) ctrs.push(ctr);
     }
 
-    if (wsIds.size < 2 || (cpls.length === 0 && roass.length === 0 && ctrs.length === 0)) return null;
+    const nCampaigns = rows.filter((row) => Number(row.gasto_total ?? 0) > 0).length;
+    if (
+      !meetsNetworkIntelligenceThreshold({ nWorkspaces: wsIds.size, nCampaigns }) ||
+      (cpls.length === 0 && roass.length === 0 && ctrs.length === 0)
+    ) {
+      return null;
+    }
 
     const sortedCpl = [...cpls].sort((a, b) => a - b);
     const sortedRoas = [...roass].sort((a, b) => b - a);
@@ -177,6 +199,7 @@ export class NetworkIntelligenceService {
       roasP75: sortedRoas.length >= 4 ? percentile(sortedRoas, 75) : null,
       ctrP50: sortedCtr.length ? percentile(sortedCtr, 50) : null,
       nWorkspaces: wsIds.size,
+      nCampaigns,
       topPattern: null,
       marketTrend: "stable",
       trendNote: "Benchmark calculado ao vivo com campanhas reais sincronizadas no Meta Ads.",
@@ -230,7 +253,8 @@ export class NetworkIntelligenceService {
 
     // Salva insights por nicho
     for (const [nicho, data] of Object.entries(byNiche)) {
-      if (data.wsIds.size < 2) continue; // Mínimo 2 workspaces para benchmark
+      const nCampaigns = Math.max(data.cpls.length, data.roass.length, data.ctrs.length);
+      if (!meetsNetworkIntelligenceThreshold({ nWorkspaces: data.wsIds.size, nCampaigns })) continue;
 
       const sortedCpl = [...data.cpls].sort((a, b) => a - b);
       const sortedRoas = [...data.roass].sort((a, b) => b - a); // desc
@@ -274,7 +298,7 @@ export class NetworkIntelligenceService {
         roas_p75:       sortedRoas.length >= 4 ? percentile(sortedRoas, 25) : null,
         ctr_p50:        sortedCtr.length ? percentile(sortedCtr, 50) : null,
         n_workspaces:   data.wsIds.size,
-        n_campaigns:    data.cpls.length,
+        n_campaigns:    nCampaigns,
         market_trend:   marketTrend,
         trend_note:     trendNote,
         computed_at:    new Date().toISOString(),
@@ -293,6 +317,12 @@ export class NetworkIntelligenceService {
       .maybeSingle();
 
     if (!data) return this.getLiveForNiche(nicho);
+    if (!meetsNetworkIntelligenceThreshold({
+      nWorkspaces: Number(data.n_workspaces ?? 0),
+      nCampaigns: Number(data.n_campaigns ?? 0),
+    })) {
+      return this.getLiveForNiche(nicho);
+    }
     return this.mapRow(data);
   }
 
@@ -377,6 +407,7 @@ export class NetworkIntelligenceService {
       roasP75:       data.roas_p75 as number | null,
       ctrP50:        data.ctr_p50 as number | null,
       nWorkspaces:   data.n_workspaces as number,
+      nCampaigns:    data.n_campaigns as number,
       topPattern:    data.top_pattern as string | null,
       marketTrend:   data.market_trend as NicheInsight["marketTrend"],
       trendNote:     data.trend_note as string | null,

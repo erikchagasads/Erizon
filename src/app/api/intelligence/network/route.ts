@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth-guard";
-import { NetworkIntelligenceService } from "@/services/network-intelligence-service";
+import {
+  NETWORK_INTELLIGENCE_MIN_WORKSPACES,
+  NetworkIntelligenceService,
+} from "@/services/network-intelligence-service";
 import { BenchmarkMarketIntelligenceService } from "@/services/benchmark-market-intelligence-service";
 import { createServerSupabase } from "@/lib/supabase/server";
 
@@ -33,7 +36,7 @@ export async function GET(req: NextRequest) {
   const readiness = {
     hasOwnData: ownStats.campaignsWithSpend > 0,
     hasNetworkBenchmark: Boolean(nicheInsight),
-    requiredWorkspaces: 2,
+    requiredWorkspaces: NETWORK_INTELLIGENCE_MIN_WORKSPACES,
     currentWorkspaces: nicheInsight?.nWorkspaces ?? 0,
     source: nicheInsight
       ? (new Date(nicheInsight.computedAt).getTime() > Date.now() - 10 * 60 * 1000 ? "live" : "weekly")
@@ -41,7 +44,7 @@ export async function GET(req: NextRequest) {
     message: nicheInsight
       ? "Benchmark real disponivel para este nicho."
       : ownStats.campaignsWithSpend > 0
-        ? "Sua conta tem dados reais, mas a rede ainda nao tem pelo menos 2 workspaces reais neste nicho."
+        ? `Sua conta tem dados reais, mas a rede ainda nao tem pelo menos ${NETWORK_INTELLIGENCE_MIN_WORKSPACES} workspaces reais neste nicho.`
         : "Sincronize campanhas reais do Meta Ads para calcular seus benchmarks.",
   };
 

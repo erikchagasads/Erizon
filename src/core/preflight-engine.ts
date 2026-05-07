@@ -20,10 +20,41 @@ export type PreflightInput = {
   objetivo: string;          // LEADS, SALES, TRAFFIC, AWARENESS, etc.
   orcamentoDiario: number;   // R$
   audienciaSize?: number;    // tamanho do público estimado
+  audience?: {
+    mode?: "ai" | "broad" | "interests" | "lookalike" | "retargeting" | string;
+    locations?: string[];
+    ageMin?: number;
+    ageMax?: number;
+    gender?: "all" | "female" | "male" | string;
+    interests?: string[];
+    exclusions?: string[];
+    customAudienceName?: string | null;
+    lookalikeSource?: string | null;
+    retargetingDays?: number;
+  };
+  placements?: {
+    advantagePlus?: boolean;
+    selected?: string[];
+    platforms?: string[];
+    devices?: string[];
+  };
   criativo?: {
     formato: string;         // video, imagem, carrossel
     temTexto?: boolean;
     temCTA?: boolean;
+    cta?: string;
+    primaryText?: string | null;
+    headline?: string | null;
+    description?: string | null;
+    destinationUrl?: string | null;
+    media?: {
+      bucket?: string;
+      path?: string;
+      fileName?: string;
+      mimeType?: string;
+      sizeBytes?: number;
+      pendingUpload?: boolean;
+    } | null;
     duracaoSegundos?: number; // para vídeos
   };
   urlDestino?: string;
@@ -122,6 +153,89 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     score -= 8;
   }
 
+  if (input.audience) {
+    const mode = String(input.audience.mode ?? "");
+    const interests = input.audience.interests ?? [];
+    const locations = input.audience.locations ?? [];
+
+    if (locations.length === 0) {
+      risks.push({
+        id: "no_location",
+        severity: "warning",
+        label: "Localizacao nao definida",
+        detail: "Sem localizacao, o pacote de publicacao fica incompleto para criar o conjunto de anuncios.",
+        recommendation: "Defina pelo menos pais, estado ou cidade antes de publicar.",
+        impactScore: 8,
+      });
+      score -= 8;
+    }
+
+    if (mode === "interests" && interests.length === 0) {
+      risks.push({
+        id: "no_interest_signals",
+        severity: "warning",
+        label: "Publico por interesses sem sinais",
+        detail: "O modo de interesses foi escolhido, mas nenhum interesse ou sinal foi informado.",
+        recommendation: "Adicione interesses, comportamentos ou troque para publico aberto/IA.",
+        impactScore: 10,
+      });
+      score -= 10;
+    }
+
+    if (mode === "lookalike" && !input.audience.lookalikeSource) {
+      risks.push({
+        id: "lookalike_without_source",
+        severity: "warning",
+        label: "Lookalike sem fonte",
+        detail: "Lookalike precisa de uma base de origem clara para ser criado corretamente.",
+        recommendation: "Informe a fonte: leads qualificados, compradores, CRM ou visitantes.",
+        impactScore: 10,
+      });
+      score -= 10;
+    }
+
+    if (mode === "retargeting" && !input.audience.customAudienceName) {
+      risks.push({
+        id: "retargeting_without_audience",
+        severity: "warning",
+        label: "Retargeting sem audiencia",
+        detail: "A campanha esta marcada como retargeting, mas nenhuma Custom Audience foi identificada.",
+        recommendation: "Escolha uma audiencia de visitantes, engajados, leads ou carrinho.",
+        impactScore: 10,
+      });
+      score -= 10;
+    }
+  }
+
+  if (input.placements) {
+    const selected = input.placements.selected ?? [];
+    const devices = input.placements.devices ?? [];
+
+    if (!input.placements.advantagePlus && selected.length < 3) {
+      risks.push({
+        id: "placements_too_narrow",
+        severity: "warning",
+        label: "Posicionamentos muito restritos",
+        detail: "Poucos posicionamentos podem limitar entrega, encarecer CPM e atrasar aprendizado.",
+        recommendation: "Use Advantage+ ou selecione pelo menos Feed, Stories e Reels.",
+        impactScore: 8,
+      });
+      score -= 8;
+    }
+
+    if (devices.length === 0) {
+      risks.push({
+        id: "no_device_selected",
+        severity: "warning",
+        label: "Nenhum dispositivo selecionado",
+        detail: "A publicacao precisa saber se a entrega sera mobile, desktop ou ambos.",
+        recommendation: "Selecione mobile e/ou desktop para completar o setup.",
+        impactScore: 8,
+      });
+      score -= 8;
+    }
+  }
+
   // ── 3. Pixel / Rastreamento ───────────────────────────────────────────────
   if (input.temPixel === false) {
     risks.push({
@@ -139,6 +253,30 @@ export function runPreflight(input: PreflightInput): PreflightResult {
   if (input.criativo) {
     const c = input.criativo;
 
+    if (!c.media || c.media.pendingUpload) {
+      risks.push({
+        id: "creative_media_missing",
+        severity: "warning",
+        label: "Arquivo criativo ainda nao salvo",
+        detail: "Sem imagem ou video salvo na Erizon, a campanha ainda depende do Ads Manager para anexar o asset.",
+        recommendation: "Suba o arquivo do criativo antes de criar a campanha no Meta.",
+        impactScore: 12,
+      });
+      score -= 12;
+    }
+
+    if (!c.temTexto || !c.primaryText || !c.headline) {
+      risks.push({
+        id: "creative_copy_incomplete",
+        severity: "warning",
+        label: "Copy do anuncio incompleta",
+        detail: "Titulo e texto principal ajudam a IA a prever qualidade e deixam o pacote pronto para publicacao.",
+        recommendation: "Preencha titulo e texto principal do anuncio.",
+        impactScore: 8,
+      });
+      score -= 8;
+    }
+
     if (!c.temCTA) {
       risks.push({
         id: "no_cta",
@@ -146,6 +284,19 @@ export function runPreflight(input: PreflightInput): PreflightResult {
         label: "Sem chamada para ação (CTA)",
         detail: "Criativos sem CTA claro têm CTR até 40% menor.",
         recommendation: "Adicione um CTA direto: 'Fale agora', 'Acesse aqui', 'Saiba mais'.",
+        impactScore: 10,
+      });
+      score -= 10;
+    }
+
+    const needsDestination = ["LEADS", "SALES", "TRAFFIC"].includes(String(input.objetivo ?? "").toUpperCase());
+    if (needsDestination && !c.destinationUrl && !input.urlDestino) {
+      risks.push({
+        id: "missing_destination_url",
+        severity: "warning",
+        label: "URL destino ausente",
+        detail: "Campanhas de leads, vendas ou trafego precisam de destino claro para completar o anuncio.",
+        recommendation: "Informe a URL da landing page, formulario ou WhatsApp.",
         impactScore: 10,
       });
       score -= 10;

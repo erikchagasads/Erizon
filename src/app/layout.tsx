@@ -12,9 +12,20 @@ const jakarta = Plus_Jakarta_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'Erizon | AI Marketing Operating System',
-  description: 'Erizon é o sistema operacional do gestor de tráfego: lucro real, copiloto de decisão, autopilot, inteligência criativa e network intelligence.',
+  title: 'Erizon AI | Automação de Marketing com Inteligência Artificial',
+  description: 'Transforme dados de campanhas em decisões claras. A Erizon AI ajuda empresas, gestores e agências a analisar performance, reduzir desperdício e escalar com mais controle.',
   manifest: '/manifest.json',
+  keywords: ['automação de marketing com IA', 'inteligência artificial para marketing', 'otimização de campanhas', 'gestão de tráfego com IA', 'análise de campanhas', 'reduzir desperdício de verba', 'escalar campanhas', 'performance de marketing', 'decisão baseada em dados'],
+  authors: [{ name: 'Erizon AI' }],
+  robots: 'index, follow',
+  openGraph: {
+    title: 'Erizon AI | Central de Decisão para Marketing com IA',
+    description: 'Sua plataforma de Growth OS — insights, automações e gestão de equipes.',
+    url: 'https://erizon.com.br',
+    siteName: 'Erizon AI',
+    locale: 'pt_BR',
+    type: 'website',
+  },
   icons: {
     icon: '/logo-erizon.png',
     apple: '/logo-erizon.png',

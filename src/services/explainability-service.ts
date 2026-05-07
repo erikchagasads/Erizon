@@ -1,11 +1,11 @@
-import OpenAI from "openai";
-
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return _openai;
-}
+import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "@/lib/observability/logger";
+
+let _anthropic: Anthropic | null = null;
+function getAnthropic(): Anthropic {
+  if (!_anthropic) _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return _anthropic;
+}
 
 export interface ExplainableDecision {
   summary: string;
@@ -148,14 +148,15 @@ IMPORTANTE: Responda APENAS em JSON, sem markdown, sem código block.
 }
 `;
 
-      const response = await getOpenAI().chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.7,
+      const response = await getAnthropic().messages.create({
+        model: "claude-sonnet-4-20250514",
         max_tokens: 300,
+        messages: [{ role: "user", content: prompt }],
       });
 
-      const content = response.choices[0].message.content || "{}";
+      const content = response.content[0].type === "text"
+        ? response.content[0].text
+        : "{}";
 
       // Parse JSON
       let parsed;
@@ -176,7 +177,7 @@ IMPORTANTE: Responda APENAS em JSON, sem markdown, sem código block.
         alternatives: parsed.alternatives || [],
       };
     } catch (error) {
-      logger.warn('OpenAI explanation failed, using fallback', { error });
+      logger.warn('Anthropic explanation failed, using fallback', { error });
 
       return {
         summary: `Campanha "${params.campaign_name}" recomendada para "${params.action}" com ${(params.confidence * 100).toFixed(0)}% de confiança`,

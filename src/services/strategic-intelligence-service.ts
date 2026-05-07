@@ -40,6 +40,8 @@ type SnapshotRow = {
 };
 
 type PreflightRow = {
+  id?: string;
+  campaign_id?: string | null;
   campaign_name: string | null;
   score: number;
   estimated_cpl_min: NumericLike;
@@ -50,6 +52,39 @@ type PreflightRow = {
     orcamentoDiario?: NumericLike;
     metaLeads?: NumericLike;
   } | null;
+  forecast_snapshot?: ForecastSnapshot | null;
+  created_at: string;
+};
+
+type ForecastSnapshot = {
+  estimatedLeads7d?: NumericLike;
+  estimatedRevenue7d?: NumericLike;
+  confidenceLabel?: string | null;
+  estimatedCplRange?: [NumericLike, NumericLike] | null;
+  estimatedRoas?: NumericLike;
+  recommendation?: string | null;
+};
+
+type DraftCampaignRow = {
+  id: string;
+  nome_campanha: string | null;
+  status: string | null;
+  orcamento: NumericLike;
+  preflight_status: string | null;
+  preflight_score: NumericLike;
+  preflight_result: {
+    estimatedCplMin?: NumericLike;
+    estimatedCplMax?: NumericLike;
+    estimatedRoas?: NumericLike;
+    readyToLaunch?: boolean;
+    topRecommendation?: string | null;
+  } | null;
+  forecast_snapshot: ForecastSnapshot | null;
+  draft_payload: {
+    orcamentoDiario?: NumericLike;
+    metaLeads?: NumericLike;
+  } | null;
+  data_atualizacao: string | null;
   created_at: string;
 };
 
@@ -161,6 +196,15 @@ export type WorkspaceStrategicSnapshot = {
     estimatedRoas: number | null;
     recommendation: string | null;
     createdAt: string | null;
+    draftCount?: number;
+    readyDraftCount?: number;
+    budget7d?: number;
+    campaigns?: Array<{
+      id: string;
+      name: string;
+      score: number | null;
+      estimatedLeads7d: number | null;
+    }>;
   } | null;
   dna: {
     bestFormats: string[];
@@ -229,6 +273,7 @@ export class StrategicIntelligenceService {
       leadsRes,
       snapshotsRes,
       preflightRes,
+      draftCampaignsRes,
       nicheRes,
       dnaRes,
       modelConfidence,
@@ -260,11 +305,19 @@ export class StrategicIntelligenceService {
         .gte("snapshot_date", since30d.toISOString().slice(0, 10)),
       this.db
         .from("preflight_scores")
-        .select("campaign_name, score, estimated_cpl_min, estimated_cpl_max, estimated_roas, risks, input_snapshot, created_at")
+        .select("id, campaign_id, campaign_name, score, estimated_cpl_min, estimated_cpl_max, estimated_roas, risks, input_snapshot, forecast_snapshot, created_at")
         .eq("workspace_id", workspaceId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      this.db
+        .from("metricas_ads")
+        .select("id, nome_campanha, status, orcamento, preflight_status, preflight_score, preflight_result, forecast_snapshot, draft_payload, data_atualizacao, created_at")
+        .eq("user_id", userId)
+        .eq("status", "rascunho")
+        .not("preflight_score", "is", null)
+        .order("data_atualizacao", { ascending: false })
+        .limit(20),
       this.db
         .from("workspaces")
         .select("niche")
@@ -290,6 +343,9 @@ export class StrategicIntelligenceService {
     const leads = (leadsRes.data ?? []) as LeadRow[];
     const snapshots = (snapshotsRes.data ?? []) as SnapshotRow[];
     const latestPreflight = (preflightRes.data ?? null) as PreflightRow | null;
+    const draftCampaigns = draftCampaignsRes.error
+      ? []
+      : (draftCampaignsRes.data ?? []) as DraftCampaignRow[];
     const dna = (dnaRes.data ?? null) as ProfitDnaRow | null;
 
     const approved = auditTrail.filter((row) => ["approved", "auto"].includes(row.approval_status ?? ""));
@@ -345,9 +401,11 @@ export class StrategicIntelligenceService {
     const niche = nicheRes.data?.niche ?? workspacePosition?.nicho ?? null;
     const nicheInsight = niche ? await this.network.getLatestForNiche(niche).catch(() => null) : null;
 
-    const forecast = latestPreflight
-      ? this.buildForecast(latestPreflight, conversionRate, ticketMedio)
-      : null;
+    const forecast = draftCampaigns.length > 0
+      ? this.buildDraftForecast(draftCampaigns, conversionRate, ticketMedio)
+      : latestPreflight
+        ? this.buildForecast(latestPreflight, conversionRate, ticketMedio)
+        : null;
 
     const learningAccuracy = measuredPredictions.length
       ? Math.round((accuratePredictions.length / measuredPredictions.length) * 100)
@@ -622,6 +680,105 @@ export class StrategicIntelligenceService {
       estimatedRoas: toNumber(latestPreflight.estimated_roas) || null,
       recommendation,
       createdAt: latestPreflight.created_at,
+    };
+  }
+
+  private buildDraftForecast(
+    drafts: DraftCampaignRow[],
+    conversionRate: number,
+    ticketMedio: number
+  ): WorkspaceStrategicSnapshot["forecast"] {
+    const normalized = drafts.map((draft) => {
+      const snapshot = draft.forecast_snapshot ?? {};
+      const cplRange = snapshot.estimatedCplRange ?? null;
+      const estimatedCplMin =
+        toNumber(cplRange?.[0]) || toNumber(draft.preflight_result?.estimatedCplMin);
+      const estimatedCplMax =
+        toNumber(cplRange?.[1]) || toNumber(draft.preflight_result?.estimatedCplMax);
+      const budget7d = toNumber(draft.draft_payload?.orcamentoDiario || draft.orcamento) * 7;
+      const leadsFromSnapshot = toNumber(snapshot.estimatedLeads7d);
+      const estimatedLeads7d =
+        leadsFromSnapshot > 0
+          ? leadsFromSnapshot
+          : budget7d > 0 && estimatedCplMin > 0 && estimatedCplMax > 0
+            ? Math.round((Math.floor(budget7d / estimatedCplMax) + Math.floor(budget7d / estimatedCplMin)) / 2)
+            : toNumber(draft.draft_payload?.metaLeads) || null;
+      const revenueFromSnapshot = toNumber(snapshot.estimatedRevenue7d);
+      const estimatedRevenue7d =
+        revenueFromSnapshot > 0
+          ? revenueFromSnapshot
+          : estimatedLeads7d && ticketMedio > 0 && conversionRate > 0
+            ? Math.round(estimatedLeads7d * (conversionRate / 100) * ticketMedio)
+            : null;
+
+      return {
+        id: draft.id,
+        name: draft.nome_campanha ?? "Campanha em rascunho",
+        score: draft.preflight_score ? toNumber(draft.preflight_score) : null,
+        ready: draft.preflight_result?.readyToLaunch ?? toNumber(draft.preflight_score) >= 60,
+        estimatedCplMin,
+        estimatedCplMax,
+        estimatedRoas: toNumber(snapshot.estimatedRoas) || toNumber(draft.preflight_result?.estimatedRoas) || null,
+        estimatedLeads7d,
+        estimatedRevenue7d,
+        budget7d,
+        recommendation:
+          snapshot.recommendation ??
+          draft.preflight_result?.topRecommendation ??
+          null,
+        createdAt: draft.data_atualizacao ?? draft.created_at,
+      };
+    });
+
+    const estimatedLeads7d = normalized.reduce((total, draft) => total + toNumber(draft.estimatedLeads7d), 0) || null;
+    const estimatedRevenue7d = normalized.reduce((total, draft) => total + toNumber(draft.estimatedRevenue7d), 0) || null;
+    const budget7d = normalized.reduce((total, draft) => total + draft.budget7d, 0);
+    const scores = normalized.map((draft) => draft.score).filter((score): score is number => score !== null);
+    const avgScore = scores.length
+      ? Math.round(scores.reduce((total, score) => total + score, 0) / scores.length)
+      : null;
+    const cplMinValues = normalized.map((draft) => draft.estimatedCplMin).filter((value) => value > 0);
+    const cplMaxValues = normalized.map((draft) => draft.estimatedCplMax).filter((value) => value > 0);
+    const readyDraftCount = normalized.filter((draft) => draft.ready).length;
+    const createdAt = normalized
+      .map((draft) => draft.createdAt)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? null;
+
+    return {
+      campaignName:
+        normalized.length === 1
+          ? normalized[0].name
+          : `${normalized.length} campanhas em rascunho`,
+      score: avgScore,
+      confidenceLabel:
+        readyDraftCount === normalized.length
+          ? "rascunhos prontos"
+          : readyDraftCount > 0
+            ? "parte pronta"
+            : "exige ajustes",
+      estimatedLeads7d,
+      estimatedRevenue7d,
+      estimatedCplRange:
+        cplMinValues.length && cplMaxValues.length
+          ? [Math.min(...cplMinValues), Math.max(...cplMaxValues)]
+          : null,
+      estimatedRoas: avg(normalized.map((draft) => draft.estimatedRoas)) ?? null,
+      recommendation:
+        readyDraftCount === normalized.length
+          ? "Rascunhos avaliados. Aprove e publique apenas quando criativo, publico e verba estiverem fechados."
+          : normalized.find((draft) => draft.recommendation)?.recommendation ?? "Ainda ha rascunhos que precisam de ajuste antes de publicar.",
+      createdAt,
+      draftCount: normalized.length,
+      readyDraftCount,
+      budget7d,
+      campaigns: normalized.map((draft) => ({
+        id: draft.id,
+        name: draft.name,
+        score: draft.score,
+        estimatedLeads7d: draft.estimatedLeads7d,
+      })),
     };
   }
 }

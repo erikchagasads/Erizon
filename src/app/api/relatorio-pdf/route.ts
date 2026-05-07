@@ -105,9 +105,17 @@ export async function GET(req: NextRequest) {
           meta_account_id:  c.meta_account_id ?? null,
           meta_campaign_id: c.meta_campaign_id ?? null,
           analise_criativo: c.analise_criativo ?? null,
-          score:           calcScore(c.gasto_total ?? 0, c.contatos ?? 0, c.gasto_total > 0 ? (c.receita_estimada ?? 0) / c.gasto_total : 0),
+          score:           c.status === "rascunho" && c.preflight_score != null
+            ? c.preflight_score
+            : calcScore(c.gasto_total ?? 0, c.contatos ?? 0, c.gasto_total > 0 ? (c.receita_estimada ?? 0) / c.gasto_total : 0),
           diasAtivo:       c.dias_ativo ?? 0,
           dataInicio:      c.data_inicio ?? null,
+          orcamento:        c.orcamento ?? 0,
+          objective:        c.objective ?? null,
+          preflight_status: c.preflight_status ?? null,
+          preflight_score:  c.preflight_score ?? null,
+          forecast_snapshot:c.forecast_snapshot ?? null,
+          draft_payload:    c.draft_payload ?? null,
         })),
       },
     });

@@ -9,7 +9,7 @@ import {
   Loader2, X, Eye, ArrowUpDown,
   AlertTriangle, CheckCircle, Target, Zap, Clock,
   Sparkles, ImageIcon, ThumbsUp, ThumbsDown, Lightbulb,
-  FileText, Save,
+  FileText, Save, PlusCircle,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { fetchSafe } from "@/lib/fetchSafe";
@@ -44,6 +44,10 @@ interface Campanha {
   cliente_id?: string;
   cliente_nome?: string;
   score?: number;
+  orcamento?: number;
+  objective?: string | null;
+  preflight_status?: string | null;
+  preflight_score?: number | null;
   meta_campaign_id?: string;
   analise_criativo?: AnaliseCriativoIA;
 }
@@ -65,7 +69,7 @@ type ClienteRaw = {
 };
 
 type OrdenarPor = "nome_campanha" | "gasto_total" | "contatos" | "cpl" | "roas" | "ctr" | "score" | "status";
-type FiltroStatus = "todos" | "ativo" | "pausado" | "critico";
+type FiltroStatus = "todos" | "rascunho" | "ativo" | "pausado" | "critico";
 type Periodo = "hoje" | "7d" | "30d" | "90d" | "todos";
 type TipoCopyContextual = "body_ad" | "headline" | "copy_imagem" | "cta";
 
@@ -110,6 +114,10 @@ function isAtivo(status: string) {
   return ["ATIVO", "ACTIVE", "ATIVA"].includes((status ?? "").toUpperCase());
 }
 
+function isRascunho(status: string) {
+  return (status ?? "").toLowerCase() === "rascunho";
+}
+
 function nomeCurto(nome: string, max = 42): string {
   if (!nome) return "—";
   return nome.length > max ? nome.slice(0, max - 1) + "…" : nome;
@@ -140,14 +148,17 @@ function ScoreDot({ score }: { score: number }) {
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
   const ativo = isAtivo(status);
+  const rascunho = isRascunho(status);
   return (
     <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-md tracking-wide ${
       ativo
         ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-        : "bg-white/[0.04] text-white/25 border border-white/[0.07]"
+        : rascunho
+          ? "bg-amber-500/10 text-amber-300 border border-amber-500/20"
+          : "bg-white/[0.04] text-white/25 border border-white/[0.07]"
     }`}>
-      <span className={`w-1 h-1 rounded-full ${ativo ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.9)]" : "bg-white/20"}`}/>
-      {ativo ? "ATIVA" : "PAUSADA"}
+      <span className={`w-1 h-1 rounded-full ${ativo ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.9)]" : rascunho ? "bg-amber-300" : "bg-white/20"}`}/>
+      {ativo ? "ATIVA" : rascunho ? "RASCUNHO" : "PAUSADA"}
     </span>
   );
 }
@@ -292,6 +303,7 @@ function gerarAnalise(camp: Campanha): AnaliseIndividual {
   const roas  = camp.gasto_total > 0 ? camp.receita_estimada / camp.gasto_total : 0;
   const score = camp.score ?? calcScore(camp.gasto_total, camp.contatos, camp.receita_estimada);
   const ativo = isAtivo(camp.status);
+  const rascunho = isRascunho(camp.status);
 
   let decisao: AnaliseIndividual["decisao"] = "ok";
   let titulo = "";
@@ -300,7 +312,12 @@ function gerarAnalise(camp: Campanha): AnaliseIndividual {
 
   const gastoDiario = camp.dias_ativo && camp.dias_ativo > 0 ? camp.gasto_total / camp.dias_ativo : camp.gasto_total;
 
-  if (!ativo) {
+  if (rascunho) {
+    decisao = "monitorar";
+    titulo = "Rascunho em preflight";
+    descricao = `Esta campanha ainda nao foi publicada. Orcamento diario planejado: ${fmtBRL2(camp.orcamento ?? 0)}. Use a avaliacao antes de enviar para o gerenciador.`;
+    impacto = camp.preflight_score != null ? `Preflight score: ${camp.preflight_score}/100` : "Preflight pendente";
+  } else if (!ativo) {
     decisao = "monitorar";
     titulo = "Campanha pausada";
     descricao = `Esta campanha está inativa. Investimento acumulado: ${fmtBRL2(camp.gasto_total)} com ${camp.contatos} leads gerados.`;
@@ -872,13 +889,18 @@ export default function GerenciadorAnunciosPage() {
       const json = await res.json();
       const camps: Campanha[] = (json.relatorio?.campanhas ?? []).map((c: ClienteRaw) => {
         const cl = listaClientes.find(x => x.id === String(c.cliente_id ?? ""));
+        const status = String(c.status ?? "PAUSADO");
+        const preflightScore = c.preflight_score != null ? Number(c.preflight_score) : null;
+        const gasto = Number(c.gasto ?? 0);
+        const leads = Number(c.leads ?? 0);
+        const receita = Number(c.receita ?? 0);
         return {
           id:               String(c.id ?? ""),
           nome_campanha:    String(c.nome ?? "—"),
-          status:           String(c.status ?? "PAUSADO"),
-          gasto_total:      Number(c.gasto ?? 0),
-          contatos:         Number(c.leads ?? 0),
-          receita_estimada: Number(c.receita ?? 0),
+          status,
+          gasto_total:      gasto,
+          contatos:         leads,
+          receita_estimada: receita,
           ctr:              Number(c.ctr ?? 0),
           cpm:              Number(c.cpm ?? 0),
           impressoes:       Number(c.impressoes ?? 0),
@@ -886,9 +908,11 @@ export default function GerenciadorAnunciosPage() {
           data_inicio:      c.dataInicio ? String(c.dataInicio) : undefined,
           cliente_id:       String(c.cliente_id ?? ""),
           cliente_nome:     cl ? (cl.nome_cliente ?? cl.nome) : "",
-          score:            c.score != null
-            ? Number(c.score)
-            : calcScore(Number(c.gasto ?? 0), Number(c.leads ?? 0), Number(c.receita ?? 0)),
+          score:            preflightScore ?? (c.score != null ? Number(c.score) : calcScore(gasto, leads, receita)),
+          orcamento:        Number(c.orcamento ?? 0),
+          objective:        c.objective ? String(c.objective) : null,
+          preflight_status: c.preflight_status ? String(c.preflight_status) : null,
+          preflight_score:  preflightScore,
           meta_campaign_id: c.meta_campaign_id ? String(c.meta_campaign_id) : undefined,
           analise_criativo: c.analise_criativo as AnaliseCriativoIA | undefined,
         };
@@ -915,9 +939,10 @@ export default function GerenciadorAnunciosPage() {
       );
     }
 
-    if (filtroStatus === "ativo")   lista = lista.filter(c => isAtivo(c.status));
-    if (filtroStatus === "pausado") lista = lista.filter(c => !isAtivo(c.status));
-    if (filtroStatus === "critico") lista = lista.filter(c => (c.score ?? 0) < 45);
+    if (filtroStatus === "rascunho") lista = lista.filter(c => isRascunho(c.status));
+    if (filtroStatus === "ativo")    lista = lista.filter(c => isAtivo(c.status));
+    if (filtroStatus === "pausado")  lista = lista.filter(c => !isAtivo(c.status) && !isRascunho(c.status));
+    if (filtroStatus === "critico")  lista = lista.filter(c => !isRascunho(c.status) && (c.score ?? 0) < 45);
 
     if (filtroCliente !== "todos") lista = lista.filter(c => c.cliente_id === filtroCliente);
 
@@ -935,7 +960,10 @@ export default function GerenciadorAnunciosPage() {
                             vb = b.gasto_total > 0 ? b.receita_estimada/b.gasto_total : 0; break;
         case "ctr":         va = a.ctr ?? 0; vb = b.ctr ?? 0; break;
         case "score":       va = a.score ?? 0; vb = b.score ?? 0; break;
-        case "status":      va = isAtivo(a.status) ? 1 : 0; vb = isAtivo(b.status) ? 1 : 0; break;
+        case "status":
+          va = isAtivo(a.status) ? 2 : isRascunho(a.status) ? 1 : 0;
+          vb = isAtivo(b.status) ? 2 : isRascunho(b.status) ? 1 : 0;
+          break;
       }
       return dir === "asc" ? va - vb : vb - va;
     });
@@ -950,8 +978,9 @@ export default function GerenciadorAnunciosPage() {
     const leads   = lista.reduce((s,c) => s + c.contatos, 0);
     const receita = lista.reduce((s,c) => s + c.receita_estimada, 0);
     const ativas  = lista.filter(c => isAtivo(c.status)).length;
-    const criticas = lista.filter(c => (c.score??0) < 45).length;
-    return { invest, leads, receita, ativas, criticas, total: lista.length,
+    const rascunhos = lista.filter(c => isRascunho(c.status)).length;
+    const criticas = lista.filter(c => !isRascunho(c.status) && (c.score??0) < 45).length;
+    return { invest, leads, receita, ativas, rascunhos, criticas, total: lista.length,
       cpl: leads > 0 ? invest/leads : 0,
       roas: invest > 0 ? receita/invest : 0,
     };
@@ -1045,6 +1074,12 @@ export default function GerenciadorAnunciosPage() {
               Sincronizar
             </button>
 
+            <button onClick={() => { window.location.href = "/campanhas/nova"; }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-500/20 bg-amber-500/10 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/15 transition-all">
+              <PlusCircle size={12}/>
+              Nova campanha
+            </button>
+
             <button onClick={handleExportar} disabled={exportando}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-[11px] font-semibold text-white transition-all disabled:opacity-50">
               {exportando ? <Loader2 size={12} className="animate-spin"/> : <Download size={12}/>}
@@ -1054,9 +1089,10 @@ export default function GerenciadorAnunciosPage() {
         </div>
 
         {/* ── KPI Strip ── */}
-        <div className="shrink-0 grid grid-cols-7 border-b border-white/[0.05] divide-x divide-white/[0.04]">
+        <div className="shrink-0 grid grid-cols-8 border-b border-white/[0.05] divide-x divide-white/[0.04]">
           {[
             { label: "Campanhas",  value: String(totais.total),       sub: `${totais.ativas} ativas`, color: "text-white" },
+            { label: "Rascunhos",   value: String(totais.rascunhos),   sub: "entram no forecast", color: totais.rascunhos > 0 ? "text-amber-300" : "text-white/25" },
             { label: "Críticas",   value: String(totais.criticas),    sub: "score derivado < 45",   color: totais.criticas > 0 ? "text-red-400" : "text-white/25" },
             { label: "Investido",  value: fmtBRL(totais.invest),      sub: "base sincronizada", color: "text-white" },
             { label: "Resultados", value: fmtNum(totais.leads),       sub: "contatos importados",color: "text-sky-400" },
@@ -1093,6 +1129,7 @@ export default function GerenciadorAnunciosPage() {
           <div className="flex items-center gap-0.5 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
             {([
               { label: "Todas", value: "todos" },
+              { label: "Rascunhos", value: "rascunho" },
               { label: "● Ativas", value: "ativo" },
               { label: "Pausadas", value: "pausado" },
               { label: "⚠ Críticas", value: "critico" },
@@ -1101,6 +1138,7 @@ export default function GerenciadorAnunciosPage() {
                 className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all whitespace-nowrap ${
                   filtroStatus === f.value
                     ? f.value === "ativo"   ? "bg-emerald-500/15 text-emerald-400"
+                      : f.value === "rascunho" ? "bg-amber-500/15 text-amber-300"
                       : f.value === "critico" ? "bg-red-500/15 text-red-400"
                       : "bg-white/[0.10] text-white"
                     : "text-white/25 hover:text-white/50"
@@ -1163,11 +1201,12 @@ export default function GerenciadorAnunciosPage() {
                   const roas   = camp.gasto_total > 0 ? camp.receita_estimada / camp.gasto_total : 0;
                   const score  = camp.score ?? calcScore(camp.gasto_total, camp.contatos, camp.receita_estimada);
                   const ativo  = isAtivo(camp.status);
+                  const rascunho = isRascunho(camp.status);
                   const critico = score < 45;
                   const sel    = selecionados.has(camp.id);
 
-                  const trClass = `group cursor-pointer transition-colors ${sel ? "bg-blue-600/[0.06]" : critico && ativo ? "bg-red-500/[0.025] hover:bg-red-500/[0.04]" : "hover:bg-white/[0.02]"}`;
-                  const barClass = `w-[3px] h-full min-h-[44px] ${ativo && critico ? "bg-red-500" : ativo ? "bg-emerald-500" : "bg-transparent"}`;
+                  const trClass = `group cursor-pointer transition-colors ${sel ? "bg-blue-600/[0.06]" : critico && ativo ? "bg-red-500/[0.025] hover:bg-red-500/[0.04]" : rascunho ? "bg-amber-500/[0.018] hover:bg-amber-500/[0.035]" : "hover:bg-white/[0.02]"}`;
+                  const barClass = `w-[3px] h-full min-h-[44px] ${rascunho ? "bg-amber-400" : ativo && critico ? "bg-red-500" : ativo ? "bg-emerald-500" : "bg-transparent"}`;
                   return (
                     <tr key={camp.id} onClick={() => toggleSel(camp.id)} className={trClass}><td className="px-4 py-3" onClick={e => e.stopPropagation()}><input type="checkbox" checked={sel} onChange={() => toggleSel(camp.id)} className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer"/></td><td className="w-[3px] p-0"><div className={barClass}/></td><td className="px-4 py-3 max-w-[260px]"><div className="flex flex-col gap-0.5"><span className="text-[12px] font-semibold text-white/85 leading-snug truncate" title={camp.nome_campanha}>{nomeCurto(camp.nome_campanha, 40)}</span>{camp.dias_ativo != null && camp.dias_ativo > 0 && (<span className="text-[10px] text-white/20 flex items-center gap-1"><Clock size={9}/>{camp.dias_ativo}d ativo</span>)}</div></td><td className="px-4 py-3">{camp.cliente_nome ? (<span className="text-[11px] text-white/40 font-medium truncate block max-w-[130px]" title={camp.cliente_nome}>{nomeCurto(camp.cliente_nome, 18)}</span>) : (<span className="text-[11px] text-white/15">—</span>)}</td><td className="px-4 py-3"><StatusBadge status={camp.status}/></td><td className="px-4 py-3 text-center"><ScoreDot score={score}/></td><td className="px-4 py-3"><MetricCell value={fmtBRL(camp.gasto_total)} color="text-white/80"/></td><td className="px-4 py-3"><MetricCell value={camp.contatos > 0 ? fmtNum(camp.contatos) : "—"} color={camp.contatos > 0 ? "text-sky-400" : "text-white/20"}/></td><td className="px-4 py-3"><MetricCell value={cpl > 0 ? fmtBRL2(cpl) : "—"} color={cpl === 0 ? "text-white/20" : cpl < 30 ? "text-emerald-400" : cpl < 80 ? "text-white/70" : "text-red-400"}/></td><td className="px-4 py-3"><MetricCell value={roas > 0 ? fmtX(roas) : "—"} color={roas === 0 ? "text-white/20" : roas >= 3 ? "text-emerald-400" : roas >= 2 ? "text-white/70" : "text-amber-400"}/></td><td className="px-4 py-3"><MetricCell value={camp.ctr != null && camp.ctr > 0 ? fmtPct(camp.ctr) : "—"} color={!camp.ctr || camp.ctr === 0 ? "text-white/20" : camp.ctr > 2 ? "text-emerald-400" : "text-white/60"}/></td><td className="px-4 py-3"><MetricCell value={camp.cpm != null && camp.cpm > 0 ? fmtBRL2(camp.cpm) : "—"} color={!camp.cpm || camp.cpm === 0 ? "text-white/20" : "text-white/60"}/></td><td className="px-4 py-3" onClick={e => e.stopPropagation()}><div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { window.location.href = `/dados?cliente=${camp.cliente_id}`; }} title="Análise completa" className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.04] border border-white/[0.07] hover:bg-blue-500/10 hover:border-blue-500/25 transition-all"><BarChart3 size={11} className="text-white/30 hover:text-blue-400"/></button><button title="Ver análise rápida" onClick={() => setCampanhaSelecionada(camp)} className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.04] border border-white/[0.07] hover:bg-purple-500/10 hover:border-purple-500/25 transition-all"><Eye size={11} className="text-white/30 hover:text-purple-400"/></button></div></td></tr>
                   );

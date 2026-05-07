@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { strategicIntelligenceService } from "@/services/strategic-intelligence-service";
+import { meetsNetworkIntelligenceThreshold } from "@/services/network-intelligence-service";
 import { filtrarAtivas, type CampanhaRaw } from "@/app/lib/engine/pulseEngine";
 
 type SnapshotRow = {
@@ -159,7 +160,7 @@ export async function GET() {
           .maybeSingle(),
         supabase
           .from("network_weekly_insights")
-          .select("nicho, cpl_p50, roas_p50, trend_note, n_workspaces")
+          .select("nicho, cpl_p50, roas_p50, trend_note, n_workspaces, n_campaigns")
           .order("semana_inicio", { ascending: false })
           .limit(1),
         strategicIntelligenceService.getWorkspaceSnapshot({ workspaceId, userId: user.id }),
@@ -241,7 +242,16 @@ export async function GET() {
     );
 
     const niche = workspaceRes.data?.niche ?? null;
-    const benchmarkRow = benchmarkRes.data?.find((row) => row.nicho === niche) ?? benchmarkRes.data?.[0] ?? null;
+    const benchmarkRows = benchmarkRes.data ?? [];
+    const isReadyBenchmark = (row: { n_workspaces?: number | null; n_campaigns?: number | null }) =>
+      meetsNetworkIntelligenceThreshold({
+        nWorkspaces: row.n_workspaces ?? 0,
+        nCampaigns: row.n_campaigns ?? 0,
+      });
+    const benchmarkRow =
+      benchmarkRows.find((row) => row.nicho === niche && isReadyBenchmark(row)) ??
+      benchmarkRows.find(isReadyBenchmark) ??
+      null;
 
     const benchmark =
       benchmarkRow

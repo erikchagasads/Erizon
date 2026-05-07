@@ -85,6 +85,9 @@ interface DailyDigestData {
     estimatedRoas: number | null;
     recommendation: string | null;
     createdAt: string | null;
+    draftCount?: number;
+    readyDraftCount?: number;
+    budget7d?: number;
   } | null;
   dna: {
     bestFormats: string[];
@@ -260,13 +263,24 @@ export function DailyDigest() {
           <div className="rounded-[24px] border border-amber-500/20 bg-amber-500/[0.06] p-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-100/85">previsao pre-publicacao</p>
             <p className="mt-3 text-[26px] font-black text-white">
-              {data.forecast?.estimatedLeads7d ? `${data.forecast.estimatedLeads7d} leads` : "Sem forecast"}
+              {data.forecast?.estimatedLeads7d
+                ? `${data.forecast.estimatedLeads7d} leads`
+                : data.forecast?.draftCount
+                  ? `${data.forecast.draftCount} rascunho${data.forecast.draftCount !== 1 ? "s" : ""}`
+                  : "Sem forecast"}
             </p>
             <p className="mt-1 text-[12px] text-white/65">
-              {data.forecast?.estimatedRevenue7d
+              {data.forecast?.draftCount && data.forecast.budget7d
+                ? `${data.forecast.draftCount} rascunho${data.forecast.draftCount !== 1 ? "s" : ""} avaliado${data.forecast.draftCount !== 1 ? "s" : ""} · R$ ${fmtBRL(data.forecast.budget7d)} planejados em 7 dias`
+                : data.forecast?.estimatedRevenue7d
                 ? `potencial de R$ ${fmtBRL(data.forecast.estimatedRevenue7d)} em 7 dias`
                 : "rode um preflight para prever leads, CPL e receita antes de publicar"}
             </p>
+            {data.forecast?.draftCount && (
+              <p className="mt-2 text-[11px] text-amber-100/70">
+                {data.forecast.readyDraftCount ?? 0}/{data.forecast.draftCount} prontos para aprovacao
+              </p>
+            )}
             {data.forecast?.recommendation && (
               <p className="mt-3 text-[12px] leading-relaxed text-white/62">{data.forecast.recommendation}</p>
             )}

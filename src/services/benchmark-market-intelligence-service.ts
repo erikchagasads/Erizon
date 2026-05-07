@@ -1,4 +1,9 @@
 import { createServerSupabase } from "@/lib/supabase/server";
+import {
+  NETWORK_INTELLIGENCE_MIN_CAMPAIGNS,
+  NETWORK_INTELLIGENCE_MIN_WORKSPACES,
+  meetsNetworkIntelligenceThreshold,
+} from "@/services/network-intelligence-service";
 
 export type BenchmarkStatus = "winning" | "median" | "attention" | "unknown";
 
@@ -212,6 +217,12 @@ function statusAgainstAverage(value: number | null, average: number | null, lowe
   if (value === null || average === null || average <= 0) return "unknown";
   if (lowerBetter) return value <= average ? "winning" : "attention";
   return value >= average ? "winning" : "attention";
+}
+
+function networkBenchmarkConfidence(nWorkspaces: number, nCampaigns: number): number {
+  const workspaceLift = Math.min(0.2, Math.max(0, nWorkspaces - NETWORK_INTELLIGENCE_MIN_WORKSPACES) * 0.01);
+  const campaignLift = Math.min(0.05, Math.max(0, nCampaigns - NETWORK_INTELLIGENCE_MIN_CAMPAIGNS) * 0.0025);
+  return Number(Math.min(0.95, 0.7 + workspaceLift + campaignLift).toFixed(2));
 }
 
 export class BenchmarkMarketIntelligenceService {
@@ -495,6 +506,15 @@ export class BenchmarkMarketIntelligenceService {
     if (!data) return null;
 
     const row = data as Record<string, unknown>;
+    const nWorkspaces = Number(row.n_workspaces ?? 0);
+    const nCampaigns = Number(row.n_campaigns ?? 0);
+    if (!meetsNetworkIntelligenceThreshold({
+      nWorkspaces,
+      nCampaigns,
+    })) {
+      return null;
+    }
+
     return {
       niche: normalizedNiche,
       campaignType: "all",
@@ -502,11 +522,11 @@ export class BenchmarkMarketIntelligenceService {
       country,
       periodStart: row.semana_inicio ? String(row.semana_inicio) : null,
       periodEnd: row.semana_inicio ? String(row.semana_inicio) : null,
-      sampleSize: row.n_workspaces === null || row.n_workspaces === undefined ? null : Number(row.n_workspaces),
-      confidence: 0.7,
+      sampleSize: nWorkspaces,
+      confidence: networkBenchmarkConfidence(nWorkspaces, nCampaigns),
       sourceName: "Rede Erizon anonimizada",
       sourceUrl: null,
-      sourceNote: "Base calculada com contas reais sincronizadas no Erizon para este nicho.",
+      sourceNote: `${nWorkspaces <= NETWORK_INTELLIGENCE_MIN_WORKSPACES + 2 ? "Amostra reduzida: " : ""}Base calculada com ${nWorkspaces} contas reais e ${nCampaigns} campanhas sincronizadas no Erizon para este nicho.`,
       metrics: {
         cpl: { p25: this.num(row.cpl_p25), p50: this.num(row.cpl_p50), p75: this.num(row.cpl_p75), unit: "BRL" },
         roas: { p25: this.num(row.roas_p25), p50: this.num(row.roas_p50), p75: this.num(row.roas_p75), unit: "x" },

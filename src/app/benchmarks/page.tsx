@@ -157,6 +157,38 @@ function StatusIcon({ status, inverse = false }: { status: Status; inverse?: boo
   return <Minus size={13} className="text-white/25" />;
 }
 
+function BenchmarkConfidenceBadge({ benchmark }: { benchmark: MarketBenchmark | null | undefined }) {
+  const sampleSize = Number.isFinite(benchmark?.sampleSize) ? Number(benchmark?.sampleSize) : null;
+  const sampleLabel = sampleSize !== null ? `${sampleSize} ${sampleSize === 1 ? "conta" : "contas"}` : null;
+  const confidence = Number.isFinite(benchmark?.confidence) ? Number(benchmark?.confidence) : 0;
+  const sourceNote = benchmark?.sourceNote ?? "";
+  const reducedByNote = sourceNote.toLowerCase().includes("amostra reduzida");
+  const isReduced = !benchmark || reducedByNote || confidence < 0.72 || (sampleSize !== null && sampleSize < 8);
+  const isHigh = Boolean(benchmark) && !isReduced && confidence >= 0.82;
+  const label = isReduced
+    ? `Amostra reduzida${sampleLabel ? ` (${sampleLabel})` : ""}`
+    : `${isHigh ? "Alta confianca" : "Confianca media"}${sampleLabel ? ` (${sampleLabel})` : ""}`;
+  const description = benchmark
+    ? `${Math.round(confidence * 100)}% de confianca${sourceNote ? ` | ${sourceNote}` : ""}`
+    : "Sem base global suficiente para este nicho";
+
+  return (
+    <span
+      title={description}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
+        isReduced
+          ? "border-amber-400/25 bg-amber-400/10 text-amber-200"
+          : isHigh
+            ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+            : "border-sky-400/25 bg-sky-400/10 text-sky-200"
+      }`}
+    >
+      {isReduced ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />}
+      {label}
+    </span>
+  );
+}
+
 function MetricCard({
   label,
   value,
@@ -689,7 +721,7 @@ export default function BenchmarksPage() {
 
               <section className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
                 <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Globe size={16} className="text-sky-300" />
                     <p className="text-sm font-semibold text-white">
                       Base global do mercado
@@ -697,6 +729,7 @@ export default function BenchmarksPage() {
                         | {marketBenchmark?.niche ?? detectedNiches[0]?.niche ?? effectiveStats.nicho}
                       </span>
                     </p>
+                    <BenchmarkConfidenceBadge benchmark={marketBenchmark} />
                   </div>
                   <span className="text-[10px] text-white/25 md:ml-auto">
                     {marketBenchmark
@@ -788,7 +821,10 @@ export default function BenchmarksPage() {
                       <article key={group.niche} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
                         <div className="mb-4 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                           <div>
-                            <p className="text-sm font-semibold capitalize text-white">{group.niche}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-white">{labelNiche(group.niche)}</p>
+                              <BenchmarkConfidenceBadge benchmark={external} />
+                            </div>
                             <p className="text-[11px] text-white/30">
                               {group.campaigns} campanhas | confianca media {(group.confidence * 100).toFixed(0)}%
                             </p>

@@ -1,10 +1,10 @@
-# Erizon V7 — Foundation Package
+# Erizon — Plataforma de Inteligência para Meta Ads
 
 Plataforma de gestão e inteligência de campanhas de anúncios pagos (Meta Ads).
 
 ## Stack
 
-- **Next.js 14** (App Router) + TypeScript
+- **Next.js 15** (App Router) + TypeScript
 - **Supabase** (PostgreSQL + Auth)
 - **Meta Ads Graph API v19.0**
 
