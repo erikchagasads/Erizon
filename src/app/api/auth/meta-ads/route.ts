@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     client_id: process.env.META_APP_ID!,
     redirect_uri: `${APP_URL}/api/auth/meta-ads/callback`,
     response_type: "code",
-    scope: "ads_read,ads_management,business_management",
+    scope: "ads_read,ads_management,business_management,pages_show_list,pages_read_engagement,instagram_basic,whatsapp_business_management",
     state,
   });
 

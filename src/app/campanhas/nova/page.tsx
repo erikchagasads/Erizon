@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCliente } from "@/app/hooks/useCliente";
 import Sidebar from "@/components/Sidebar";
@@ -177,6 +177,16 @@ type InstagramPostsResponse = {
   ok?: boolean;
   posts?: InstagramPostOption[];
   error?: string;
+};
+
+type MetaWhatsappSyncResponse = {
+  ok?: boolean;
+  whatsapp?: string;
+  source?: string;
+  warning?: string | null;
+  error?: string;
+  savedToClient?: boolean;
+  saveError?: string | null;
 };
 
 type PayloadOverride = {
@@ -457,8 +467,9 @@ function ScoreGauge({ score, classification }: { score: number; classification: 
 export default function NovaPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { clientes, clienteAtual, loading: loadingClientes, selecionarCliente } = useCliente();
+  const { clientes, clienteAtual, loading: loadingClientes, selecionarCliente, recarregar: recarregarClientes } = useCliente();
   const draftQueryId = searchParams.get("draft");
+  const lastMetaWhatsappSyncKeyRef = useRef("");
 
   const [step, setStep] = useState<"form" | "result">("form");
   const [loading, setLoading] = useState(false);
@@ -480,6 +491,9 @@ export default function NovaPage() {
   const [copyError, setCopyError] = useState<string | null>(null);
   const [copyGeneratingField, setCopyGeneratingField] = useState<"all" | "primaryText" | "headline" | "description" | null>(null);
   const [loadedDraftId, setLoadedDraftId] = useState<string | null>(null);
+  const [syncingMetaWhatsapp, setSyncingMetaWhatsapp] = useState(false);
+  const [metaWhatsappInfo, setMetaWhatsappInfo] = useState<string | null>(null);
+  const [metaWhatsappError, setMetaWhatsappError] = useState<string | null>(null);
 
   const [campaignName, setCampaignName] = useState("");
   const [objetivo, setObjetivo] = useState("LEADS");
@@ -586,6 +600,12 @@ export default function NovaPage() {
   }, [clienteAtual?.whatsapp_mensagem, clienteAtual?.id]);
 
   useEffect(() => {
+    setMetaWhatsappInfo(null);
+    setMetaWhatsappError(null);
+    lastMetaWhatsappSyncKeyRef.current = "";
+  }, [clienteAtual?.id]);
+
+  useEffect(() => {
     if (objetivo === "ENGAGEMENT" && campaignDestination === "website") {
       setCampaignDestination("post_engagement");
       return;
@@ -617,6 +637,57 @@ export default function NovaPage() {
     if (cta === "CONTACT_US") return;
     setCta("CONTACT_US");
   }, [cta, messagingCampaign]);
+
+  async function syncWhatsappFromMeta(clientId: string, options?: { silent?: boolean }) {
+    setSyncingMetaWhatsapp(true);
+    setMetaWhatsappError(null);
+    if (!options?.silent) setMetaWhatsappInfo(null);
+
+    try {
+      const query = metaPageId.trim() ? `?pageId=${encodeURIComponent(metaPageId.trim())}` : "";
+      const res = await fetch(`/api/clientes/${clientId}/meta-whatsapp${query}`);
+      const data = (await res.json()) as MetaWhatsappSyncResponse;
+
+      if (!res.ok || !data.ok || !data.whatsapp) {
+        throw new Error(data.error ?? "Nao foi possivel buscar o WhatsApp conectado na Meta.");
+      }
+
+      const clientWhatsappDigits = normalizePhoneDigits(clienteAtual?.whatsapp ?? "");
+      setMessagePhoneNumber((current) => {
+        const currentDigits = normalizePhoneDigits(current);
+        if (!currentDigits || currentDigits === clientWhatsappDigits) {
+          return data.whatsapp ?? current;
+        }
+        return current;
+      });
+
+      const sourceLabel = data.source === "connected_whatsapp_number"
+        ? "Numero conectado da Page puxado da Meta."
+        : "Numero puxado do WhatsApp Business da conta Meta.";
+      setMetaWhatsappInfo(data.warning ? `${sourceLabel} ${data.warning}` : sourceLabel);
+      if (data.saveError) {
+        setMetaWhatsappError(`A Erizon encontrou o numero, mas nao conseguiu salvar no cliente: ${data.saveError}`);
+      } else if (data.savedToClient) {
+        void recarregarClientes();
+      }
+    } catch (error) {
+      setMetaWhatsappError(error instanceof Error ? error.message : "Erro ao buscar o WhatsApp na Meta.");
+    } finally {
+      setSyncingMetaWhatsapp(false);
+    }
+  }
+
+  useEffect(() => {
+    if (campaignDestination !== "whatsapp") return;
+    if (!clienteAtual?.id) return;
+    if (normalizePhoneDigits(messagePhoneNumber)) return;
+
+    const syncKey = `${clienteAtual.id}:${metaPageId.trim() || clienteAtual.ig_user_id || "auto"}`;
+    if (lastMetaWhatsappSyncKeyRef.current === syncKey) return;
+    lastMetaWhatsappSyncKeyRef.current = syncKey;
+
+    void syncWhatsappFromMeta(clienteAtual.id, { silent: true });
+  }, [campaignDestination, clienteAtual?.id, clienteAtual?.ig_user_id, metaPageId, messagePhoneNumber]);
 
   async function carregarPostsInstagram(clientId: string) {
     setInstagramPostsLoading(true);
@@ -1510,7 +1581,22 @@ export default function NovaPage() {
                             {campaignDestination === "whatsapp" ? (
                               <>
                                 <div>
-                                  <FieldLabel>WhatsApp de destino</FieldLabel>
+                                  <div className="mb-1.5 flex items-center justify-between gap-3">
+                                    <FieldLabel>WhatsApp de destino</FieldLabel>
+                                    <button
+                                      type="button"
+                                      onClick={() => clienteAtual?.id ? void syncWhatsappFromMeta(clienteAtual.id) : undefined}
+                                      disabled={syncingMetaWhatsapp || !clienteAtual?.id}
+                                      className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/[0.08] px-2.5 py-1 text-[10px] font-semibold text-emerald-100/85 transition hover:bg-emerald-400/[0.12] disabled:cursor-not-allowed disabled:opacity-55"
+                                    >
+                                      {syncingMetaWhatsapp ? (
+                                        <Loader2 size={11} className="animate-spin" />
+                                      ) : (
+                                        <RefreshCw size={11} />
+                                      )}
+                                      Buscar da Meta
+                                    </button>
+                                  </div>
                                   <input
                                     value={messagePhoneNumber}
                                     onChange={(event) => setMessagePhoneNumber(event.target.value)}
@@ -1518,8 +1604,23 @@ export default function NovaPage() {
                                     className={inputClass}
                                   />
                                   <p className="mt-1.5 text-[10px] leading-relaxed text-white/28">
-                                    Puxado do cliente automaticamente quando houver WhatsApp cadastrado.
+                                    A Erizon usa primeiro o WhatsApp salvo no cliente e, se estiver vazio, tenta puxar o numero conectado na Meta.
                                   </p>
+                                  {syncingMetaWhatsapp && (
+                                    <p className="mt-1.5 text-[10px] leading-relaxed text-emerald-100/75">
+                                      Buscando o WhatsApp conectado na Meta para este cliente...
+                                    </p>
+                                  )}
+                                  {metaWhatsappInfo && !syncingMetaWhatsapp && (
+                                    <p className="mt-1.5 text-[10px] leading-relaxed text-emerald-100/75">
+                                      {metaWhatsappInfo}
+                                    </p>
+                                  )}
+                                  {metaWhatsappError && !syncingMetaWhatsapp && (
+                                    <p className="mt-1.5 text-[10px] leading-relaxed text-red-300/85">
+                                      {metaWhatsappError}
+                                    </p>
+                                  )}
                                 </div>
                                 <div>
                                   <FieldLabel>Mensagem inicial</FieldLabel>
