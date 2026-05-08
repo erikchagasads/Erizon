@@ -75,6 +75,14 @@ type UploadedAsset =
   | { type: "image"; imageHash: string; raw: JsonRecord }
   | { type: "video"; videoId: string; raw: JsonRecord };
 
+type InstagramPostSelection = {
+  mediaId: string;
+  mediaType: string | null;
+  permalink: string | null;
+  previewUrl: string | null;
+  caption: string | null;
+};
+
 type TargetingResolution = {
   targeting: JsonRecord;
   warnings: string[];
@@ -138,6 +146,23 @@ function normalizeUrl(value: unknown): string {
   if (/^https?:\/\//i.test(raw)) return raw;
   if (/^wa\.me\//i.test(raw)) return `https://${raw}`;
   return `https://${raw}`;
+}
+
+function getSelectedInstagramPost(draft: JsonRecord): InstagramPostSelection | null {
+  const creative = asObject(draft.criativo);
+  const source = asString(creative.source, "upload");
+  const instagramPost = asObject(creative.instagramPost);
+  const mediaId = asString(instagramPost.mediaId ?? instagramPost.id);
+
+  if (source !== "instagram_existing_post" || !mediaId) return null;
+
+  return {
+    mediaId,
+    mediaType: asString(instagramPost.mediaType) || null,
+    permalink: asString(instagramPost.permalink) || null,
+    previewUrl: asString(instagramPost.previewUrl) || null,
+    caption: asString(instagramPost.caption) || null,
+  };
 }
 
 function resolveBidStrategy(draft: JsonRecord): BidStrategyResolution {
@@ -840,15 +865,44 @@ async function createMetaAdCreative(params: {
   accountId: string;
   accessToken: string;
   name: string;
-  objectStorySpec: JsonRecord;
+  objectStorySpec?: JsonRecord;
+  instagramPost?: {
+    pageId: string;
+    instagramUserId: string;
+    sourceInstagramMediaId: string;
+    callToActionType: string | null;
+    destinationUrl: string | null;
+  } | null;
 }) {
+  const fields: Record<string, string> = {
+    name: `${params.name} | Criativo 1`,
+    access_token: params.accessToken,
+  };
+
+  if (params.instagramPost) {
+    fields.object_id = params.instagramPost.pageId;
+    fields.instagram_user_id = params.instagramPost.instagramUserId;
+    fields.source_instagram_media_id = params.instagramPost.sourceInstagramMediaId;
+
+    if (params.instagramPost.callToActionType && params.instagramPost.destinationUrl) {
+      fields.call_to_action = JSON.stringify({
+        type: params.instagramPost.callToActionType,
+        value: { link: params.instagramPost.destinationUrl },
+      });
+    }
+  } else if (params.objectStorySpec) {
+    fields.object_story_spec = JSON.stringify(params.objectStorySpec);
+  } else {
+    return {
+      ok: false as const,
+      error: "Nao foi possivel montar o criativo Meta para essa campanha.",
+      raw: null,
+    };
+  }
+
   return postMetaForm(
     `${params.accountId}/adcreatives`,
-    {
-      name: `${params.name} | Criativo 1`,
-      object_story_spec: JSON.stringify(params.objectStorySpec),
-      access_token: params.accessToken,
-    },
+    fields,
     "Erro ao criar criativo no Meta."
   );
 }
@@ -961,6 +1015,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     asString(client?.facebook_pixel_id) ||
     null;
   const destinationUrl = normalizeUrl(creative.destinationUrl ?? draft.urlDestino);
+  const selectedInstagramPost = getSelectedInstagramPost(draft);
 
   if (["OUTCOME_LEADS", "OUTCOME_SALES", "OUTCOME_TRAFFIC"].includes(metaObjective) && !destinationUrl) {
     const message = "Informe a URL destino do anuncio antes de publicar no Meta.";
@@ -977,21 +1032,29 @@ export async function POST(req: NextRequest, context: RouteContext) {
     pageName: page.pageName,
     instagramActorId: page.instagramActorId,
     pixelId,
+    creativeSource: selectedInstagramPost ? "instagram_existing_post" : "upload",
     steps: [],
   };
 
-  const uploadedAsset = await uploadAssetToMeta({
-    db,
-    accountId: credentials.accountId,
-    accessToken: credentials.accessToken,
-    draft,
-  });
-  if (uploadedAsset.ok === false) {
-    await recordPublishError(db, id, auth.user.id, uploadedAsset.error, partial);
-    return NextResponse.json({ error: uploadedAsset.error, metaResult: uploadedAsset.raw }, { status: 400 });
+  let uploadedAsset: UploadedAsset | null = null;
+  if (selectedInstagramPost) {
+    partial.instagramPost = selectedInstagramPost;
+    (partial.steps as unknown[]).push("instagram_post_selected");
+  } else {
+    const uploaded = await uploadAssetToMeta({
+      db,
+      accountId: credentials.accountId,
+      accessToken: credentials.accessToken,
+      draft,
+    });
+    if (uploaded.ok === false) {
+      await recordPublishError(db, id, auth.user.id, uploaded.error, partial);
+      return NextResponse.json({ error: uploaded.error, metaResult: uploaded.raw }, { status: 400 });
+    }
+    uploadedAsset = uploaded.asset;
+    partial.asset = uploaded.asset;
+    (partial.steps as unknown[]).push("asset_uploaded");
   }
-  partial.asset = uploadedAsset.asset;
-  (partial.steps as unknown[]).push("asset_uploaded");
 
   const createdCampaign = await createMetaCampaign({
     accountId: credentials.accountId,
@@ -1043,19 +1106,50 @@ export async function POST(req: NextRequest, context: RouteContext) {
   partial.adsetRaw = createdAdSet.raw;
   (partial.steps as unknown[]).push("adset_created");
 
-  const objectStorySpec = buildObjectStorySpec({
-    draft,
-    asset: uploadedAsset.asset,
-    pageId: page.pageId,
-    instagramActorId: page.instagramActorId,
-  });
-  partial.objectStorySpec = objectStorySpec;
+  let objectStorySpec: JsonRecord | undefined;
+  let instagramCreative:
+    | {
+        pageId: string;
+        instagramUserId: string;
+        sourceInstagramMediaId: string;
+        callToActionType: string | null;
+        destinationUrl: string | null;
+      }
+    | null
+    = null;
+
+  if (selectedInstagramPost) {
+    const instagramUserId = page.instagramActorId || client?.ig_user_id || null;
+    if (!instagramUserId) {
+      const message = "Nao encontramos o Instagram User ID conectado para promover uma publicacao existente.";
+      await recordPublishError(db, id, auth.user.id, message, partial);
+      return NextResponse.json({ error: message, metaResult: partial }, { status: 400 });
+    }
+
+    instagramCreative = {
+      pageId: page.pageId,
+      instagramUserId,
+      sourceInstagramMediaId: selectedInstagramPost.mediaId,
+      callToActionType: destinationUrl ? asString(creative.cta, "LEARN_MORE") : null,
+      destinationUrl: destinationUrl || null,
+    };
+    partial.instagramCreative = instagramCreative;
+  } else if (uploadedAsset) {
+    objectStorySpec = buildObjectStorySpec({
+      draft,
+      asset: uploadedAsset,
+      pageId: page.pageId,
+      instagramActorId: page.instagramActorId,
+    });
+    partial.objectStorySpec = objectStorySpec;
+  }
 
   const createdCreative = await createMetaAdCreative({
     accountId: credentials.accountId,
     accessToken: credentials.accessToken,
     name: campaignName,
     objectStorySpec,
+    instagramPost: instagramCreative,
   });
   if (createdCreative.ok === false) {
     await recordPublishError(db, id, auth.user.id, createdCreative.error, partial);

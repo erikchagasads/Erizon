@@ -152,6 +152,24 @@ type CreativeUpload = {
   uploadedAt: string;
 };
 
+type CreativeSource = "upload" | "instagram_existing_post";
+
+type InstagramPostOption = {
+  id: string;
+  caption: string | null;
+  mediaType: string;
+  mediaProductType: string | null;
+  permalink: string | null;
+  previewUrl: string | null;
+  timestamp: string | null;
+};
+
+type InstagramPostsResponse = {
+  ok?: boolean;
+  posts?: InstagramPostOption[];
+  error?: string;
+};
+
 type PayloadOverride = {
   media?: CreativeUpload | null;
 };
@@ -466,6 +484,11 @@ export default function NovaPage() {
   const [creativePreviewUrl, setCreativePreviewUrl] = useState<string | null>(null);
   const [creativeUpload, setCreativeUpload] = useState<CreativeUpload | null>(null);
   const [creativeUploadError, setCreativeUploadError] = useState<string | null>(null);
+  const [creativeSource, setCreativeSource] = useState<CreativeSource>("upload");
+  const [instagramPosts, setInstagramPosts] = useState<InstagramPostOption[]>([]);
+  const [instagramPostsLoading, setInstagramPostsLoading] = useState(false);
+  const [instagramPostsError, setInstagramPostsError] = useState<string | null>(null);
+  const [selectedInstagramPost, setSelectedInstagramPost] = useState<InstagramPostOption | null>(null);
   const [primaryText, setPrimaryText] = useState("");
   const [headline, setHeadline] = useState("");
   const [description, setDescription] = useState("");
@@ -522,6 +545,43 @@ export default function NovaPage() {
     return () => window.clearTimeout(timer);
   }, [sucesso]);
 
+  useEffect(() => {
+    if (creativeSource !== "instagram_existing_post") return;
+    if (!creativePreviewUrl) return;
+    URL.revokeObjectURL(creativePreviewUrl);
+    setCreativePreviewUrl(null);
+  }, [creativeSource, creativePreviewUrl]);
+
+  async function carregarPostsInstagram(clientId: string) {
+    setInstagramPostsLoading(true);
+    setInstagramPostsError(null);
+
+    try {
+      const res = await fetch(`/api/campaigns/instagram-posts?clientId=${encodeURIComponent(clientId)}`);
+      const data = (await res.json()) as InstagramPostsResponse;
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error ?? "Nao foi possivel carregar publicacoes do Instagram.");
+      }
+
+      setInstagramPosts(data.posts ?? []);
+      setSelectedInstagramPost((current) => {
+        if (!current) return null;
+        return (data.posts ?? []).find((post) => post.id === current.id) ?? null;
+      });
+    } catch (error) {
+      setInstagramPosts([]);
+      setInstagramPostsError(error instanceof Error ? error.message : "Erro ao carregar publicacoes do Instagram.");
+    } finally {
+      setInstagramPostsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (creativeSource !== "instagram_existing_post") return;
+    if (!clienteAtual?.id) return;
+    void carregarPostsInstagram(clienteAtual.id);
+  }, [creativeSource, clienteAtual?.id]);
+
   const audiencePresets = useMemo(() => {
     const baseAudience = suggestions[0]?.audience || (clienteAtual ? `${clienteAtual.nome_cliente ?? clienteAtual.nome}` : "Publico amplo qualificado");
     const baseSize = suggestions[0]?.audienceSize || 800_000;
@@ -569,7 +629,9 @@ export default function NovaPage() {
       Boolean(primaryText.trim()),
       Boolean(headline.trim()),
       Boolean(destinationUrl.trim()),
-      Boolean(creativeFile || creativeUpload),
+      creativeSource === "instagram_existing_post"
+        ? Boolean(selectedInstagramPost?.id)
+        : Boolean(creativeFile || creativeUpload),
       temPixel,
       !["SALES", "LEADS"].includes(objetivo) || Boolean(metaPixelId.trim()),
     ];
@@ -580,8 +642,10 @@ export default function NovaPage() {
     audiencia,
     audienceMode,
     campaignName,
+    creativeSource,
     creativeFile,
     creativeUpload,
+    selectedInstagramPost?.id,
     destinationUrl,
     headline,
     interests,
@@ -650,6 +714,9 @@ export default function NovaPage() {
     setDescription(suggestion.rationale || "");
     setMetaPageId("");
     setMetaPixelId(suggestionClient?.facebook_pixel_id ?? "");
+    setCreativeSource("upload");
+    setSelectedInstagramPost(null);
+    setInstagramPostsError(null);
     setCreativeFile(null);
     setCreativeUpload(null);
     setCreativeUploadError(null);
@@ -666,7 +733,9 @@ export default function NovaPage() {
     const placements = asRecord(payload.placements);
     const creative = asRecord(payload.criativo);
     const media = asRecord(creative.media);
+    const instagramPost = asRecord(creative.instagramPost);
     const tracking = asRecord(payload.tracking);
+    const restoredCreativeSource = asString(creative.source, instagramPost.mediaId ? "instagram_existing_post" : "upload") as CreativeSource;
     const clientId = asString(payload.clientId ?? draft.cliente_id);
     const matchedClient = clientId ? clientes.find((cliente) => cliente.id === clientId) ?? null : null;
 
@@ -706,6 +775,20 @@ export default function NovaPage() {
     setSelectedPlatforms(asStringArray(placements.platforms).length > 0 ? asStringArray(placements.platforms) : ["facebook", "instagram"]);
     setSelectedDevices(asStringArray(placements.devices).length > 0 ? asStringArray(placements.devices) : ["mobile", "desktop"]);
     setFormato(asString(creative.formato, "video"));
+    setCreativeSource(restoredCreativeSource);
+    setSelectedInstagramPost(
+      asString(instagramPost.mediaId ?? instagramPost.id)
+        ? {
+            id: asString(instagramPost.mediaId ?? instagramPost.id),
+            caption: asString(instagramPost.caption) || null,
+            mediaType: asString(instagramPost.mediaType, "UNKNOWN"),
+            mediaProductType: asString(instagramPost.mediaProductType) || null,
+            permalink: asString(instagramPost.permalink) || null,
+            previewUrl: asString(instagramPost.previewUrl) || null,
+            timestamp: asString(instagramPost.timestamp) || null,
+          }
+        : null
+    );
     setPrimaryText(asString(creative.primaryText));
     setHeadline(asString(creative.headline));
     setDescription(asString(creative.description));
@@ -720,7 +803,7 @@ export default function NovaPage() {
     setMetaPixelId(asString(payload.metaPixelId ?? tracking.metaPixelId ?? matchedClient?.facebook_pixel_id));
     setCreativeFile(null);
     setCreativeUpload(
-      media.bucket && media.path
+      restoredCreativeSource === "upload" && media.bucket && media.path
         ? {
             bucket: asString(media.bucket),
             path: asString(media.path),
@@ -738,6 +821,7 @@ export default function NovaPage() {
     }
     setCopyPackage(null);
     setCopyError(null);
+    setInstagramPostsError(null);
     setErro(null);
     setSucesso("Rascunho carregado para edicao.");
   }
@@ -775,15 +859,33 @@ export default function NovaPage() {
 
   function handleCreativeFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
+    setCreativeSource("upload");
     setCreativeFile(file);
     setCreativeUpload(null);
     setCreativeUploadError(null);
+    setSelectedInstagramPost(null);
 
     if (creativePreviewUrl) URL.revokeObjectURL(creativePreviewUrl);
     if (file && (file.type.startsWith("image/") || file.type.startsWith("video/"))) {
       setCreativePreviewUrl(URL.createObjectURL(file));
     } else {
       setCreativePreviewUrl(null);
+    }
+  }
+
+  function selecionarPostInstagram(post: InstagramPostOption) {
+    setCreativeSource("instagram_existing_post");
+    setSelectedInstagramPost(post);
+    setCreativeFile(null);
+    setCreativeUpload(null);
+    setCreativeUploadError(null);
+    if (creativePreviewUrl) {
+      URL.revokeObjectURL(creativePreviewUrl);
+      setCreativePreviewUrl(null);
+    }
+
+    if (!primaryText.trim() && post.caption) {
+      setPrimaryText(post.caption.slice(0, 220));
     }
   }
 
@@ -818,6 +920,7 @@ export default function NovaPage() {
         devices: selectedDevices,
       },
       criativo: {
+        source: creativeSource,
         formato,
         temTexto: Boolean(primaryText.trim() || headline.trim()),
         temCTA,
@@ -827,8 +930,19 @@ export default function NovaPage() {
         description: description.trim() || null,
         destinationUrl: destinationUrl.trim() || null,
         duracaoSegundos: formato === "video" && duracao ? parseNumber(duracao) : undefined,
+        instagramPost: creativeSource === "instagram_existing_post" && selectedInstagramPost
+          ? {
+              mediaId: selectedInstagramPost.id,
+              caption: selectedInstagramPost.caption,
+              mediaType: selectedInstagramPost.mediaType,
+              mediaProductType: selectedInstagramPost.mediaProductType,
+              permalink: selectedInstagramPost.permalink,
+              previewUrl: selectedInstagramPost.previewUrl,
+              timestamp: selectedInstagramPost.timestamp,
+            }
+          : null,
         media: media ?? (
-          creativeFile
+          creativeSource === "upload" && creativeFile
             ? {
                 fileName: creativeFile.name,
                 mimeType: creativeFile.type,
@@ -854,6 +968,7 @@ export default function NovaPage() {
   }
 
   async function uploadCreativeFile(draftId: string): Promise<CreativeUpload | null> {
+    if (creativeSource !== "upload") return null;
     if (!creativeFile) return creativeUpload;
     if (creativeUpload?.fingerprint === fileFingerprint(creativeFile)) return creativeUpload;
 
@@ -913,7 +1028,7 @@ export default function NovaPage() {
     let finalPayload = montarPayload();
     const draftId = await persistDraft(finalPayload, campaignId);
 
-    if (creativeFile && creativeUpload?.fingerprint !== fileFingerprint(creativeFile)) {
+    if (creativeSource === "upload" && creativeFile && creativeUpload?.fingerprint !== fileFingerprint(creativeFile)) {
       const uploaded = await uploadCreativeFile(draftId);
       finalPayload = montarPayload({ media: uploaded });
       await persistDraft(finalPayload, draftId);
@@ -928,11 +1043,13 @@ export default function NovaPage() {
       campaignName ? `Campanha: ${campaignName}` : null,
       `Objetivo: ${objetivo}`,
       `Formato: ${formato}`,
+      `Origem do criativo: ${creativeSource === "instagram_existing_post" ? "publicacao existente do Instagram" : "arquivo enviado para anuncio"}`,
       destinationUrl ? `URL destino: ${destinationUrl}` : null,
       `CTA atual: ${cta}`,
       audiencia ? `Tamanho estimado de publico: ${audiencia} mil pessoas` : null,
       locations ? `Localizacao: ${locations}` : null,
       interests ? `Interesses e sinais: ${interests}` : null,
+      selectedInstagramPost?.caption ? `Legenda da publicacao selecionada: ${selectedInstagramPost.caption}` : null,
       primaryText ? `Texto principal atual: ${primaryText}` : null,
       headline ? `Headline atual: ${headline}` : null,
       description ? `Descricao atual: ${description}` : null,
@@ -1071,11 +1188,17 @@ export default function NovaPage() {
 
   const budgetDaily = parseNumber(orcamento) ?? 0;
   const weeklyBudget = budgetDaily * 7;
-  const uploadedOrSelectedFile = creativeUpload ?? (creativeFile ? {
-    fileName: creativeFile.name,
-    mimeType: creativeFile.type,
-    sizeBytes: creativeFile.size,
-  } : null);
+  const uploadedOrSelectedFile = creativeSource === "instagram_existing_post"
+    ? (selectedInstagramPost ? {
+        fileName: `Instagram post ${selectedInstagramPost.mediaType.toLowerCase()}`,
+        mimeType: selectedInstagramPost.mediaType,
+        sizeBytes: 0,
+      } : null)
+    : creativeUpload ?? (creativeFile ? {
+        fileName: creativeFile.name,
+        mimeType: creativeFile.type,
+        sizeBytes: creativeFile.size,
+      } : null);
 
   return (
     <div className="flex min-h-screen bg-[#060609] text-white">
@@ -1106,7 +1229,7 @@ export default function NovaPage() {
               {[
                 { label: "Setup", value: `${setupCompleteness}%` },
                 { label: "Budget 7d", value: weeklyBudget ? `R$ ${weeklyBudget.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}` : "-" },
-                { label: "Arquivo", value: uploadedOrSelectedFile ? "OK" : "-" },
+                { label: "Criativo", value: uploadedOrSelectedFile ? "OK" : "-" },
               ].map((item) => (
                 <div key={item.label} className="rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2">
                   <p className="text-[9px] uppercase tracking-wider text-white/22">{item.label}</p>
@@ -1462,7 +1585,18 @@ export default function NovaPage() {
                           </div>
                         </div>
 
-                        <div className="rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.025] p-4">
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <PillButton active={creativeSource === "upload"} onClick={() => setCreativeSource("upload")}>
+                              <span className="inline-flex items-center gap-1"><FileUp size={12} /> Arquivo novo</span>
+                            </PillButton>
+                            <PillButton active={creativeSource === "instagram_existing_post"} onClick={() => setCreativeSource("instagram_existing_post")}>
+                              <span className="inline-flex items-center gap-1"><LinkIcon size={12} /> Post do Instagram</span>
+                            </PillButton>
+                          </div>
+
+                          {creativeSource === "upload" && (
+                            <div className="rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.025] p-4">
                           <div className="mb-3 flex items-center justify-between gap-3">
                             <div>
                               <p className="text-[11px] font-semibold text-white/72">Criativo do anuncio</p>
@@ -1500,6 +1634,88 @@ export default function NovaPage() {
                           )}
                           {creativeUploadError && (
                             <p className="mt-3 text-[10px] text-red-300/80">{creativeUploadError}</p>
+                          )}
+                        </div>
+                          )}
+
+                          {creativeSource === "instagram_existing_post" && (
+                            <div className="space-y-3 rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.025] p-4">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-[11px] font-semibold text-white/72">Publicacoes existentes</p>
+                                  <p className="mt-1 text-[10px] text-white/28">Escolha um post organico ja publicado no Instagram do cliente.</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => clienteAtual?.id ? void carregarPostsInstagram(clienteAtual.id) : undefined}
+                                  disabled={instagramPostsLoading || !clienteAtual?.id}
+                                  className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] font-semibold text-white/72 transition-all hover:bg-white/[0.08] disabled:opacity-40"
+                                >
+                                  <RefreshCw size={13} className={instagramPostsLoading ? "animate-spin" : ""} />
+                                  Atualizar posts
+                                </button>
+                              </div>
+
+                              {!clienteAtual?.ig_user_id && (
+                                <p className="rounded-xl border border-amber-400/15 bg-amber-400/[0.05] px-4 py-3 text-[10px] leading-relaxed text-amber-100/78">
+                                  Esse cliente ainda nao tem IG User ID configurado. Preencha isso no cadastro do cliente para liberar a selecao de publicacoes.
+                                </p>
+                              )}
+
+                              {instagramPostsError && (
+                                <p className="rounded-xl border border-red-400/15 bg-red-400/[0.05] px-4 py-3 text-[10px] leading-relaxed text-red-100/78">
+                                  {instagramPostsError}
+                                </p>
+                              )}
+
+                              {instagramPostsLoading ? (
+                                <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-black/20 px-4 py-4 text-[11px] text-white/45">
+                                  <Loader2 size={13} className="animate-spin" />
+                                  Carregando publicacoes do Instagram...
+                                </div>
+                              ) : instagramPosts.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                  {instagramPosts.map((post) => (
+                                    <button
+                                      key={post.id}
+                                      type="button"
+                                      onClick={() => selecionarPostInstagram(post)}
+                                      className={`overflow-hidden rounded-2xl border text-left transition-all ${
+                                        selectedInstagramPost?.id === post.id
+                                          ? "border-fuchsia-400/45 bg-fuchsia-400/[0.08]"
+                                          : "border-white/[0.06] bg-black/20 hover:border-fuchsia-300/20 hover:bg-fuchsia-300/[0.04]"
+                                      }`}
+                                    >
+                                      <div className="aspect-square bg-white/[0.03]">
+                                        {post.previewUrl ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img src={post.previewUrl} alt="" className="h-full w-full object-cover" />
+                                        ) : (
+                                          <div className="flex h-full items-center justify-center text-white/18">
+                                            <ImageIcon size={28} />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="space-y-1 px-3 py-3">
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/28">
+                                          {post.mediaType.replaceAll("_", " ")}
+                                        </p>
+                                        <p className="line-clamp-3 text-[11px] leading-relaxed text-white/68">
+                                          {post.caption || "Publicacao sem legenda"}
+                                        </p>
+                                        <p className="text-[10px] text-white/28">
+                                          {post.permalink ? "Pronta para promover na Meta" : "Sem permalink detectado"}
+                                        </p>
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : clienteAtual?.ig_user_id ? (
+                                <div className="rounded-xl border border-white/[0.06] bg-black/20 px-4 py-4 text-[11px] text-white/38">
+                                  Nenhuma publicacao foi encontrada para esse Instagram conectado.
+                                </div>
+                              ) : null}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1690,7 +1906,10 @@ export default function NovaPage() {
                       </div>
                       <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-[#111116]">
                         <div className="aspect-[4/5] bg-white/[0.025]">
-                          {creativePreviewUrl && creativeFile?.type.startsWith("image/") ? (
+                          {creativeSource === "instagram_existing_post" && selectedInstagramPost?.previewUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={selectedInstagramPost.previewUrl} alt="" className="h-full w-full object-cover" />
+                          ) : creativePreviewUrl && creativeFile?.type.startsWith("image/") ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={creativePreviewUrl} alt="" className="h-full w-full object-cover" />
                           ) : creativePreviewUrl && creativeFile?.type.startsWith("video/") ? (
@@ -1698,11 +1917,14 @@ export default function NovaPage() {
                           ) : (
                             <div className="flex h-full flex-col items-center justify-center text-white/22">
                               <ImageIcon size={28} />
-                              <p className="mt-2 text-[11px]">Sem arquivo</p>
+                              <p className="mt-2 text-[11px]">{creativeSource === "instagram_existing_post" ? "Sem post selecionado" : "Sem arquivo"}</p>
                             </div>
                           )}
                         </div>
                         <div className="space-y-2 p-3">
+                          {creativeSource === "instagram_existing_post" && selectedInstagramPost?.permalink ? (
+                            <p className="text-[10px] font-semibold text-fuchsia-200/68">Usando publicacao existente do Instagram</p>
+                          ) : null}
                           <p className="line-clamp-2 text-[12px] font-bold text-white/85">{headline || "Titulo do anuncio"}</p>
                           {description ? <p className="line-clamp-2 text-[10px] text-white/34">{description}</p> : null}
                           <p className="line-clamp-4 text-[11px] leading-relaxed text-white/45">{primaryText || "Texto principal do anuncio aparece aqui."}</p>
@@ -1811,6 +2033,7 @@ export default function NovaPage() {
                       { label: "Budget", value: budgetDaily ? `R$ ${budgetDaily}/dia` : "-" },
                       { label: "Publico", value: audiencia ? `${audiencia}k | ${audienceMode}` : audienceMode },
                       { label: "Posicionamento", value: selectedPlacementLabels.slice(0, 2).join(", ") + (selectedPlacementLabels.length > 2 ? ` +${selectedPlacementLabels.length - 2}` : "") },
+                      { label: "Origem", value: creativeSource === "instagram_existing_post" ? "Post do Instagram" : "Arquivo novo" },
                       { label: "Criativo", value: uploadedOrSelectedFile ? uploadedOrSelectedFile.fileName : "Pendente" },
                       { label: "Tracking", value: metaPixelId ? "Pixel informado" : metaPageId ? "Page informada" : "Auto" },
                     ].map((item) => (
@@ -1828,7 +2051,7 @@ export default function NovaPage() {
                     <p className="text-[10px] font-bold uppercase tracking-wider text-white/28">O que sera salvo</p>
                   </div>
                   <div className="space-y-2 text-[11px] leading-relaxed text-white/38">
-                    <p>Campaign, audience, placements, copy, URL, arquivo criativo e tracking.</p>
+                    <p>Campaign, audience, placements, copy, URL, criativo ou publicacao existente e tracking.</p>
                     <p>A publicacao cria Campaign, Ad Set, Creative e Ad no Meta em pausa por padrao.</p>
                   </div>
                 </section>
