@@ -852,7 +852,12 @@ export class IntelligentBlogService {
       return this.generatePost("seo_educational", 14, null, options);
     }
 
-    const aiDraft = await generateWithGroq(type, safeData, source);
+    let aiDraft: ArticleDraft | null = null;
+    try {
+      aiDraft = await generateWithGroq(type, safeData, source);
+    } catch (error) {
+      console.error(`[blog/groq/${type}]`, error);
+    }
     const draft = aiDraft ?? fallbackArticle(type, safeData, source);
     const risk = calculateIdentificationRisk(`${draft.title}\n${draft.excerpt}\n${draft.content}`);
     const publish = canAutoPublish(risk.level, draft.content, options.forcePublish);

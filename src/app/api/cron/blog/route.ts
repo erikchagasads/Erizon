@@ -12,43 +12,49 @@ export async function POST(request: NextRequest) {
 }
 
 async function runBlogCron(request: NextRequest) {
-  const auth = await authorizeBlogMutation(request);
-  if (!auth.ok) return auth.response;
+  try {
+    const auth = await authorizeBlogMutation(request);
+    if (!auth.ok) return auth.response;
 
-  if (process.env.BLOG_AUTOMATION_ENABLED === "false") {
-    return NextResponse.json({ error: "Automação do blog desativada." }, { status: 403 });
+    if (process.env.BLOG_AUTOMATION_ENABLED === "false") {
+      return NextResponse.json({ error: "Automacao do blog desativada." }, { status: 403 });
+    }
+
+    const service = new IntelligentBlogService(createServerSupabase());
+    const now = new Date();
+    const results: Record<string, unknown> = {
+      daily: await service.generateDailyBlogDraft({
+        forcePublish: true,
+        preferMarketNews: true,
+        skipIfPublishedRecently: true,
+      }),
+    };
+
+    const weekday = new Intl.DateTimeFormat("en-US", {
+      timeZone: process.env.BLOG_TIMEZONE || "America/Sao_Paulo",
+      weekday: "short",
+    }).format(now);
+    if (weekday === "Fri") {
+      results.weekly = await service.generateWeeklyReport();
+    }
+
+    const tomorrowInBrazil = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const todayDay = new Intl.DateTimeFormat("en-CA", {
+      timeZone: process.env.BLOG_TIMEZONE || "America/Sao_Paulo",
+      day: "2-digit",
+    }).format(now);
+    const tomorrowDay = new Intl.DateTimeFormat("en-CA", {
+      timeZone: process.env.BLOG_TIMEZONE || "America/Sao_Paulo",
+      day: "2-digit",
+    }).format(tomorrowInBrazil);
+    if (Number(tomorrowDay) < Number(todayDay)) {
+      results.monthly = await service.generateMonthlyReport();
+    }
+
+    return NextResponse.json({ ok: true, results });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro interno no cron do blog.";
+    console.error("[cron/blog]", error);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
-
-  const service = new IntelligentBlogService(createServerSupabase());
-  const now = new Date();
-  const results: Record<string, unknown> = {
-    daily: await service.generateDailyBlogDraft({
-      forcePublish: true,
-      preferMarketNews: true,
-      skipIfPublishedRecently: true,
-    }),
-  };
-
-  const weekday = new Intl.DateTimeFormat("en-US", {
-    timeZone: process.env.BLOG_TIMEZONE || "America/Sao_Paulo",
-    weekday: "short",
-  }).format(now);
-  if (weekday === "Fri") {
-    results.weekly = await service.generateWeeklyReport();
-  }
-
-  const tomorrowInBrazil = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const todayDay = new Intl.DateTimeFormat("en-CA", {
-    timeZone: process.env.BLOG_TIMEZONE || "America/Sao_Paulo",
-    day: "2-digit",
-  }).format(now);
-  const tomorrowDay = new Intl.DateTimeFormat("en-CA", {
-    timeZone: process.env.BLOG_TIMEZONE || "America/Sao_Paulo",
-    day: "2-digit",
-  }).format(tomorrowInBrazil);
-  if (Number(tomorrowDay) < Number(todayDay)) {
-    results.monthly = await service.generateMonthlyReport();
-  }
-
-  return NextResponse.json({ ok: true, results });
 }
