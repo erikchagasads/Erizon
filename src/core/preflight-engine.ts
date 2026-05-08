@@ -39,6 +39,7 @@ export type PreflightInput = {
     devices?: string[];
   };
   criativo?: {
+    source?: string;
     formato: string;         // video, imagem, carrossel
     temTexto?: boolean;
     temCTA?: boolean;
@@ -47,6 +48,10 @@ export type PreflightInput = {
     headline?: string | null;
     description?: string | null;
     destinationUrl?: string | null;
+    instagramPost?: {
+      mediaId?: string | null;
+      permalink?: string | null;
+    } | null;
     media?: {
       bucket?: string;
       path?: string;
@@ -74,6 +79,12 @@ export type PreflightInput = {
 
   // Contexto adicional
   temPixel?: boolean;
+  destinationConfig?: {
+    channel?: string | null;
+    isMessaging?: boolean;
+    whatsappNumber?: string | null;
+    openingMessage?: string | null;
+  };
   publicoCustom?: boolean;   // usa Custom Audience ou Lookalike
   diasDeSemana?: number[];   // dias programados (0-6)
 };
@@ -92,6 +103,8 @@ export type PreflightResult = {
 export function runPreflight(input: PreflightInput): PreflightResult {
   const risks: PreflightRisk[] = [];
   let score = 100;
+  const destinationChannel = String(input.destinationConfig?.channel ?? "website").toLowerCase();
+  const isMessagingFlow = ["whatsapp", "messenger", "instagram_direct"].includes(destinationChannel);
 
   // ── 1. Orçamento ─────────────────────────────────────────────────────────
   if (input.orcamentoDiario < 20) {
@@ -237,7 +250,7 @@ export function runPreflight(input: PreflightInput): PreflightResult {
   }
 
   // ── 3. Pixel / Rastreamento ───────────────────────────────────────────────
-  if (input.temPixel === false) {
+  if (input.temPixel === false && !isMessagingFlow) {
     risks.push({
       id: "no_pixel",
       severity: "critical",
@@ -247,13 +260,23 @@ export function runPreflight(input: PreflightInput): PreflightResult {
       impactScore: 35,
     });
     score -= 35;
+  } else if (input.temPixel === false && isMessagingFlow) {
+    risks.push({
+      id: "pixel_optional_for_messages",
+      severity: "info",
+      label: "Pixel nao informado para fluxo de mensagem",
+      detail: "Em campanhas com destino de mensagem, o pixel pode nao ser obrigatorio para iniciar o fluxo.",
+      recommendation: "Se houver landing page de apoio ou rastreamento paralelo, ainda vale configurar o Pixel do Meta.",
+      impactScore: 0,
+    });
   }
 
   // ── 4. Criativo ───────────────────────────────────────────────────────────
   if (input.criativo) {
     const c = input.criativo;
 
-    if (!c.media || c.media.pendingUpload) {
+    const hasInstagramPost = Boolean(c.instagramPost?.mediaId);
+    if ((!c.media || c.media.pendingUpload) && !hasInstagramPost) {
       risks.push({
         id: "creative_media_missing",
         severity: "warning",
@@ -290,7 +313,10 @@ export function runPreflight(input: PreflightInput): PreflightResult {
     }
 
     const needsDestination = ["LEADS", "SALES", "TRAFFIC"].includes(String(input.objetivo ?? "").toUpperCase());
-    if (needsDestination && !c.destinationUrl && !input.urlDestino) {
+    const destinationHandledByMessageFlow =
+      isMessagingFlow ||
+      (String(input.objetivo ?? "").toUpperCase() === "ENGAGEMENT" && destinationChannel === "post_engagement");
+    if (needsDestination && !destinationHandledByMessageFlow && !c.destinationUrl && !input.urlDestino) {
       risks.push({
         id: "missing_destination_url",
         severity: "warning",

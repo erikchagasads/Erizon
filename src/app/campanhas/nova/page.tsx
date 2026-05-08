@@ -57,6 +57,14 @@ const CTAS = [
   { id: "SHOP_NOW", label: "Comprar agora" },
 ];
 
+const MESSAGE_DESTINATIONS = [
+  { id: "website", label: "Site / landing", sub: "Leva para uma URL externa" },
+  { id: "post_engagement", label: "Post / perfil", sub: "Engajamento no proprio ativo" },
+  { id: "whatsapp", label: "WhatsApp", sub: "Puxa o numero do cliente automaticamente" },
+  { id: "messenger", label: "Messenger", sub: "Conversa pela Page conectada" },
+  { id: "instagram_direct", label: "Instagram Direct", sub: "Mensagem pelo Instagram conectado" },
+] as const;
+
 const PLACEMENTS = [
   { id: "facebook_feed", label: "Facebook Feed", group: "Facebook" },
   { id: "facebook_video_feeds", label: "Video Feeds", group: "Facebook" },
@@ -141,6 +149,7 @@ type SuggestionsResponse = {
 
 type AudienceMode = "ai" | "broad" | "interests" | "lookalike" | "retargeting";
 type Gender = "all" | "female" | "male";
+type CampaignDestination = "website" | "post_engagement" | "whatsapp" | "messenger" | "instagram_direct";
 
 type CreativeUpload = {
   bucket: string;
@@ -223,6 +232,21 @@ function asInputValue(value: unknown) {
   if (value == null) return "";
   const parsed = Number(value);
   return Number.isFinite(parsed) ? String(parsed) : String(value);
+}
+
+function normalizePhoneDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function isMessagingDestination(value: string) {
+  return ["whatsapp", "messenger", "instagram_direct"].includes(value);
+}
+
+function buildWhatsAppUrl(phone: string, text: string) {
+  const digits = normalizePhoneDigits(phone);
+  if (!digits) return "";
+  const base = `https://wa.me/${digits}`;
+  return text.trim() ? `${base}?text=${encodeURIComponent(text.trim())}` : base;
 }
 
 function parseList(value: string) {
@@ -459,6 +483,7 @@ export default function NovaPage() {
 
   const [campaignName, setCampaignName] = useState("");
   const [objetivo, setObjetivo] = useState("LEADS");
+  const [campaignDestination, setCampaignDestination] = useState<CampaignDestination>("website");
   const [orcamento, setOrcamento] = useState("");
   const [metaCpl, setMetaCpl] = useState("");
   const [audiencia, setAudiencia] = useState("");
@@ -493,6 +518,8 @@ export default function NovaPage() {
   const [headline, setHeadline] = useState("");
   const [description, setDescription] = useState("");
   const [destinationUrl, setDestinationUrl] = useState("");
+  const [messagePhoneNumber, setMessagePhoneNumber] = useState("");
+  const [messageOpeningText, setMessageOpeningText] = useState("");
   const [cta, setCta] = useState("LEARN_MORE");
   const [temCTA, setTemCTA] = useState(true);
   const [duracao, setDuracao] = useState("");
@@ -502,6 +529,15 @@ export default function NovaPage() {
   const [publicoCustom, setPublicoCustom] = useState(false);
   const [metaPageId, setMetaPageId] = useState("");
   const [metaPixelId, setMetaPixelId] = useState("");
+  const supportsDestinationSelection = objetivo === "LEADS" || objetivo === "ENGAGEMENT";
+  const destinationOptions = MESSAGE_DESTINATIONS.filter((option) => (
+    objetivo === "ENGAGEMENT" ? true : option.id !== "post_engagement"
+  ));
+  const messagingCampaign = supportsDestinationSelection && isMessagingDestination(campaignDestination);
+  const resolvedDestinationUrl = campaignDestination === "whatsapp"
+    ? buildWhatsAppUrl(messagePhoneNumber, messageOpeningText)
+    : destinationUrl.trim();
+  const requiresPixelForObjective = objetivo === "SALES" || (objetivo === "LEADS" && !messagingCampaign);
 
   useEffect(() => {
     if (loadingClientes) return;
@@ -540,6 +576,30 @@ export default function NovaPage() {
   }, [clienteAtual?.facebook_pixel_id, clienteAtual?.id]);
 
   useEffect(() => {
+    if (!clienteAtual?.whatsapp) return;
+    setMessagePhoneNumber((current) => current || clienteAtual.whatsapp || "");
+  }, [clienteAtual?.whatsapp, clienteAtual?.id]);
+
+  useEffect(() => {
+    if (!clienteAtual?.whatsapp_mensagem) return;
+    setMessageOpeningText((current) => current || clienteAtual.whatsapp_mensagem || "");
+  }, [clienteAtual?.whatsapp_mensagem, clienteAtual?.id]);
+
+  useEffect(() => {
+    if (objetivo === "ENGAGEMENT" && campaignDestination === "website") {
+      setCampaignDestination("post_engagement");
+      return;
+    }
+    if (objetivo === "LEADS" && campaignDestination === "post_engagement") {
+      setCampaignDestination("website");
+      return;
+    }
+    if (!supportsDestinationSelection && campaignDestination !== "website") {
+      setCampaignDestination("website");
+    }
+  }, [campaignDestination, objetivo, supportsDestinationSelection]);
+
+  useEffect(() => {
     if (!sucesso) return;
     const timer = window.setTimeout(() => setSucesso(null), 3200);
     return () => window.clearTimeout(timer);
@@ -551,6 +611,12 @@ export default function NovaPage() {
     URL.revokeObjectURL(creativePreviewUrl);
     setCreativePreviewUrl(null);
   }, [creativeSource, creativePreviewUrl]);
+
+  useEffect(() => {
+    if (!messagingCampaign) return;
+    if (cta === "CONTACT_US") return;
+    setCta("CONTACT_US");
+  }, [cta, messagingCampaign]);
 
   async function carregarPostsInstagram(clientId: string) {
     setInstagramPostsLoading(true);
@@ -628,12 +694,15 @@ export default function NovaPage() {
       advantagePlacements || selectedPlacements.length >= 3,
       Boolean(primaryText.trim()),
       Boolean(headline.trim()),
-      Boolean(destinationUrl.trim()),
+      campaignDestination === "post_engagement"
+        ? true
+        : Boolean(resolvedDestinationUrl),
       creativeSource === "instagram_existing_post"
         ? Boolean(selectedInstagramPost?.id)
         : Boolean(creativeFile || creativeUpload),
-      temPixel,
-      !["SALES", "LEADS"].includes(objetivo) || Boolean(metaPixelId.trim()),
+      !requiresPixelForObjective || temPixel,
+      !requiresPixelForObjective || Boolean(metaPixelId.trim()),
+      !messagingCampaign || campaignDestination !== "whatsapp" || Boolean(normalizePhoneDigits(messagePhoneNumber)),
     ];
 
     return Math.round((checks.filter(Boolean).length / checks.length) * 100);
@@ -642,20 +711,24 @@ export default function NovaPage() {
     audiencia,
     audienceMode,
     campaignName,
+    campaignDestination,
     creativeSource,
     creativeFile,
     creativeUpload,
     selectedInstagramPost?.id,
-    destinationUrl,
+    resolvedDestinationUrl,
     headline,
     interests,
     locations,
+    messagePhoneNumber,
     metaPixelId,
     orcamento,
     objetivo,
     primaryText,
+    requiresPixelForObjective,
     selectedPlacements.length,
     temPixel,
+    messagingCampaign,
   ]);
 
   async function atualizarSugestoes() {
@@ -699,6 +772,7 @@ export default function NovaPage() {
     setForecast(null);
     setCampaignName(draft.campaignName || suggestion.title);
     setObjetivo(draft.objetivo || suggestion.objective || "LEADS");
+    setCampaignDestination((draft.objetivo || suggestion.objective || "LEADS") === "ENGAGEMENT" ? "post_engagement" : "website");
     setOrcamento(String(draft.orcamentoDiario || suggestion.dailyBudget || ""));
     setAudiencia(draft.audienciaSize ? String(Math.round(draft.audienciaSize / 1000)) : "");
     setFormato(draft.formato || suggestion.format || "video");
@@ -712,6 +786,8 @@ export default function NovaPage() {
     setPrimaryText(suggestion.angle || suggestion.rationale || "");
     setHeadline(suggestion.title);
     setDescription(suggestion.rationale || "");
+    setMessagePhoneNumber(suggestionClient?.whatsapp ?? "");
+    setMessageOpeningText(suggestionClient?.whatsapp_mensagem ?? "");
     setMetaPageId("");
     setMetaPixelId(suggestionClient?.facebook_pixel_id ?? "");
     setCreativeSource("upload");
@@ -735,6 +811,7 @@ export default function NovaPage() {
     const media = asRecord(creative.media);
     const instagramPost = asRecord(creative.instagramPost);
     const tracking = asRecord(payload.tracking);
+    const destinationConfig = asRecord(payload.destinationConfig);
     const restoredCreativeSource = asString(creative.source, instagramPost.mediaId ? "instagram_existing_post" : "upload") as CreativeSource;
     const clientId = asString(payload.clientId ?? draft.cliente_id);
     const matchedClient = clientId ? clientes.find((cliente) => cliente.id === clientId) ?? null : null;
@@ -749,6 +826,7 @@ export default function NovaPage() {
     setForecast(draft.forecast_snapshot ?? null);
     setCampaignName(asString(payload.campaignName ?? draft.nome_campanha));
     setObjetivo(asString(payload.objetivo ?? draft.objective, "LEADS"));
+    setCampaignDestination(asString(destinationConfig.channel, asString(payload.objetivo ?? draft.objective, "LEADS") === "ENGAGEMENT" ? "post_engagement" : "website") as CampaignDestination);
     setOrcamento(asInputValue(payload.orcamentoDiario ?? draft.orcamento));
     setMetaCpl(asInputValue(payload.metaCpl));
     setAudienceMode(asString(audience.mode, "ai") as AudienceMode);
@@ -793,6 +871,8 @@ export default function NovaPage() {
     setHeadline(asString(creative.headline));
     setDescription(asString(creative.description));
     setDestinationUrl(asString(creative.destinationUrl ?? payload.urlDestino));
+    setMessagePhoneNumber(asString(destinationConfig.whatsappNumber ?? matchedClient?.whatsapp));
+    setMessageOpeningText(asString(destinationConfig.openingMessage ?? matchedClient?.whatsapp_mensagem));
     setCta(asString(creative.cta, "LEARN_MORE"));
     setTemCTA(asBoolean(creative.temCTA, true));
     setDuracao(asInputValue(creative.duracaoSegundos));
@@ -893,6 +973,7 @@ export default function NovaPage() {
     const media = override?.media === undefined ? creativeUpload : override.media;
     const audienceSize = audiencia ? Number(audiencia) * 1000 : undefined;
     const customAudience = audienceMode === "lookalike" || audienceMode === "retargeting" || publicoCustom;
+    const normalizedWhatsapp = normalizePhoneDigits(messagePhoneNumber);
 
     return {
       clientId: clienteAtual?.id,
@@ -928,7 +1009,7 @@ export default function NovaPage() {
         primaryText: primaryText.trim() || null,
         headline: headline.trim() || null,
         description: description.trim() || null,
-        destinationUrl: destinationUrl.trim() || null,
+        destinationUrl: resolvedDestinationUrl || null,
         duracaoSegundos: formato === "video" && duracao ? parseNumber(duracao) : undefined,
         instagramPost: creativeSource === "instagram_existing_post" && selectedInstagramPost
           ? {
@@ -952,7 +1033,13 @@ export default function NovaPage() {
             : null
         ),
       },
-      urlDestino: destinationUrl.trim() || undefined,
+      destinationConfig: {
+        channel: campaignDestination,
+        isMessaging: messagingCampaign,
+        whatsappNumber: normalizedWhatsapp || null,
+        openingMessage: messageOpeningText.trim() || null,
+      },
+      urlDestino: resolvedDestinationUrl || undefined,
       velocidadeUrl: velocidade ? parseNumber(velocidade) : undefined,
       temPixel,
       metaPageId: metaPageId.trim() || undefined,
@@ -1042,9 +1129,11 @@ export default function NovaPage() {
       clienteAtual ? `Cliente: ${clienteAtual.nome_cliente ?? clienteAtual.nome}` : "Cliente: nao selecionado",
       campaignName ? `Campanha: ${campaignName}` : null,
       `Objetivo: ${objetivo}`,
+      `Destino da campanha: ${campaignDestination}`,
       `Formato: ${formato}`,
       `Origem do criativo: ${creativeSource === "instagram_existing_post" ? "publicacao existente do Instagram" : "arquivo enviado para anuncio"}`,
-      destinationUrl ? `URL destino: ${destinationUrl}` : null,
+      resolvedDestinationUrl ? `URL destino: ${resolvedDestinationUrl}` : null,
+      messagingCampaign && campaignDestination === "whatsapp" && messagePhoneNumber ? `WhatsApp destino: ${messagePhoneNumber}` : null,
       `CTA atual: ${cta}`,
       audiencia ? `Tamanho estimado de publico: ${audiencia} mil pessoas` : null,
       locations ? `Localizacao: ${locations}` : null,
@@ -1090,7 +1179,7 @@ export default function NovaPage() {
           campaignName,
           objective: objetivo,
           format: formato,
-          destinationUrl,
+          destinationUrl: resolvedDestinationUrl,
           cta,
           currentPrimaryText: primaryText,
           currentHeadline: headline,
@@ -1100,6 +1189,7 @@ export default function NovaPage() {
             audiencia ? `${audiencia}k` : null,
             locations || null,
             interests || null,
+            campaignDestination,
           ].filter(Boolean).join(" | "),
           contextNotes: buildCopyContext(),
         }),
@@ -1385,6 +1475,73 @@ export default function NovaPage() {
                         Usado no preflight e nas previsoes da Erizon. A publicacao na Meta segue custo mais baixo sem limite por compatibilidade.
                       </p>
                     </div>
+
+                    {supportsDestinationSelection && (
+                      <div className="lg:col-span-2 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
+                        <div className="mb-3">
+                          <FieldLabel>Destino da campanha</FieldLabel>
+                          <p className="mt-1 text-[10px] leading-relaxed text-white/28">
+                            Para campanhas de leads ou engajamento, voce pode escolher se a acao vai para site, post/perfil ou app de mensagem.
+                          </p>
+                        </div>
+
+                        <div className={`grid gap-2 ${objetivo === "ENGAGEMENT" ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+                          {destinationOptions.map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => setCampaignDestination(option.id as CampaignDestination)}
+                              className={`rounded-xl border px-3 py-3 text-left transition-all ${
+                                campaignDestination === option.id
+                                  ? "border-purple-500/45 bg-purple-500/[0.12]"
+                                  : "border-white/[0.07] bg-black/20 hover:bg-white/[0.05]"
+                              }`}
+                            >
+                              <p className={`text-[12px] font-bold ${campaignDestination === option.id ? "text-purple-200" : "text-white/65"}`}>
+                                {option.label}
+                              </p>
+                              <p className="mt-1 text-[10px] leading-tight text-white/30">{option.sub}</p>
+                            </button>
+                          ))}
+                        </div>
+
+                        {messagingCampaign && (
+                          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                            {campaignDestination === "whatsapp" ? (
+                              <>
+                                <div>
+                                  <FieldLabel>WhatsApp de destino</FieldLabel>
+                                  <input
+                                    value={messagePhoneNumber}
+                                    onChange={(event) => setMessagePhoneNumber(event.target.value)}
+                                    placeholder="5511999999999"
+                                    className={inputClass}
+                                  />
+                                  <p className="mt-1.5 text-[10px] leading-relaxed text-white/28">
+                                    Puxado do cliente automaticamente quando houver WhatsApp cadastrado.
+                                  </p>
+                                </div>
+                                <div>
+                                  <FieldLabel>Mensagem inicial</FieldLabel>
+                                  <textarea
+                                    value={messageOpeningText}
+                                    onChange={(event) => setMessageOpeningText(event.target.value)}
+                                    className={textareaClass}
+                                    placeholder="Oi, vim pelo anuncio e quero saber mais."
+                                  />
+                                </div>
+                              </>
+                            ) : (
+                              <div className="lg:col-span-2 rounded-xl border border-blue-400/15 bg-blue-400/[0.05] px-4 py-3 text-[11px] leading-relaxed text-blue-100/78">
+                                {campaignDestination === "messenger"
+                                  ? "A Erizon vai salvar essa campanha como destino de mensagens no Messenger usando a Page conectada."
+                                  : "A Erizon vai salvar essa campanha como destino de mensagens no Instagram Direct usando o Instagram conectado do cliente."}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </Section>
 
@@ -1881,11 +2038,28 @@ export default function NovaPage() {
                       </div>
 
                       <div>
-                        <FieldLabel>URL destino</FieldLabel>
-                        <div className="relative">
-                          <LinkIcon size={13} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/24" />
-                          <input value={destinationUrl} onChange={(event) => setDestinationUrl(event.target.value)} className={`${inputClass} pl-10`} placeholder="https://..." />
-                        </div>
+                        <FieldLabel>{messagingCampaign ? "Destino resolvido" : "URL destino"}</FieldLabel>
+                        {campaignDestination === "website" || !supportsDestinationSelection ? (
+                          <div className="relative">
+                            <LinkIcon size={13} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/24" />
+                            <input value={destinationUrl} onChange={(event) => setDestinationUrl(event.target.value)} className={`${inputClass} pl-10`} placeholder="https://..." />
+                          </div>
+                        ) : campaignDestination === "whatsapp" ? (
+                          <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.05] px-4 py-3">
+                            <p className="text-[12px] font-semibold text-emerald-100/86">{resolvedDestinationUrl || "Informe o WhatsApp para montar o destino."}</p>
+                            <p className="mt-1 text-[10px] leading-relaxed text-emerald-100/48">
+                              A URL de destino e montada automaticamente a partir do numero e da mensagem inicial.
+                            </p>
+                          </div>
+                        ) : campaignDestination === "post_engagement" ? (
+                          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3 text-[11px] leading-relaxed text-white/42">
+                            A Meta vai trabalhar o proprio post/perfil como destino principal, sem URL externa obrigatoria.
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3 text-[11px] leading-relaxed text-white/42">
+                            O destino desta campanha sera tratado como conversa em {campaignDestination === "messenger" ? "Messenger" : "Instagram Direct"}.
+                          </div>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -1929,7 +2103,7 @@ export default function NovaPage() {
                           {description ? <p className="line-clamp-2 text-[10px] text-white/34">{description}</p> : null}
                           <p className="line-clamp-4 text-[11px] leading-relaxed text-white/45">{primaryText || "Texto principal do anuncio aparece aqui."}</p>
                           <div className="flex items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
-                            <span className="truncate text-[10px] text-white/35">{destinationUrl || "URL destino"}</span>
+                            <span className="truncate text-[10px] text-white/35">{resolvedDestinationUrl || (campaignDestination === "post_engagement" ? "Post / perfil" : "Destino da campanha")}</span>
                             <span className="rounded-md bg-white/10 px-2 py-1 text-[9px] font-bold text-white/70">
                               {CTAS.find((item) => item.id === cta)?.label ?? "CTA"}
                             </span>
@@ -2032,6 +2206,7 @@ export default function NovaPage() {
                       { label: "Objetivo", value: objetivo },
                       { label: "Budget", value: budgetDaily ? `R$ ${budgetDaily}/dia` : "-" },
                       { label: "Publico", value: audiencia ? `${audiencia}k | ${audienceMode}` : audienceMode },
+                      { label: "Destino", value: destinationOptions.find((item) => item.id === campaignDestination)?.label ?? campaignDestination },
                       { label: "Posicionamento", value: selectedPlacementLabels.slice(0, 2).join(", ") + (selectedPlacementLabels.length > 2 ? ` +${selectedPlacementLabels.length - 2}` : "") },
                       { label: "Origem", value: creativeSource === "instagram_existing_post" ? "Post do Instagram" : "Arquivo novo" },
                       { label: "Criativo", value: uploadedOrSelectedFile ? uploadedOrSelectedFile.fileName : "Pendente" },
@@ -2051,7 +2226,7 @@ export default function NovaPage() {
                     <p className="text-[10px] font-bold uppercase tracking-wider text-white/28">O que sera salvo</p>
                   </div>
                   <div className="space-y-2 text-[11px] leading-relaxed text-white/38">
-                    <p>Campaign, audience, placements, copy, URL, criativo ou publicacao existente e tracking.</p>
+                    <p>Campaign, audience, placements, copy, destino, criativo ou publicacao existente e tracking.</p>
                     <p>A publicacao cria Campaign, Ad Set, Creative e Ad no Meta em pausa por padrao.</p>
                   </div>
                 </section>
