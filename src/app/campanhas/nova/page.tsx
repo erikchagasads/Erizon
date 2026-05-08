@@ -1258,6 +1258,9 @@ export default function NovaPage() {
                         placeholder="50"
                         className={inputClass}
                       />
+                      <p className="mt-1.5 text-[10px] leading-relaxed text-white/28">
+                        Usado no preflight e nas previsoes da Erizon. A publicacao na Meta segue custo mais baixo sem limite por compatibilidade.
+                      </p>
                     </div>
                   </div>
                 </Section>

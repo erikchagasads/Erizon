@@ -80,6 +80,11 @@ type TargetingResolution = {
   warnings: string[];
 };
 
+type BidStrategyResolution = {
+  bidStrategy: "LOWEST_COST_WITHOUT_CAP";
+  warnings: string[];
+};
+
 function cleanToken(raw: string): string {
   const compact = raw.trim().replace(/\s+/g, "");
   const match = compact.match(/EAA[A-Za-z0-9]+/);
@@ -133,6 +138,23 @@ function normalizeUrl(value: unknown): string {
   if (/^https?:\/\//i.test(raw)) return raw;
   if (/^wa\.me\//i.test(raw)) return `https://${raw}`;
   return `https://${raw}`;
+}
+
+function resolveBidStrategy(draft: JsonRecord): BidStrategyResolution {
+  const structure = asObject(draft.estrutura);
+  const hint = asString(draft.estrategiaBid ?? draft.bidStrategy ?? structure.estrategiaBid).toLowerCase();
+  const warnings: string[] = [];
+
+  if (hint.includes("roas")) {
+    warnings.push("ROAS alvo ainda nao esta automatizado na publicacao da Erizon. Foi aplicado custo mais baixo sem limite para compatibilidade com a Meta.");
+  } else if (hint.includes("bid cap") || hint.includes("limite de lance") || hint.includes("custo alvo") || hint.includes("cost cap")) {
+    warnings.push("A estrategia de lance sugerida foi normalizada para custo mais baixo sem limite para evitar rejeicao da Meta.");
+  }
+
+  return {
+    bidStrategy: "LOWEST_COST_WITHOUT_CAP",
+    warnings,
+  };
 }
 
 function mapMetaObjective(value: unknown) {
@@ -601,13 +623,14 @@ function buildAdSetFields(params: {
   pixelId: string | null;
   targeting: JsonRecord;
   status: "ACTIVE" | "PAUSED";
-}): { ok: true; fields: Record<string, string> } | { ok: false; error: string } {
+}): { ok: true; fields: Record<string, string>; warnings: string[] } | { ok: false; error: string } {
   let optimizationGoal = "LINK_CLICKS";
   let promotedObject: JsonRecord | null = null;
   let destinationType: string | null = null;
   const creative = asObject(params.draft.criativo);
   const destinationUrl = normalizeUrl(creative.destinationUrl ?? params.draft.urlDestino);
   const cta = asString(creative.cta, "LEARN_MORE");
+  const bidSetup = resolveBidStrategy(params.draft);
 
   if (cta === "WHATSAPP_MESSAGE") {
     return {
@@ -657,6 +680,7 @@ function buildAdSetFields(params: {
     status: params.status,
     daily_budget: cents(params.draft.orcamentoDiario ?? params.draft.orcamento),
     billing_event: "IMPRESSIONS",
+    bid_strategy: bidSetup.bidStrategy,
     optimization_goal: optimizationGoal,
     targeting: JSON.stringify(params.targeting),
     access_token: params.accessToken,
@@ -665,7 +689,7 @@ function buildAdSetFields(params: {
   if (promotedObject) fields.promoted_object = JSON.stringify(promotedObject);
   if (destinationType) fields.destination_type = destinationType;
 
-  return { ok: true, fields };
+  return { ok: true, fields, warnings: bidSetup.warnings };
 }
 
 async function downloadCreativeAsset(
@@ -1003,6 +1027,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
     await recordPublishError(db, id, auth.user.id, adSetFields.error, partial);
     return NextResponse.json({ error: adSetFields.error, metaResult: partial }, { status: 400 });
   }
+  partial.bidStrategy = adSetFields.fields.bid_strategy;
+  partial.warnings = [...new Set([...(targeting.warnings ?? []), ...(adSetFields.warnings ?? [])])];
 
   const createdAdSet = await postMetaForm(
     `${credentials.accountId}/adsets`,
