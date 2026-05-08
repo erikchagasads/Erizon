@@ -149,16 +149,45 @@ function mapMetaObjective(value: unknown) {
   return "OUTCOME_LEADS";
 }
 
+function parseMetaErrorData(value: unknown): JsonRecord {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as JsonRecord;
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parseMetaErrorData(parsed);
+    } catch {
+      return {};
+    }
+  }
+
+  return {};
+}
+
 function metaErrorMessage(data: JsonRecord, fallback = "Erro ao publicar no Meta.") {
   const error = data.error as JsonRecord | undefined;
   if (!error) return fallback;
 
   const code = Number(error.code);
   const message = String(error.message ?? fallback);
+  const userTitle = asString(error.error_user_title);
+  const userMessage = asString(error.error_user_msg);
+  const errorData = parseMetaErrorData(error.error_data);
+  const blameFieldSpecs = Array.isArray(errorData.blame_field_specs)
+    ? errorData.blame_field_specs.flatMap((group) => Array.isArray(group) ? group.map((item) => String(item)) : [])
+    : [];
+  const blameText = blameFieldSpecs.length > 0
+    ? ` Campos: ${[...new Set(blameFieldSpecs)].join(", ")}.`
+    : "";
 
   if (code === 190) return "Token do Meta expirado. Atualize a integracao antes de publicar.";
   if (code === 200 || code === 294) return "Permissao insuficiente. O token precisa de ads_management e acesso a Page/conta de anuncios.";
-  if (code === 100) return `Meta recusou o setup: ${message}`;
+  if (code === 100) {
+    const detail = [userTitle, userMessage].filter(Boolean).join(" — ");
+    return `Meta recusou o setup: ${detail || message}.${blameText}`.trim();
+  }
 
   return `Meta API (${code || "erro"}): ${message}`;
 }
@@ -575,7 +604,17 @@ function buildAdSetFields(params: {
 }): { ok: true; fields: Record<string, string> } | { ok: false; error: string } {
   let optimizationGoal = "LINK_CLICKS";
   let promotedObject: JsonRecord | null = null;
-  const destinationUrl = normalizeUrl(asObject(params.draft.criativo).destinationUrl ?? params.draft.urlDestino);
+  let destinationType: string | null = null;
+  const creative = asObject(params.draft.criativo);
+  const destinationUrl = normalizeUrl(creative.destinationUrl ?? params.draft.urlDestino);
+  const cta = asString(creative.cta, "LEARN_MORE");
+
+  if (cta === "WHATSAPP_MESSAGE") {
+    return {
+      ok: false,
+      error: "CTA de WhatsApp ainda nao esta suportado na publicacao automatica da Erizon. Use Saiba mais, Cadastre-se, Fale conosco ou Comprar agora.",
+    };
+  }
 
   if (params.metaObjective === "OUTCOME_SALES") {
     if (!params.pixelId) {
@@ -586,19 +625,30 @@ function buildAdSetFields(params: {
     }
     optimizationGoal = "OFFSITE_CONVERSIONS";
     promotedObject = { pixel_id: params.pixelId, custom_event_type: "PURCHASE" };
+    destinationType = "WEBSITE";
   } else if (params.metaObjective === "OUTCOME_LEADS") {
-    if (params.pixelId && destinationUrl) {
-      optimizationGoal = "OFFSITE_CONVERSIONS";
-      promotedObject = { pixel_id: params.pixelId, custom_event_type: "LEAD" };
-    } else {
-      optimizationGoal = "LEAD_GENERATION";
-      promotedObject = { page_id: params.pageId };
+    if (!params.pixelId) {
+      return {
+        ok: false,
+        error: "Para publicar campanhas de leads pela Erizon, informe um Pixel Meta no cliente. Fluxos de formulario instantaneo e WhatsApp ainda nao estao automatizados.",
+      };
     }
+    if (!destinationUrl) {
+      return {
+        ok: false,
+        error: "Informe a URL destino do anuncio antes de publicar a campanha de leads.",
+      };
+    }
+    optimizationGoal = "OFFSITE_CONVERSIONS";
+    promotedObject = { pixel_id: params.pixelId, custom_event_type: "LEAD" };
+    destinationType = "WEBSITE";
   } else if (params.metaObjective === "OUTCOME_AWARENESS") {
     optimizationGoal = "REACH";
   } else if (params.metaObjective === "OUTCOME_ENGAGEMENT") {
     optimizationGoal = "POST_ENGAGEMENT";
     promotedObject = { page_id: params.pageId };
+  } else if (params.metaObjective === "OUTCOME_TRAFFIC") {
+    destinationType = "WEBSITE";
   }
 
   const fields: Record<string, string> = {
@@ -613,9 +663,7 @@ function buildAdSetFields(params: {
   };
 
   if (promotedObject) fields.promoted_object = JSON.stringify(promotedObject);
-  if (["OUTCOME_LEADS", "OUTCOME_SALES", "OUTCOME_TRAFFIC"].includes(params.metaObjective)) {
-    fields.destination_type = "WEBSITE";
-  }
+  if (destinationType) fields.destination_type = destinationType;
 
   return { ok: true, fields };
 }

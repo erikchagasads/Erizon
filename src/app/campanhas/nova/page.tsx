@@ -37,7 +37,7 @@ import {
 import type { PreflightResult, PreflightRisk } from "@/core/preflight-engine";
 
 const OBJETIVOS = [
-  { id: "LEADS", label: "Leads", sub: "Formulario, WhatsApp ou landing" },
+  { id: "LEADS", label: "Leads", sub: "Landing com Pixel Meta e evento Lead" },
   { id: "SALES", label: "Vendas", sub: "Compra, checkout ou catalogo" },
   { id: "TRAFFIC", label: "Trafego", sub: "Cliques qualificados" },
   { id: "AWARENESS", label: "Reconhecimento", sub: "Alcance e lembranca" },
@@ -54,7 +54,6 @@ const CTAS = [
   { id: "LEARN_MORE", label: "Saiba mais" },
   { id: "SIGN_UP", label: "Cadastre-se" },
   { id: "CONTACT_US", label: "Fale conosco" },
-  { id: "WHATSAPP_MESSAGE", label: "Enviar mensagem" },
   { id: "SHOP_NOW", label: "Comprar agora" },
 ];
 
@@ -476,7 +475,7 @@ export default function NovaPage() {
       Boolean(destinationUrl.trim()),
       Boolean(creativeFile || creativeUpload),
       temPixel,
-      objetivo !== "SALES" || Boolean(metaPixelId.trim()),
+      !["SALES", "LEADS"].includes(objetivo) || Boolean(metaPixelId.trim()),
     ];
 
     return Math.round((checks.filter(Boolean).length / checks.length) * 100);
