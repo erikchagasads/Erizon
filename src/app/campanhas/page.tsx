@@ -9,7 +9,7 @@ import {
   Loader2, X, Eye, ArrowUpDown,
   AlertTriangle, CheckCircle, Target, Zap, Clock,
   Sparkles, ImageIcon, ThumbsUp, ThumbsDown, Lightbulb,
-  FileText, Save, PlusCircle,
+  FileText, Save, PlusCircle, Pencil, Trash2,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { fetchSafe } from "@/lib/fetchSafe";
@@ -856,6 +856,8 @@ export default function GerenciadorAnunciosPage() {
   const [erro, setErro]                 = useState("");
   const [sucesso, setSucesso]           = useState("");
   const [campanhaSelecionada, setCampanhaSelecionada] = useState<Campanha | null>(null);
+  const [draftToDelete, setDraftToDelete] = useState<Campanha | null>(null);
+  const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
 
   // Filtros
   const [busca, setBusca]               = useState("");
@@ -1022,6 +1024,48 @@ export default function GerenciadorAnunciosPage() {
       setTimeout(() => setSucesso(""), 3000);
     } catch { setErro("Erro ao sincronizar."); }
     setSyncingId(null);
+  }
+
+  function editarRascunho(campanha: Campanha) {
+    window.location.href = `/campanhas/nova?draft=${campanha.id}`;
+  }
+
+  async function excluirRascunho() {
+    if (!draftToDelete) return;
+
+    setDeletingDraftId(draftToDelete.id);
+    setErro("");
+
+    try {
+      const response = await fetch(`/api/campaigns/drafts?id=${draftToDelete.id}`, {
+        method: "DELETE",
+      });
+      const json = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null;
+
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.error || "Nao foi possivel excluir o rascunho.");
+      }
+
+      setCampanhas((atual) => atual.filter((campanha) => campanha.id !== draftToDelete.id));
+      setSelecionados((atual) => {
+        const proximo = new Set(atual);
+        proximo.delete(draftToDelete.id);
+        return proximo;
+      });
+
+      if (campanhaSelecionada?.id === draftToDelete.id) {
+        setCampanhaSelecionada(null);
+      }
+
+      setDraftToDelete(null);
+      setSucesso("Rascunho excluido.");
+      setTimeout(() => setSucesso(""), 3000);
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Erro ao excluir rascunho.");
+      setTimeout(() => setErro(""), 4000);
+    } finally {
+      setDeletingDraftId(null);
+    }
   }
 
   const periodos: { label: string; value: Periodo }[] = [
@@ -1208,7 +1252,91 @@ export default function GerenciadorAnunciosPage() {
                   const trClass = `group cursor-pointer transition-colors ${sel ? "bg-blue-600/[0.06]" : critico && ativo ? "bg-red-500/[0.025] hover:bg-red-500/[0.04]" : rascunho ? "bg-amber-500/[0.018] hover:bg-amber-500/[0.035]" : "hover:bg-white/[0.02]"}`;
                   const barClass = `w-[3px] h-full min-h-[44px] ${rascunho ? "bg-amber-400" : ativo && critico ? "bg-red-500" : ativo ? "bg-emerald-500" : "bg-transparent"}`;
                   return (
-                    <tr key={camp.id} onClick={() => toggleSel(camp.id)} className={trClass}><td className="px-4 py-3" onClick={e => e.stopPropagation()}><input type="checkbox" checked={sel} onChange={() => toggleSel(camp.id)} className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer"/></td><td className="w-[3px] p-0"><div className={barClass}/></td><td className="px-4 py-3 max-w-[260px]"><div className="flex flex-col gap-0.5"><span className="text-[12px] font-semibold text-white/85 leading-snug truncate" title={camp.nome_campanha}>{nomeCurto(camp.nome_campanha, 40)}</span>{camp.dias_ativo != null && camp.dias_ativo > 0 && (<span className="text-[10px] text-white/20 flex items-center gap-1"><Clock size={9}/>{camp.dias_ativo}d ativo</span>)}</div></td><td className="px-4 py-3">{camp.cliente_nome ? (<span className="text-[11px] text-white/40 font-medium truncate block max-w-[130px]" title={camp.cliente_nome}>{nomeCurto(camp.cliente_nome, 18)}</span>) : (<span className="text-[11px] text-white/15">—</span>)}</td><td className="px-4 py-3"><StatusBadge status={camp.status}/></td><td className="px-4 py-3 text-center"><ScoreDot score={score}/></td><td className="px-4 py-3"><MetricCell value={fmtBRL(camp.gasto_total)} color="text-white/80"/></td><td className="px-4 py-3"><MetricCell value={camp.contatos > 0 ? fmtNum(camp.contatos) : "—"} color={camp.contatos > 0 ? "text-sky-400" : "text-white/20"}/></td><td className="px-4 py-3"><MetricCell value={cpl > 0 ? fmtBRL2(cpl) : "—"} color={cpl === 0 ? "text-white/20" : cpl < 30 ? "text-emerald-400" : cpl < 80 ? "text-white/70" : "text-red-400"}/></td><td className="px-4 py-3"><MetricCell value={roas > 0 ? fmtX(roas) : "—"} color={roas === 0 ? "text-white/20" : roas >= 3 ? "text-emerald-400" : roas >= 2 ? "text-white/70" : "text-amber-400"}/></td><td className="px-4 py-3"><MetricCell value={camp.ctr != null && camp.ctr > 0 ? fmtPct(camp.ctr) : "—"} color={!camp.ctr || camp.ctr === 0 ? "text-white/20" : camp.ctr > 2 ? "text-emerald-400" : "text-white/60"}/></td><td className="px-4 py-3"><MetricCell value={camp.cpm != null && camp.cpm > 0 ? fmtBRL2(camp.cpm) : "—"} color={!camp.cpm || camp.cpm === 0 ? "text-white/20" : "text-white/60"}/></td><td className="px-4 py-3" onClick={e => e.stopPropagation()}><div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { window.location.href = `/dados?cliente=${camp.cliente_id}`; }} title="Análise completa" className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.04] border border-white/[0.07] hover:bg-blue-500/10 hover:border-blue-500/25 transition-all"><BarChart3 size={11} className="text-white/30 hover:text-blue-400"/></button><button title="Ver análise rápida" onClick={() => setCampanhaSelecionada(camp)} className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.04] border border-white/[0.07] hover:bg-purple-500/10 hover:border-purple-500/25 transition-all"><Eye size={11} className="text-white/30 hover:text-purple-400"/></button></div></td></tr>
+                    <tr key={camp.id} onClick={() => toggleSel(camp.id)} className={trClass}>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={sel} onChange={() => toggleSel(camp.id)} className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer"/>
+                      </td>
+                      <td className="w-[3px] p-0"><div className={barClass}/></td>
+                      <td className="px-4 py-3 max-w-[260px]">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[12px] font-semibold text-white/85 leading-snug truncate" title={camp.nome_campanha}>
+                            {nomeCurto(camp.nome_campanha, 40)}
+                          </span>
+                          {camp.dias_ativo != null && camp.dias_ativo > 0 && (
+                            <span className="text-[10px] text-white/20 flex items-center gap-1">
+                              <Clock size={9}/>
+                              {camp.dias_ativo}d ativo
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {camp.cliente_nome ? (
+                          <span className="text-[11px] text-white/40 font-medium truncate block max-w-[130px]" title={camp.cliente_nome}>
+                            {nomeCurto(camp.cliente_nome, 18)}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-white/15">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3"><StatusBadge status={camp.status}/></td>
+                      <td className="px-4 py-3 text-center"><ScoreDot score={score}/></td>
+                      <td className="px-4 py-3"><MetricCell value={fmtBRL(camp.gasto_total)} color="text-white/80"/></td>
+                      <td className="px-4 py-3">
+                        <MetricCell value={camp.contatos > 0 ? fmtNum(camp.contatos) : "—"} color={camp.contatos > 0 ? "text-sky-400" : "text-white/20"}/>
+                      </td>
+                      <td className="px-4 py-3">
+                        <MetricCell value={cpl > 0 ? fmtBRL2(cpl) : "—"} color={cpl === 0 ? "text-white/20" : cpl < 30 ? "text-emerald-400" : cpl < 80 ? "text-white/70" : "text-red-400"}/>
+                      </td>
+                      <td className="px-4 py-3">
+                        <MetricCell value={roas > 0 ? fmtX(roas) : "—"} color={roas === 0 ? "text-white/20" : roas >= 3 ? "text-emerald-400" : roas >= 2 ? "text-white/70" : "text-amber-400"}/>
+                      </td>
+                      <td className="px-4 py-3">
+                        <MetricCell value={camp.ctr != null && camp.ctr > 0 ? fmtPct(camp.ctr) : "—"} color={!camp.ctr || camp.ctr === 0 ? "text-white/20" : camp.ctr > 2 ? "text-emerald-400" : "text-white/60"}/>
+                      </td>
+                      <td className="px-4 py-3">
+                        <MetricCell value={camp.cpm != null && camp.cpm > 0 ? fmtBRL2(camp.cpm) : "—"} color={!camp.cpm || camp.cpm === 0 ? "text-white/20" : "text-white/60"}/>
+                      </td>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {rascunho ? (
+                            <>
+                              <button
+                                onClick={() => editarRascunho(camp)}
+                                title="Editar rascunho"
+                                className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.04] border border-white/[0.07] hover:bg-emerald-500/10 hover:border-emerald-500/25 transition-all"
+                              >
+                                <Pencil size={11} className="text-white/30 hover:text-emerald-400"/>
+                              </button>
+                              <button
+                                onClick={() => setDraftToDelete(camp)}
+                                title="Excluir rascunho"
+                                className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.04] border border-white/[0.07] hover:bg-red-500/10 hover:border-red-500/25 transition-all"
+                              >
+                                <Trash2 size={11} className="text-white/30 hover:text-red-400"/>
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => { window.location.href = `/dados?cliente=${camp.cliente_id}`; }}
+                                title="Análise completa"
+                                className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.04] border border-white/[0.07] hover:bg-blue-500/10 hover:border-blue-500/25 transition-all"
+                              >
+                                <BarChart3 size={11} className="text-white/30 hover:text-blue-400"/>
+                              </button>
+                              <button
+                                title="Ver análise rápida"
+                                onClick={() => setCampanhaSelecionada(camp)}
+                                className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/[0.04] border border-white/[0.07] hover:bg-purple-500/10 hover:border-purple-500/25 transition-all"
+                              >
+                                <Eye size={11} className="text-white/30 hover:text-purple-400"/>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -1235,6 +1363,50 @@ export default function GerenciadorAnunciosPage() {
             analise={gerarAnalise(campanhaSelecionada)}
             onFechar={() => setCampanhaSelecionada(null)}
           />
+        )}
+
+        {draftToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div className="w-full max-w-md rounded-[28px] border border-white/[0.08] bg-[#101014] shadow-[0_30px_100px_rgba(0,0,0,0.45)]">
+              <div className="px-6 pt-6 pb-4 border-b border-white/[0.06]">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                    <Trash2 size={16} className="text-red-400"/>
+                  </div>
+                  <div>
+                    <h3 className="text-[16px] font-semibold text-white">Excluir rascunho</h3>
+                    <p className="text-[12px] text-white/45">
+                      Esse rascunho vai sair da lista e nao podera ser recuperado.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-5">
+                <p className="text-[13px] text-white/70 leading-relaxed">
+                  Confirmar exclusao de <span className="font-semibold text-white">{nomeCurto(draftToDelete.nome_campanha, 52)}</span>?
+                </p>
+              </div>
+
+              <div className="px-6 pb-6 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setDraftToDelete(null)}
+                  disabled={deletingDraftId === draftToDelete.id}
+                  className="px-4 py-2 rounded-xl border border-white/[0.08] text-[12px] text-white/55 hover:text-white transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={excluirRascunho}
+                  disabled={deletingDraftId === draftToDelete.id}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-[12px] font-semibold text-white transition-all disabled:opacity-60"
+                >
+                  {deletingDraftId === draftToDelete.id ? <Loader2 size={13} className="animate-spin"/> : <Trash2 size={13}/>}
+                  Excluir rascunho
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Toasts */}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCliente } from "@/app/hooks/useCliente";
 import Sidebar from "@/components/Sidebar";
 import { getSupabase } from "@/lib/supabase";
@@ -78,9 +78,21 @@ type ForecastPayload = {
   recommendation?: string | null;
 };
 
+type DraftRecord = {
+  id: string;
+  cliente_id?: string | null;
+  nome_campanha?: string | null;
+  objective?: string | null;
+  orcamento?: number | null;
+  draft_payload?: Record<string, unknown> | null;
+  preflight_result?: PreflightResult | null;
+  forecast_snapshot?: ForecastPayload | null;
+};
+
 type DraftResponse = {
   ok?: boolean;
-  draft?: { id: string };
+  draft?: DraftRecord;
+  drafts?: DraftRecord[];
   error?: string;
 };
 
@@ -144,6 +156,21 @@ type PayloadOverride = {
   media?: CreativeUpload | null;
 };
 
+type CopySuggestionPackage = {
+  angle: string;
+  rationale: string;
+  primaryTexts: string[];
+  headlines: string[];
+  descriptions: string[];
+  ctaSuggestions: string[];
+};
+
+type CopyAssistResponse = {
+  ok?: boolean;
+  package?: CopySuggestionPackage;
+  error?: string;
+};
+
 const inputClass =
   "w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-[13px] text-white placeholder-white/20 outline-none transition-colors focus:border-purple-500/45";
 
@@ -153,6 +180,31 @@ const textareaClass =
 function parseNumber(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asString(value: unknown, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function asBoolean(value: unknown, fallback = false) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function asStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((item) => String(item ?? "").trim()).filter(Boolean)
+    : [];
+}
+
+function asInputValue(value: unknown) {
+  if (value == null) return "";
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? String(parsed) : String(value);
 }
 
 function parseList(value: string) {
@@ -287,6 +339,33 @@ function Toggle({
   );
 }
 
+function CopyChoiceButton({
+  label,
+  value,
+  active,
+  onApply,
+}: {
+  label: string;
+  value: string;
+  active: boolean;
+  onApply: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onApply}
+      className={`rounded-xl border px-3 py-2 text-left transition-all ${
+        active
+          ? "border-purple-500/45 bg-purple-500/[0.14]"
+          : "border-white/[0.06] bg-white/[0.025] hover:border-purple-400/25 hover:bg-purple-400/[0.05]"
+      }`}
+    >
+      <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.16em] text-white/28">{label}</p>
+      <p className="text-[12px] leading-relaxed text-white/72">{value}</p>
+    </button>
+  );
+}
+
 function SeverityIcon({ s }: { s: PreflightRisk["severity"] }) {
   if (s === "critical") return <XCircle size={13} className="mt-0.5 shrink-0 text-red-400" />;
   if (s === "warning") return <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400" />;
@@ -335,20 +414,30 @@ function ScoreGauge({ score, classification }: { score: number; classification: 
 
 export default function NovaPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { clientes, clienteAtual, loading: loadingClientes, selecionarCliente } = useCliente();
+  const draftQueryId = searchParams.get("draft");
 
   const [step, setStep] = useState<"form" | "result">("form");
   const [loading, setLoading] = useState(false);
   const [publicando, setPublicando] = useState(false);
   const [uploadingCreative, setUploadingCreative] = useState(false);
+  const [loadingDraft, setLoadingDraft] = useState(false);
+  const [savingDraftOnly, setSavingDraftOnly] = useState(false);
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [forecast, setForecast] = useState<ForecastPayload | null>(null);
   const [expandedRisk, setExpandedRisk] = useState<string | null>(null);
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<CampaignSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
+  const [copyPackage, setCopyPackage] = useState<CopySuggestionPackage | null>(null);
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [copyGeneratingField, setCopyGeneratingField] = useState<"all" | "primaryText" | "headline" | "description" | null>(null);
+  const [loadedDraftId, setLoadedDraftId] = useState<string | null>(null);
 
   const [campaignName, setCampaignName] = useState("");
   const [objetivo, setObjetivo] = useState("LEADS");
@@ -423,8 +512,15 @@ export default function NovaPage() {
   }, [creativePreviewUrl]);
 
   useEffect(() => {
-    setMetaPixelId(clienteAtual?.facebook_pixel_id ?? "");
+    if (!clienteAtual?.facebook_pixel_id) return;
+    setMetaPixelId((current) => current || clienteAtual.facebook_pixel_id || "");
   }, [clienteAtual?.facebook_pixel_id, clienteAtual?.id]);
+
+  useEffect(() => {
+    if (!sucesso) return;
+    const timer = window.setTimeout(() => setSucesso(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [sucesso]);
 
   const audiencePresets = useMemo(() => {
     const baseAudience = suggestions[0]?.audience || (clienteAtual ? `${clienteAtual.nome_cliente ?? clienteAtual.nome}` : "Publico amplo qualificado");
@@ -564,6 +660,119 @@ export default function NovaPage() {
     setErro(null);
   }
 
+  function hydrateDraft(draft: DraftRecord) {
+    const payload = asRecord(draft.draft_payload);
+    const audience = asRecord(payload.audience);
+    const placements = asRecord(payload.placements);
+    const creative = asRecord(payload.criativo);
+    const media = asRecord(creative.media);
+    const tracking = asRecord(payload.tracking);
+    const clientId = asString(payload.clientId ?? draft.cliente_id);
+    const matchedClient = clientId ? clientes.find((cliente) => cliente.id === clientId) ?? null : null;
+
+    if (matchedClient) {
+      selecionarCliente(matchedClient);
+    }
+
+    setCampaignId(draft.id);
+    setStep("form");
+    setResult(draft.preflight_result ?? null);
+    setForecast(draft.forecast_snapshot ?? null);
+    setCampaignName(asString(payload.campaignName ?? draft.nome_campanha));
+    setObjetivo(asString(payload.objetivo ?? draft.objective, "LEADS"));
+    setOrcamento(asInputValue(payload.orcamentoDiario ?? draft.orcamento));
+    setMetaCpl(asInputValue(payload.metaCpl));
+    setAudienceMode(asString(audience.mode, "ai") as AudienceMode);
+    setLocations(asStringArray(audience.locations).join(", ") || "Brasil");
+    setAgeMin(asInputValue(audience.ageMin || 24));
+    setAgeMax(asInputValue(audience.ageMax || 55));
+    setGender(asString(audience.gender, "all") as Gender);
+    setInterests(asStringArray(audience.interests).join("\n"));
+    setExclusions(asStringArray(audience.exclusions).join("\n"));
+    setCustomAudienceName(asString(audience.customAudienceName));
+    setLookalikeSource(asString(audience.lookalikeSource));
+    setRetargetingDays(asInputValue(audience.retargetingDays || 30));
+    setAudiencia(
+      payload.audienciaSize != null && Number.isFinite(Number(payload.audienciaSize))
+        ? String(Math.round(Number(payload.audienciaSize) / 1000))
+        : ""
+    );
+    setAdvantagePlacements(placements.advantagePlus !== false);
+    setSelectedPlacements(
+      placements.advantagePlus !== false
+        ? DEFAULT_PLACEMENTS
+        : asStringArray(placements.selected).filter((item) => item !== "advantage_plus")
+    );
+    setSelectedPlatforms(asStringArray(placements.platforms).length > 0 ? asStringArray(placements.platforms) : ["facebook", "instagram"]);
+    setSelectedDevices(asStringArray(placements.devices).length > 0 ? asStringArray(placements.devices) : ["mobile", "desktop"]);
+    setFormato(asString(creative.formato, "video"));
+    setPrimaryText(asString(creative.primaryText));
+    setHeadline(asString(creative.headline));
+    setDescription(asString(creative.description));
+    setDestinationUrl(asString(creative.destinationUrl ?? payload.urlDestino));
+    setCta(asString(creative.cta, "LEARN_MORE"));
+    setTemCTA(asBoolean(creative.temCTA, true));
+    setDuracao(asInputValue(creative.duracaoSegundos));
+    setVelocidade(asInputValue(payload.velocidadeUrl));
+    setTemPixel(asBoolean(payload.temPixel, true));
+    setPublicoCustom(asBoolean(payload.publicoCustom, false));
+    setMetaPageId(asString(payload.metaPageId ?? tracking.metaPageId));
+    setMetaPixelId(asString(payload.metaPixelId ?? tracking.metaPixelId ?? matchedClient?.facebook_pixel_id));
+    setCreativeFile(null);
+    setCreativeUpload(
+      media.bucket && media.path
+        ? {
+            bucket: asString(media.bucket),
+            path: asString(media.path),
+            fileName: asString(media.fileName, "criativo"),
+            mimeType: asString(media.mimeType, "application/octet-stream"),
+            sizeBytes: Number(media.sizeBytes ?? 0),
+            fingerprint: asString(media.fingerprint, `${asString(media.fileName)}:${asString(media.path)}`),
+            uploadedAt: asString(media.uploadedAt, new Date().toISOString()),
+          }
+        : null
+    );
+    if (creativePreviewUrl) {
+      URL.revokeObjectURL(creativePreviewUrl);
+      setCreativePreviewUrl(null);
+    }
+    setCopyPackage(null);
+    setCopyError(null);
+    setErro(null);
+    setSucesso("Rascunho carregado para edicao.");
+  }
+
+  useEffect(() => {
+    if (loadingClientes || !draftQueryId || loadedDraftId === draftQueryId) return;
+
+    let cancelled = false;
+    async function loadDraft() {
+      setLoadingDraft(true);
+      try {
+        const res = await fetch(`/api/campaigns/drafts?id=${encodeURIComponent(draftQueryId)}`);
+        const data = (await res.json()) as DraftResponse;
+        if (!res.ok || !data.draft) {
+          throw new Error(data.error ?? "Nao foi possivel carregar o rascunho.");
+        }
+        if (!cancelled) {
+          hydrateDraft(data.draft);
+          setLoadedDraftId(draftQueryId);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErro(error instanceof Error ? error.message : "Erro ao carregar rascunho.");
+        }
+      } finally {
+        if (!cancelled) setLoadingDraft(false);
+      }
+    }
+
+    void loadDraft();
+    return () => {
+      cancelled = true;
+    };
+  }, [draftQueryId, loadedDraftId, loadingClientes, clientes]);
+
   function handleCreativeFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     setCreativeFile(file);
@@ -701,16 +910,111 @@ export default function NovaPage() {
   }
 
   async function salvarRascunho() {
-    const firstPayload = montarPayload();
-    const draftId = await persistDraft(firstPayload, campaignId);
+    let finalPayload = montarPayload();
+    const draftId = await persistDraft(finalPayload, campaignId);
 
     if (creativeFile && creativeUpload?.fingerprint !== fileFingerprint(creativeFile)) {
       const uploaded = await uploadCreativeFile(draftId);
-      const enrichedPayload = montarPayload({ media: uploaded });
-      await persistDraft(enrichedPayload, draftId);
+      finalPayload = montarPayload({ media: uploaded });
+      await persistDraft(finalPayload, draftId);
     }
 
-    return draftId;
+    return { draftId, payload: finalPayload };
+  }
+
+  function buildCopyContext() {
+    return [
+      clienteAtual ? `Cliente: ${clienteAtual.nome_cliente ?? clienteAtual.nome}` : "Cliente: nao selecionado",
+      campaignName ? `Campanha: ${campaignName}` : null,
+      `Objetivo: ${objetivo}`,
+      `Formato: ${formato}`,
+      destinationUrl ? `URL destino: ${destinationUrl}` : null,
+      `CTA atual: ${cta}`,
+      audiencia ? `Tamanho estimado de publico: ${audiencia} mil pessoas` : null,
+      locations ? `Localizacao: ${locations}` : null,
+      interests ? `Interesses e sinais: ${interests}` : null,
+      primaryText ? `Texto principal atual: ${primaryText}` : null,
+      headline ? `Headline atual: ${headline}` : null,
+      description ? `Descricao atual: ${description}` : null,
+      "Crie mensagens com cara de Meta Ads Brasil: claras, diretas, específicas e com persuasao sem promessas absolutas.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function applyCopyPackage(pkg: CopySuggestionPackage, field: "all" | "primaryText" | "headline" | "description") {
+    setCopyPackage(pkg);
+    if (field === "all" || field === "primaryText") {
+      if (pkg.primaryTexts[0]) setPrimaryText(pkg.primaryTexts[0]);
+    }
+    if (field === "all" || field === "headline") {
+      if (pkg.headlines[0]) setHeadline(pkg.headlines[0]);
+    }
+    if (field === "all" || field === "description") {
+      if (pkg.descriptions[0]) setDescription(pkg.descriptions[0]);
+    }
+    if (field === "all" && pkg.ctaSuggestions[0] && CTAS.some((item) => item.id === pkg.ctaSuggestions[0])) {
+      setCta(pkg.ctaSuggestions[0]);
+    }
+  }
+
+  async function gerarPacoteDeCopy(field: "all" | "primaryText" | "headline" | "description" = "all") {
+    setCopyLoading(true);
+    setCopyError(null);
+    setCopyGeneratingField(field);
+
+    try {
+      const res = await fetch("/api/campaigns/copy-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: clienteAtual?.id ?? null,
+          clientName: clienteAtual?.nome_cliente ?? clienteAtual?.nome ?? null,
+          campaignName,
+          objective: objetivo,
+          format: formato,
+          destinationUrl,
+          cta,
+          currentPrimaryText: primaryText,
+          currentHeadline: headline,
+          currentDescription: description,
+          audienceSummary: [
+            audienceMode,
+            audiencia ? `${audiencia}k` : null,
+            locations || null,
+            interests || null,
+          ].filter(Boolean).join(" | "),
+          contextNotes: buildCopyContext(),
+        }),
+      });
+      const data = (await res.json()) as CopyAssistResponse;
+      if (!res.ok || !data.ok || !data.package) {
+        throw new Error(data.error ?? "Nao foi possivel gerar a copy.");
+      }
+
+      applyCopyPackage(data.package, field);
+      setSucesso(field === "all" ? "Pacote de copy gerado e aplicado." : "Sugestoes de copy geradas.");
+    } catch (error) {
+      setCopyError(error instanceof Error ? error.message : "Erro ao gerar copy.");
+    } finally {
+      setCopyLoading(false);
+      setCopyGeneratingField(null);
+    }
+  }
+
+  async function salvarSomenteRascunho() {
+    setSavingDraftOnly(true);
+    setErro(null);
+
+    try {
+      const { draftId } = await salvarRascunho();
+      setCampaignId(draftId);
+      setSucesso("Rascunho salvo com sucesso.");
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Erro ao salvar rascunho.");
+    } finally {
+      setSavingDraftOnly(false);
+    }
   }
 
   async function analisar() {
@@ -719,9 +1023,9 @@ export default function NovaPage() {
     setErro(null);
 
     try {
-      const draftId = await salvarRascunho();
+      const { draftId, payload } = await salvarRascunho();
       const body = {
-        ...montarPayload(),
+        ...payload,
         campaignId: draftId,
       };
 
@@ -791,10 +1095,10 @@ export default function NovaPage() {
             <div>
               <div className="mb-1 flex items-center gap-3">
                 <Gauge size={17} className="text-purple-400" />
-                <h1 className="text-[24px] font-bold">Nova campanha Meta</h1>
+                <h1 className="text-[24px] font-bold">{campaignId ? "Editar rascunho Meta" : "Nova campanha Meta"}</h1>
               </div>
               <p className="max-w-2xl text-[12px] leading-relaxed text-white/32">
-                Monte campanha, publico, posicionamentos e criativo antes do preflight.
+                Monte campanha, publico, posicionamentos e anuncio com a mesma logica do gerenciador, com copy assistida pela IA antes do preflight.
               </p>
             </div>
 
@@ -812,10 +1116,17 @@ export default function NovaPage() {
             </div>
           </div>
 
-          {step === "form" && (
-            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-              <div className="space-y-5">
-                <Section title="Cliente e sugestoes" icon={<Users size={14} className="text-purple-400" />}>
+            {step === "form" && (
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="space-y-5">
+                  {loadingDraft && (
+                    <div className="flex items-center gap-2 rounded-2xl border border-blue-400/18 bg-blue-400/[0.06] px-4 py-3 text-[12px] text-blue-100/85">
+                      <Loader2 size={14} className="animate-spin" />
+                      Carregando rascunho para edicao...
+                    </div>
+                  )}
+
+                  <Section title="Cliente e sugestoes" icon={<Users size={14} className="text-purple-400" />}>
                   <div className="space-y-4">
                     {loadingClientes ? (
                       <div className="flex items-center gap-2 text-[12px] text-white/35">
@@ -1116,74 +1427,238 @@ export default function NovaPage() {
                   </div>
                 </Section>
 
-                <Section title="Criativo" icon={<ImageIcon size={14} className="text-fuchsia-300" />}>
-                  <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <Section
+                  title="Anuncio"
+                  icon={<ImageIcon size={14} className="text-fuchsia-300" />}
+                  right={(
+                    <button
+                      type="button"
+                      onClick={() => void gerarPacoteDeCopy("all")}
+                      disabled={copyLoading}
+                      className="inline-flex items-center gap-2 rounded-xl border border-fuchsia-400/20 bg-fuchsia-400/[0.08] px-3 py-2 text-[11px] font-semibold text-fuchsia-100 transition-all hover:bg-fuchsia-400/[0.14] disabled:opacity-45"
+                    >
+                      {copyLoading && copyGeneratingField === "all" ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                      Ativar time de copy
+                    </button>
+                  )}
+                >
+                  <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
                     <div className="space-y-4">
-                      <div>
-                        <FieldLabel>Formato</FieldLabel>
-                        <div className="grid grid-cols-3 gap-2">
-                          {FORMATOS.map((item) => {
-                            const Icon = item.icon;
-                            return (
-                              <PillButton key={item.id} active={formato === item.id} onClick={() => setFormato(item.id)}>
-                                <span className="inline-flex items-center gap-1"><Icon size={12} /> {item.label}</span>
-                              </PillButton>
-                            );
-                          })}
+                      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[160px_minmax(0,1fr)]">
+                        <div>
+                          <FieldLabel>Formato</FieldLabel>
+                          <div className="grid grid-cols-3 gap-2 xl:grid-cols-1">
+                            {FORMATOS.map((item) => {
+                              const Icon = item.icon;
+                              return (
+                                <PillButton key={item.id} active={formato === item.id} onClick={() => setFormato(item.id)}>
+                                  <span className="inline-flex items-center gap-1"><Icon size={12} /> {item.label}</span>
+                                </PillButton>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.025] p-4">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-[11px] font-semibold text-white/72">Criativo do anuncio</p>
+                              <p className="mt-1 text-[10px] text-white/28">Suba a imagem ou video que vai para o pacote Meta.</p>
+                            </div>
+                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] font-semibold text-white/72 transition-all hover:bg-white/[0.08]">
+                              <FileUp size={13} />
+                              Selecionar arquivo
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
+                                onChange={handleCreativeFile}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+
+                          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3">
+                            <p className="truncate text-[12px] font-semibold text-white/74">
+                              {creativeFile?.name || creativeUpload?.fileName || "Nenhum arquivo selecionado"}
+                            </p>
+                            <p className="mt-1 text-[10px] text-white/28">
+                              {creativeFile
+                                ? `${creativeFile.type || "arquivo"} · ${fmtFileSize(creativeFile.size)}`
+                                : creativeUpload
+                                  ? `${creativeUpload.mimeType} · ${fmtFileSize(creativeUpload.sizeBytes)}`
+                                  : "JPG, PNG, WEBP, MP4 ou MOV"}
+                            </p>
+                          </div>
+
+                          {creativeUpload && (
+                            <p className="mt-3 flex items-center gap-1 text-[10px] font-semibold text-emerald-300/80">
+                              <CheckCircle2 size={12} /> Criativo salvo na Erizon
+                            </p>
+                          )}
+                          {creativeUploadError && (
+                            <p className="mt-3 text-[10px] text-red-300/80">{creativeUploadError}</p>
+                          )}
                         </div>
                       </div>
 
-                      <div>
-                        <FieldLabel>Arquivo do criativo</FieldLabel>
-                        <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.025] px-4 py-7 text-center transition-all hover:border-purple-400/30 hover:bg-purple-400/[0.035]">
-                          <FileUp size={22} className="mb-2 text-white/35" />
-                          <span className="text-[12px] font-semibold text-white/65">
-                            {creativeFile ? creativeFile.name : "Selecionar imagem ou video"}
-                          </span>
-                          <span className="mt-1 text-[10px] text-white/28">JPG, PNG, WEBP, MP4 ou MOV</span>
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
-                            onChange={handleCreativeFile}
-                            className="hidden"
-                          />
-                        </label>
-                        {creativeFile && (
-                          <p className="mt-2 text-[10px] text-white/30">
-                            {creativeFile.type || "arquivo"} | {fmtFileSize(creativeFile.size)}
-                          </p>
+                      <div className="rounded-2xl border border-fuchsia-400/16 bg-fuchsia-400/[0.05] p-4">
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold text-fuchsia-100/88">Copiloto de copy</p>
+                            <p className="mt-1 text-[10px] leading-relaxed text-fuchsia-100/48">
+                              Head de copy, estrategista de performance e contexto do cliente trabalhando juntos para gerar variações mais persuasivas.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void gerarPacoteDeCopy("all")}
+                            disabled={copyLoading}
+                            className="inline-flex items-center gap-2 rounded-xl border border-fuchsia-300/18 bg-black/20 px-3 py-2 text-[11px] font-semibold text-fuchsia-100/80 transition-all hover:bg-fuchsia-400/[0.08] disabled:opacity-40"
+                          >
+                            {copyLoading && copyGeneratingField === "all" ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                            Gerar pacote completo
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
+                            <p className="text-[9px] uppercase tracking-[0.14em] text-white/25">Cliente</p>
+                            <p className="mt-1 text-[12px] font-semibold text-white/72">{clienteAtual?.nome_cliente ?? clienteAtual?.nome ?? "Sem cliente selecionado"}</p>
+                          </div>
+                          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
+                            <p className="text-[9px] uppercase tracking-[0.14em] text-white/25">Objetivo</p>
+                            <p className="mt-1 text-[12px] font-semibold text-white/72">{objetivo}</p>
+                          </div>
+                          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
+                            <p className="text-[9px] uppercase tracking-[0.14em] text-white/25">Publico</p>
+                            <p className="mt-1 text-[12px] font-semibold text-white/72">{audiencia ? `${audiencia}k` : audienceMode}</p>
+                          </div>
+                        </div>
+
+                        {copyError && (
+                          <p className="mt-3 text-[11px] text-red-200/80">{copyError}</p>
                         )}
-                        {creativeUpload && (
-                          <p className="mt-2 flex items-center gap-1 text-[10px] font-semibold text-emerald-300/80">
-                            <CheckCircle2 size={12} /> Criativo salvo na Erizon
-                          </p>
-                        )}
-                        {creativeUploadError && (
-                          <p className="mt-2 text-[10px] text-red-300/80">{creativeUploadError}</p>
+                        {copyPackage && (
+                          <div className="mt-4 rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3">
+                            <p className="text-[9px] uppercase tracking-[0.14em] text-white/25">Angulo sugerido</p>
+                            <p className="mt-1 text-[12px] font-semibold text-white/78">{copyPackage.angle}</p>
+                            <p className="mt-2 text-[11px] leading-relaxed text-white/45">{copyPackage.rationale}</p>
+                          </div>
                         )}
                       </div>
 
                       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                        <div>
-                          <FieldLabel>Titulo</FieldLabel>
+                        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
+                          <FieldLabel>
+                            <div className="flex items-center justify-between gap-3">
+                              <span>Titulo</span>
+                              <button
+                                type="button"
+                                onClick={() => void gerarPacoteDeCopy("headline")}
+                                disabled={copyLoading}
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-fuchsia-200/78 transition-colors hover:text-fuchsia-100 disabled:opacity-35"
+                              >
+                                {copyLoading && copyGeneratingField === "headline" ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                                Gerar
+                              </button>
+                            </div>
+                          </FieldLabel>
                           <input value={headline} onChange={(event) => setHeadline(event.target.value)} className={inputClass} placeholder="Headline do anuncio" />
+                          {copyPackage?.headlines?.length ? (
+                            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              {copyPackage.headlines.slice(0, 4).map((option, index) => (
+                                <CopyChoiceButton
+                                  key={`${option}-${index}`}
+                                  label={`Headline ${index + 1}`}
+                                  value={option}
+                                  active={headline === option}
+                                  onApply={() => setHeadline(option)}
+                                />
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
-                        <div>
+
+                        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
                           <FieldLabel>CTA</FieldLabel>
                           <select value={cta} onChange={(event) => setCta(event.target.value)} className={inputClass}>
                             {CTAS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                           </select>
+                          {copyPackage?.ctaSuggestions?.length ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {copyPackage.ctaSuggestions
+                                .filter((option, index, list) => list.indexOf(option) === index && CTAS.some((item) => item.id === option))
+                                .slice(0, 4)
+                                .map((option) => (
+                                  <PillButton key={option} active={cta === option} onClick={() => setCta(option)}>
+                                    {CTAS.find((item) => item.id === option)?.label ?? option}
+                                  </PillButton>
+                                ))}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
 
-                      <div>
-                        <FieldLabel>Texto principal</FieldLabel>
+                      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
+                        <FieldLabel>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Texto principal</span>
+                            <button
+                              type="button"
+                              onClick={() => void gerarPacoteDeCopy("primaryText")}
+                              disabled={copyLoading}
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-fuchsia-200/78 transition-colors hover:text-fuchsia-100 disabled:opacity-35"
+                            >
+                              {copyLoading && copyGeneratingField === "primaryText" ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                              Gerar
+                            </button>
+                          </div>
+                        </FieldLabel>
                         <textarea value={primaryText} onChange={(event) => setPrimaryText(event.target.value)} className={textareaClass} placeholder="Copy do anuncio" />
+                        {copyPackage?.primaryTexts?.length ? (
+                          <div className="mt-3 grid grid-cols-1 gap-2">
+                            {copyPackage.primaryTexts.slice(0, 3).map((option, index) => (
+                              <CopyChoiceButton
+                                key={`${option}-${index}`}
+                                label={`Texto ${index + 1}`}
+                                value={option}
+                                active={primaryText === option}
+                                onApply={() => setPrimaryText(option)}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
 
-                      <div>
-                        <FieldLabel>Descricao</FieldLabel>
+                      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
+                        <FieldLabel>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Descricao</span>
+                            <button
+                              type="button"
+                              onClick={() => void gerarPacoteDeCopy("description")}
+                              disabled={copyLoading}
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-fuchsia-200/78 transition-colors hover:text-fuchsia-100 disabled:opacity-35"
+                            >
+                              {copyLoading && copyGeneratingField === "description" ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                              Gerar
+                            </button>
+                          </div>
+                        </FieldLabel>
                         <input value={description} onChange={(event) => setDescription(event.target.value)} className={inputClass} placeholder="Linha complementar" />
+                        {copyPackage?.descriptions?.length ? (
+                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            {copyPackage.descriptions.slice(0, 4).map((option, index) => (
+                              <CopyChoiceButton
+                                key={`${option}-${index}`}
+                                label={`Descricao ${index + 1}`}
+                                value={option}
+                                active={description === option}
+                                onApply={() => setDescription(option)}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div>
@@ -1208,7 +1683,7 @@ export default function NovaPage() {
                     <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-4">
                       <div className="mb-3 flex items-center gap-2">
                         <Eye size={14} className="text-white/35" />
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Preview</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">Preview do anuncio</p>
                       </div>
                       <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-[#111116]">
                         <div className="aspect-[4/5] bg-white/[0.025]">
@@ -1226,7 +1701,8 @@ export default function NovaPage() {
                         </div>
                         <div className="space-y-2 p-3">
                           <p className="line-clamp-2 text-[12px] font-bold text-white/85">{headline || "Titulo do anuncio"}</p>
-                          <p className="line-clamp-3 text-[11px] leading-relaxed text-white/45">{primaryText || "Texto principal do anuncio aparece aqui."}</p>
+                          {description ? <p className="line-clamp-2 text-[10px] text-white/34">{description}</p> : null}
+                          <p className="line-clamp-4 text-[11px] leading-relaxed text-white/45">{primaryText || "Texto principal do anuncio aparece aqui."}</p>
                           <div className="flex items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
                             <span className="truncate text-[10px] text-white/35">{destinationUrl || "URL destino"}</span>
                             <span className="rounded-md bg-white/10 px-2 py-1 text-[9px] font-bold text-white/70">
@@ -1278,21 +1754,39 @@ export default function NovaPage() {
                   </div>
                 </Section>
 
+                {sucesso && (
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-[12px] text-emerald-100/85">
+                    {sucesso}
+                  </div>
+                )}
+
                 {erro && (
                   <div className="rounded-2xl border border-red-500/20 bg-red-500/[0.05] px-4 py-3 text-[12px] text-red-200">
                     {erro}
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={analisar}
-                  disabled={loading || uploadingCreative || !orcamento}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-600 py-4 text-[14px] font-bold text-white shadow-[0_0_30px_rgba(168,85,247,0.3)] transition-all hover:bg-purple-500 disabled:opacity-40"
-                >
-                  {loading || uploadingCreative ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  {uploadingCreative ? "Subindo criativo..." : loading ? "Salvando e avaliando..." : "Salvar pacote e rodar preflight"}
-                </button>
+                <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <button
+                    type="button"
+                    onClick={salvarSomenteRascunho}
+                    disabled={savingDraftOnly || loading || uploadingCreative}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.04] py-4 text-[13px] font-semibold text-white/72 transition-all hover:bg-white/[0.08] disabled:opacity-40"
+                  >
+                    {savingDraftOnly ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    {savingDraftOnly ? "Salvando..." : "Salvar rascunho"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={analisar}
+                    disabled={loading || uploadingCreative || !orcamento || loadingDraft}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-600 py-4 text-[14px] font-bold text-white shadow-[0_0_30px_rgba(168,85,247,0.3)] transition-all hover:bg-purple-500 disabled:opacity-40"
+                  >
+                    {loading || uploadingCreative ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    {uploadingCreative ? "Subindo criativo..." : loading ? "Salvando e avaliando..." : "Salvar pacote e rodar preflight"}
+                  </button>
+                </div>
               </div>
 
               <aside className="space-y-4 xl:sticky xl:top-8 xl:self-start">

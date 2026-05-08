@@ -69,6 +69,47 @@ function buildDraftRow(body: DraftPayload, userId: string, workspaceId: string) 
   };
 }
 
+export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.response) return auth.response;
+
+  const id = req.nextUrl.searchParams.get("id");
+  const db = createServerSupabase();
+
+  if (id) {
+    const { data, error } = await db
+      .from("metricas_ads")
+      .select("id, cliente_id, nome_campanha, objective, orcamento, draft_payload, preflight_result, forecast_snapshot, status, preflight_status")
+      .eq("id", id)
+      .eq("user_id", auth.user.id)
+      .eq("status", "rascunho")
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (!data) {
+      return NextResponse.json({ error: "Rascunho nao encontrado." }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true, draft: data });
+  }
+
+  const { data, error } = await db
+    .from("metricas_ads")
+    .select("id, cliente_id, nome_campanha, objective, orcamento, draft_payload, preflight_result, forecast_snapshot, status, preflight_status")
+    .eq("user_id", auth.user.id)
+    .eq("status", "rascunho")
+    .order("data_atualizacao", { ascending: false })
+    .limit(30);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, drafts: data ?? [] });
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
   if (auth.response) return auth.response;
@@ -99,6 +140,35 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, draft: data });
+}
+
+export async function DELETE(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.response) return auth.response;
+
+  const id = req.nextUrl.searchParams.get("id");
+  if (!id) {
+    return NextResponse.json({ error: "id do rascunho obrigatorio." }, { status: 400 });
+  }
+
+  const db = createServerSupabase();
+  const { data, error } = await db
+    .from("metricas_ads")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", auth.user.id)
+    .eq("status", "rascunho")
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ error: "Rascunho nao encontrado." }, { status: 404 });
+  }
+
+  return NextResponse.json({ ok: true, id: data.id });
 }
 
 export async function PATCH(req: NextRequest) {
