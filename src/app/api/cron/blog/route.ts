@@ -37,7 +37,9 @@ async function runBlogCron(request: NextRequest) {
     }).format(now);
     if (weekday === "Fri") {
       try {
-        results.weekly = await service.generateWeeklyReport();
+        results.weekly = await service.generateWeeklyReport({
+          skipIfPublishedRecently: true,
+        });
       } catch (error) {
         taskErrors.weekly = error instanceof Error ? error.message : "Falha ao gerar relatorio semanal.";
         console.error("[cron/blog][weekly]", error);
@@ -55,7 +57,9 @@ async function runBlogCron(request: NextRequest) {
     }).format(tomorrowInBrazil);
     if (Number(tomorrowDay) < Number(todayDay)) {
       try {
-        results.monthly = await service.generateMonthlyReport();
+        results.monthly = await service.generateMonthlyReport({
+          skipIfPublishedRecently: true,
+        });
       } catch (error) {
         taskErrors.monthly = error instanceof Error ? error.message : "Falha ao gerar relatorio mensal.";
         console.error("[cron/blog][monthly]", error);

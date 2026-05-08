@@ -74,6 +74,7 @@ type DailyBlogOptions = {
 
 type GeneratePostOptions = {
   forcePublish?: boolean;
+  skipIfPublishedRecently?: boolean;
   usedSourceUrls?: Set<string>;
 };
 
@@ -757,17 +758,22 @@ async function getPublishedSourceUrls(supabase: SupabaseClient) {
   return new Set((data ?? []).map((row) => normalizeSourceUrl(String(row.source_url ?? ""))).filter(Boolean));
 }
 
-async function getRecentPublishedAutoPost(supabase: SupabaseClient) {
+async function getRecentPublishedAutoPost(supabase: SupabaseClient, contentType?: BlogContentType) {
   const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
+  let query = supabase
     .from("blog_posts")
     .select("id, slug, title, published_at, source_name, source_url")
     .eq("published", true)
     .eq("gerado_por_ia", true)
     .gte("published_at", since)
     .order("published_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  if (contentType) {
+    query = query.eq("content_type", contentType);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) return null;
   return data ?? null;
@@ -848,6 +854,17 @@ export class IntelligentBlogService {
   }
 
   private async generatePost(type: BlogContentType, daysBack = 14, source?: MarketSource | null, options: GeneratePostOptions = {}) {
+    if (options.skipIfPublishedRecently) {
+      const recent = await getRecentPublishedAutoPost(this.supabase, type);
+      if (recent) {
+        return {
+          post: recent,
+          skipped: true,
+          reason: `Ja existe ${CONTENT_TYPE_LABELS[type].toLowerCase()} automatico publicado nas ultimas 20 horas.`,
+        };
+      }
+    }
+
     const safeData = ["anonymous_case_study", "weekly_report", "monthly_report", "performance_insight"].includes(type)
       ? await getInternalSafeData(this.supabase, daysBack)
       : undefined;
