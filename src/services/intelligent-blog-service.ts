@@ -243,6 +243,23 @@ function calculateReadingTime(content: string) {
   return `${Math.max(3, Math.ceil(words / 210))} min`;
 }
 
+function normalizeStringArray(value: unknown, fallback: string[] = []) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return fallback;
+}
+
 function rangeCurrency(value: number) {
   if (!Number.isFinite(value) || value <= 0) return "Sem faixa segura suficiente";
   if (value < 1000) return "até R$ 1 mil";
@@ -865,6 +882,8 @@ export class IntelligentBlogService {
     const now = new Date().toISOString();
     const slug = `${slugify(draft.slug || draft.title)}-${Date.now().toString(36)}`;
 
+    const seoKeywords = normalizeStringArray(draft.seo_keywords, SAFE_KEYWORDS.slice(0, 6));
+
     const insertPayload = {
       title: draft.title,
       slug,
@@ -882,8 +901,8 @@ export class IntelligentBlogService {
       read_time: calculateReadingTime(draft.content),
       seo_title: draft.seo_title,
       seo_description: draft.seo_description,
-      seo_keywords: draft.seo_keywords,
-      tags: draft.seo_keywords,
+      seo_keywords: seoKeywords,
+      tags: seoKeywords,
       source_name: draft.source_name,
       source_url: draft.source_url,
       source_published_at: draft.source_published_at,
