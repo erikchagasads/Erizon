@@ -30,6 +30,7 @@
 # ─── Vercel ──────────────────────────────────────────────────
 .vercel
 .vercel/
+.vercel.broken-*/
 
 # ─── Artefatos de build ──────────────────────────────────────
 *.tsbuildinfo
