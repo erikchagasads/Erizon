@@ -22,6 +22,7 @@ async function runBlogCron(request: NextRequest) {
 
     const service = new IntelligentBlogService(createServerSupabase());
     const now = new Date();
+    const taskErrors: Record<string, string> = {};
     const results: Record<string, unknown> = {
       daily: await service.generateDailyBlogDraft({
         forcePublish: true,
@@ -35,7 +36,12 @@ async function runBlogCron(request: NextRequest) {
       weekday: "short",
     }).format(now);
     if (weekday === "Fri") {
-      results.weekly = await service.generateWeeklyReport();
+      try {
+        results.weekly = await service.generateWeeklyReport();
+      } catch (error) {
+        taskErrors.weekly = error instanceof Error ? error.message : "Falha ao gerar relatorio semanal.";
+        console.error("[cron/blog][weekly]", error);
+      }
     }
 
     const tomorrowInBrazil = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -48,10 +54,19 @@ async function runBlogCron(request: NextRequest) {
       day: "2-digit",
     }).format(tomorrowInBrazil);
     if (Number(tomorrowDay) < Number(todayDay)) {
-      results.monthly = await service.generateMonthlyReport();
+      try {
+        results.monthly = await service.generateMonthlyReport();
+      } catch (error) {
+        taskErrors.monthly = error instanceof Error ? error.message : "Falha ao gerar relatorio mensal.";
+        console.error("[cron/blog][monthly]", error);
+      }
     }
 
-    return NextResponse.json({ ok: true, results });
+    return NextResponse.json({
+      ok: true,
+      results,
+      taskErrors: Object.keys(taskErrors).length ? taskErrors : undefined,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro interno no cron do blog.";
     console.error("[cron/blog]", error);

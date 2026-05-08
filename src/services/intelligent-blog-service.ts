@@ -287,6 +287,8 @@ function stripSensitiveStrings(value: string) {
 
 export function anonymizeCampaignData(rawData: Record<string, unknown> | Record<string, unknown>[]): SafeCampaignData {
   const rows = Array.isArray(rawData) ? rawData : [rawData];
+  const firstRawRow = rows[0] ?? {};
+  const lastRawRow = rows[rows.length - 1] ?? firstRawRow;
   const safeRows = rows.map((row) => {
     const clean: Record<string, unknown> = {};
     Object.entries(row ?? {}).forEach(([key, value]) => {
@@ -321,8 +323,8 @@ export function anonymizeCampaignData(rawData: Record<string, unknown> | Record<
 
   return {
     anonymized_client_label: `Conta anonimizada ${Math.max(3, safeRows.length)}`,
-    period_start: String(safeRows[0]?.snapshot_date ?? safeRows[0]?.period_start ?? today),
-    period_end: String(safeRows[safeRows.length - 1]?.snapshot_date ?? safeRows[0]?.period_end ?? today),
+    period_start: String(firstRawRow.snapshot_date ?? firstRawRow.period_start ?? today),
+    period_end: String(lastRawRow.snapshot_date ?? lastRawRow.period_end ?? today),
     niche_generic: String(safeRows[0]?.niche_generic ?? safeRows[0]?.nicho ?? "Negócio digital ou serviço recorrente"),
     region_generic: "Brasil, sem recorte local identificável",
     investment_range: rangeCurrency(totalSpend),
