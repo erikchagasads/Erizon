@@ -47,6 +47,8 @@ type ClientLaunchRow = {
   facebook_pixel_id: string | null;
   ig_user_id: string | null;
   whatsapp: string | null;
+  nome: string | null;
+  nome_cliente: string | null;
 };
 
 type MetaCredentials =
@@ -100,6 +102,25 @@ type DestinationResolution = {
   openingMessage: string | null;
 };
 
+type AdAccountContext =
+  | {
+      ok: true;
+      businessName: string | null;
+      accountName: string | null;
+      defaultDsaBeneficiary: string | null;
+      defaultDsaPayor: string | null;
+    }
+  | { ok: false; error: string };
+
+type WhatsAppLinkContext =
+  | {
+      ok: true;
+      whatsappNumber: string;
+      displayPhoneNumber: string | null;
+      warning: string | null;
+    }
+  | { ok: false; error: string };
+
 function cleanToken(raw: string): string {
   const compact = raw.trim().replace(/\s+/g, "");
   const match = compact.match(/EAA[A-Za-z0-9]+/);
@@ -144,6 +165,14 @@ function asStringArray(value: unknown): string[] {
 
 function normalizePhoneDigits(value: unknown): string {
   return String(value ?? "").replace(/\D/g, "");
+}
+
+function buildWhatsAppUrl(phone: string | null, text: string | null) {
+  const digits = normalizePhoneDigits(phone);
+  if (!digits) return "";
+  const base = `https://wa.me/${digits}`;
+  const message = asString(text);
+  return message ? `${base}?text=${encodeURIComponent(message)}` : base;
 }
 
 function cents(value: unknown): string {
@@ -449,7 +478,7 @@ async function getClientLaunchData(
 
   const { data } = await db
     .from("clientes")
-    .select("id, meta_account_id, facebook_pixel_id, ig_user_id, whatsapp")
+    .select("id, meta_account_id, facebook_pixel_id, ig_user_id, whatsapp, nome, nome_cliente")
     .eq("id", campaign.cliente_id)
     .eq("user_id", userId)
     .maybeSingle();
@@ -511,6 +540,176 @@ async function resolvePageContext(
     pageId: String(selected.id),
     pageName: String(selected.name ?? "Facebook Page"),
     instagramActorId: preferredInstagramId || (instagram.id ? String(instagram.id) : null),
+  };
+}
+
+async function resolveAdAccountContext(
+  accessToken: string,
+  accountId: string
+): Promise<AdAccountContext> {
+  const account = await getMeta(
+    accountId,
+    {
+      fields: "id,name,business_name,default_dsa_beneficiary,default_dsa_payor",
+    },
+    accessToken
+  );
+
+  if (account.ok === false) {
+    return { ok: false, error: account.error };
+  }
+
+  return {
+    ok: true,
+    businessName: asString(account.raw.business_name) || null,
+    accountName: asString(account.raw.name) || null,
+    defaultDsaBeneficiary: asString(account.raw.default_dsa_beneficiary) || null,
+    defaultDsaPayor: asString(account.raw.default_dsa_payor) || null,
+  };
+}
+
+function isFieldSupportError(message: string): boolean {
+  return /tried accessing nonexisting field|cannot query field|unsupported get request|not available/i.test(message);
+}
+
+async function loadPageWhatsAppContext(accessToken: string, pageId: string) {
+  const attempts = [
+    "connected_whatsapp_number,whatsapp_business_account{id,name}",
+    "whatsapp_business_account{id,name}",
+    "connected_whatsapp_number",
+  ];
+
+  let lastError: string | null = null;
+  for (const fields of attempts) {
+    const response = await getMeta(pageId, { fields }, accessToken);
+    if (response.ok === true) return { ok: true as const, raw: response.raw };
+    lastError = response.error;
+    if (!isFieldSupportError(response.error)) {
+      return response;
+    }
+  }
+
+  return {
+    ok: false as const,
+    error: lastError ?? "Nao foi possivel consultar os dados de WhatsApp dessa Page na Meta.",
+  };
+}
+
+async function resolveLinkedWhatsAppForPage(
+  accessToken: string,
+  pageId: string,
+  requestedNumber: string | null
+): Promise<WhatsAppLinkContext> {
+  const pageContext = await loadPageWhatsAppContext(accessToken, pageId);
+  if (pageContext.ok === false) {
+    return pageContext;
+  }
+
+  const connectedWhatsappRaw = asString(pageContext.raw.connected_whatsapp_number);
+  const connectedWhatsapp = normalizePhoneDigits(connectedWhatsappRaw);
+  if (connectedWhatsapp) {
+    if (requestedNumber && requestedNumber !== connectedWhatsapp) {
+      return {
+        ok: false,
+        error: `O WhatsApp ${requestedNumber} nao esta vinculado a esta Page. Na Meta, o numero conectado e ${connectedWhatsapp}.`,
+      };
+    }
+
+    return {
+      ok: true,
+      whatsappNumber: connectedWhatsapp,
+      displayPhoneNumber: connectedWhatsappRaw || connectedWhatsapp,
+      warning: null,
+    };
+  }
+
+  const waba = asObject(pageContext.raw.whatsapp_business_account);
+  const wabaId = asString(waba.id);
+  if (!wabaId) {
+    return {
+      ok: false,
+      error: "Essa Page nao tem um WhatsApp conectado na Meta ou o token atual nao consegue ler esse vinculo.",
+    };
+  }
+
+  const phonesResponse = await getMeta(
+    `${wabaId}/phone_numbers`,
+    {
+      fields: "display_phone_number,verified_name,quality_rating,name_status",
+      limit: "10",
+    },
+    accessToken
+  );
+
+  if (phonesResponse.ok === false) {
+    return { ok: false, error: phonesResponse.error };
+  }
+
+  const rawPhones = Array.isArray(phonesResponse.raw.data) ? (phonesResponse.raw.data as JsonRecord[]) : [];
+  const options = rawPhones
+    .map((item) => ({
+      normalized: normalizePhoneDigits(item.display_phone_number),
+      displayPhoneNumber: asString(item.display_phone_number) || null,
+    }))
+    .filter((item) => item.normalized);
+
+  if (options.length === 0) {
+    return {
+      ok: false,
+      error: "A conta de WhatsApp Business foi encontrada, mas nao retornou nenhum numero disponivel.",
+    };
+  }
+
+  if (requestedNumber) {
+    const matched = options.find((item) => item.normalized === requestedNumber);
+    if (!matched) {
+      return {
+        ok: false,
+        error: `O WhatsApp ${requestedNumber} nao esta vinculado a esta conta Meta. Numeros disponiveis: ${options.map((item) => item.normalized).join(", ")}.`,
+      };
+    }
+
+    return {
+      ok: true,
+      whatsappNumber: matched.normalized,
+      displayPhoneNumber: matched.displayPhoneNumber,
+      warning: null,
+    };
+  }
+
+  if (options.length > 1) {
+    return {
+      ok: false,
+      error: `A Meta retornou mais de um WhatsApp vinculado para esta conta. Informe um dos numeros disponiveis: ${options.map((item) => item.normalized).join(", ")}.`,
+    };
+  }
+
+  return {
+    ok: true,
+    whatsappNumber: options[0].normalized,
+    displayPhoneNumber: options[0].displayPhoneNumber,
+    warning: null,
+  };
+}
+
+function resolveDsaIdentity(params: {
+  client: ClientLaunchRow | null;
+  pageName: string;
+  account: AdAccountContext;
+}) {
+  const clientName = asString(params.client?.nome_cliente ?? params.client?.nome);
+  const beneficiary =
+    params.account.ok && params.account.defaultDsaBeneficiary
+      ? params.account.defaultDsaBeneficiary
+      : clientName || params.pageName || (params.account.ok ? params.account.businessName ?? params.account.accountName ?? "" : "");
+  const payor =
+    params.account.ok && params.account.defaultDsaPayor
+      ? params.account.defaultDsaPayor
+      : (params.account.ok ? params.account.businessName ?? params.account.accountName ?? "" : "") || clientName || params.pageName;
+
+  return {
+    beneficiary: beneficiary.trim() || null,
+    payor: payor.trim() || null,
   };
 }
 
@@ -859,7 +1058,9 @@ function buildObjectStorySpec(params: {
   const creative = asObject(params.draft.criativo);
   const destination = resolveDestination(params.draft, null);
   const destinationUrl =
-    normalizeUrl(creative.destinationUrl ?? params.draft.urlDestino) ||
+    (destination.channel === "whatsapp"
+      ? buildWhatsAppUrl(destination.whatsappNumber, destination.openingMessage)
+      : normalizeUrl(creative.destinationUrl ?? params.draft.urlDestino)) ||
     `https://www.facebook.com/${params.pageId}`;
   const cta = destination.channel === "whatsapp"
     ? "WHATSAPP_MESSAGE"
@@ -908,17 +1109,24 @@ async function createMetaCampaign(params: {
   name: string;
   objective: string;
   status: "ACTIVE" | "PAUSED";
+  dsaBeneficiary?: string | null;
+  dsaPayor?: string | null;
 }) {
+  const fields: Record<string, string> = {
+    name: params.name,
+    objective: params.objective,
+    status: params.status,
+    buying_type: "AUCTION",
+    special_ad_categories: "[]",
+    access_token: params.accessToken,
+  };
+
+  if (params.dsaBeneficiary) fields.dsa_beneficiary = params.dsaBeneficiary;
+  if (params.dsaPayor) fields.dsa_payor = params.dsaPayor;
+
   return postMetaForm(
     `${params.accountId}/campaigns`,
-    {
-      name: params.name,
-      objective: params.objective,
-      status: params.status,
-      buying_type: "AUCTION",
-      special_ad_categories: "[]",
-      access_token: params.accessToken,
-    },
+    fields,
     "Erro ao criar campanha no Meta."
   );
 }
@@ -1066,6 +1274,41 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: page.error }, { status: 400 });
   }
 
+  const accountContext = await resolveAdAccountContext(credentials.accessToken, credentials.accountId);
+  if (accountContext.ok === false) {
+    await recordPublishError(db, id, auth.user.id, accountContext.error);
+    return NextResponse.json({ error: accountContext.error }, { status: 400 });
+  }
+
+  const dsaIdentity = resolveDsaIdentity({
+    client,
+    pageName: page.pageName,
+    account: accountContext,
+  });
+  if (!dsaIdentity.beneficiary) {
+    const message = "Nao foi possivel identificar o anunciante promovido para preencher o dsa_beneficiary da Meta.";
+    await recordPublishError(db, id, auth.user.id, message);
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+  if (!dsaIdentity.payor) {
+    const message = "Nao foi possivel identificar o pagador da campanha para preencher o dsa_payor da Meta.";
+    await recordPublishError(db, id, auth.user.id, message);
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+
+  if (destination.channel === "whatsapp") {
+    const whatsappLink = await resolveLinkedWhatsAppForPage(
+      credentials.accessToken,
+      page.pageId,
+      destination.whatsappNumber
+    );
+    if (whatsappLink.ok === false) {
+      await recordPublishError(db, id, auth.user.id, whatsappLink.error);
+      return NextResponse.json({ error: whatsappLink.error }, { status: 400 });
+    }
+    destination.whatsappNumber = whatsappLink.whatsappNumber;
+  }
+
   const metaObjective = mapMetaObjective(typedCampaign.objective ?? draft.objetivo);
   const metaStatus = body.activateOnMeta ? "ACTIVE" : "PAUSED";
   const campaignName =
@@ -1077,10 +1320,17 @@ export async function POST(req: NextRequest, context: RouteContext) {
     asString(tracking.metaPixelId) ||
     asString(client?.facebook_pixel_id) ||
     null;
-  const destinationUrl = normalizeUrl(creative.destinationUrl ?? draft.urlDestino);
+  const destinationUrl =
+    destination.channel === "whatsapp"
+      ? buildWhatsAppUrl(destination.whatsappNumber, destination.openingMessage)
+      : normalizeUrl(creative.destinationUrl ?? draft.urlDestino);
   const selectedInstagramPost = getSelectedInstagramPost(draft);
 
-  if (["OUTCOME_LEADS", "OUTCOME_SALES", "OUTCOME_TRAFFIC"].includes(metaObjective) && !destinationUrl) {
+  if (
+    ["OUTCOME_LEADS", "OUTCOME_SALES", "OUTCOME_TRAFFIC"].includes(metaObjective) &&
+    !destination.isMessaging &&
+    !destinationUrl
+  ) {
     const message = "Informe a URL destino do anuncio antes de publicar no Meta.";
     await recordPublishError(db, id, auth.user.id, message);
     return NextResponse.json({ error: message }, { status: 400 });
@@ -1096,6 +1346,11 @@ export async function POST(req: NextRequest, context: RouteContext) {
     instagramActorId: page.instagramActorId,
     pixelId,
     destination,
+    dsaIdentity,
+    accountContext: {
+      businessName: accountContext.businessName,
+      accountName: accountContext.accountName,
+    },
     creativeSource: selectedInstagramPost ? "instagram_existing_post" : "upload",
     steps: [],
   };
@@ -1126,6 +1381,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
     name: campaignName,
     objective: metaObjective,
     status: metaStatus,
+    dsaBeneficiary: dsaIdentity.beneficiary,
+    dsaPayor: dsaIdentity.payor,
   });
   if (createdCampaign.ok === false) {
     await recordPublishError(db, id, auth.user.id, createdCampaign.error, partial);
@@ -1195,7 +1452,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
       pageId: page.pageId,
       instagramUserId,
       sourceInstagramMediaId: selectedInstagramPost.mediaId,
-      callToActionType: destinationUrl ? asString(creative.cta, "LEARN_MORE") : null,
+      callToActionType: destinationUrl
+        ? (destination.channel === "whatsapp" ? "WHATSAPP_MESSAGE" : asString(creative.cta, "LEARN_MORE"))
+        : null,
       destinationUrl: destinationUrl || null,
     };
     partial.instagramCreative = instagramCreative;
