@@ -1604,7 +1604,7 @@ export default function NovaPage() {
                                     className={inputClass}
                                   />
                                   <p className="mt-1.5 text-[10px] leading-relaxed text-white/28">
-                                    A Erizon usa primeiro o WhatsApp salvo no cliente e, se estiver vazio, tenta puxar o numero conectado na Meta.
+                                    A Erizon usa primeiro o WhatsApp salvo no cliente e, se estiver vazio, tenta puxar o numero conectado na Meta. Na publicacao, esse numero vira o destino nativo de conversa no WhatsApp.
                                   </p>
                                   {syncingMetaWhatsapp && (
                                     <p className="mt-1.5 text-[10px] leading-relaxed text-emerald-100/75">

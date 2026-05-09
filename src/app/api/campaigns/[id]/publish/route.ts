@@ -93,6 +93,13 @@ type BidStrategyResolution = {
   warnings: string[];
 };
 
+type DestinationResolution = {
+  channel: "website" | "post_engagement" | "whatsapp" | "messenger" | "instagram_direct";
+  isMessaging: boolean;
+  whatsappNumber: string | null;
+  openingMessage: string | null;
+};
+
 function cleanToken(raw: string): string {
   const compact = raw.trim().replace(/\s+/g, "");
   const match = compact.match(/EAA[A-Za-z0-9]+/);
@@ -135,6 +142,10 @@ function asStringArray(value: unknown): string[] {
   return value.map((item) => String(item ?? "").trim()).filter(Boolean);
 }
 
+function normalizePhoneDigits(value: unknown): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
 function cents(value: unknown): string {
   const parsed = asNumber(value) ?? 0;
   return String(Math.max(100, Math.round(parsed * 100)));
@@ -162,6 +173,28 @@ function getSelectedInstagramPost(draft: JsonRecord): InstagramPostSelection | n
     permalink: asString(instagramPost.permalink) || null,
     previewUrl: asString(instagramPost.previewUrl) || null,
     caption: asString(instagramPost.caption) || null,
+  };
+}
+
+function resolveDestination(draft: JsonRecord, client: ClientLaunchRow | null): DestinationResolution {
+  const destinationConfig = asObject(draft.destinationConfig);
+  const rawChannel = asString(destinationConfig.channel, "website").toLowerCase();
+  const channel = (
+    ["website", "post_engagement", "whatsapp", "messenger", "instagram_direct"].includes(rawChannel)
+      ? rawChannel
+      : "website"
+  ) as DestinationResolution["channel"];
+  const isMessaging = ["whatsapp", "messenger", "instagram_direct"].includes(channel);
+  const whatsappNumber =
+    channel === "whatsapp"
+      ? normalizePhoneDigits(destinationConfig.whatsappNumber ?? client?.whatsapp)
+      : null;
+
+  return {
+    channel,
+    isMessaging,
+    whatsappNumber: whatsappNumber || null,
+    openingMessage: asString(destinationConfig.openingMessage) || null,
   };
 }
 
@@ -577,13 +610,17 @@ async function resolveInterestTargeting(
   return { interests, warnings };
 }
 
-function mapPlacementTargeting(placements: JsonRecord): JsonRecord {
+function mapPlacementTargeting(placements: JsonRecord, destination: DestinationResolution): JsonRecord {
   if (placements.advantagePlus !== false) return {};
 
   const selected = asStringArray(placements.selected);
   const publisherPlatforms = asStringArray(placements.platforms);
   const devices = asStringArray(placements.devices);
   const targeting: JsonRecord = {};
+
+  if (destination.channel === "whatsapp" && !publisherPlatforms.includes("whatsapp")) {
+    publisherPlatforms.push("whatsapp");
+  }
 
   if (publisherPlatforms.length > 0) targeting.publisher_platforms = publisherPlatforms;
   if (devices.length === 1) targeting.device_platforms = devices;
@@ -608,7 +645,8 @@ function mapPlacementTargeting(placements: JsonRecord): JsonRecord {
 
 async function buildTargeting(
   accessToken: string,
-  draft: JsonRecord
+  draft: JsonRecord,
+  destination: DestinationResolution
 ): Promise<TargetingResolution> {
   const audience = asObject(draft.audience);
   const placements = asObject(draft.placements);
@@ -621,7 +659,7 @@ async function buildTargeting(
     geo_locations: geo,
     age_min: Math.max(18, asNumber(audience.ageMin) ?? 18),
     age_max: Math.min(65, asNumber(audience.ageMax) ?? 65),
-    ...mapPlacementTargeting(placements),
+    ...mapPlacementTargeting(placements, destination),
   };
 
   const gender = asString(audience.gender, "all");
@@ -648,6 +686,7 @@ function buildAdSetFields(params: {
   pixelId: string | null;
   targeting: JsonRecord;
   status: "ACTIVE" | "PAUSED";
+  destination: DestinationResolution;
 }): { ok: true; fields: Record<string, string>; warnings: string[] } | { ok: false; error: string } {
   let optimizationGoal = "LINK_CLICKS";
   let promotedObject: JsonRecord | null = null;
@@ -657,14 +696,34 @@ function buildAdSetFields(params: {
   const cta = asString(creative.cta, "LEARN_MORE");
   const bidSetup = resolveBidStrategy(params.draft);
 
-  if (cta === "WHATSAPP_MESSAGE") {
+  if (cta === "WHATSAPP_MESSAGE" && params.destination.channel !== "whatsapp") {
     return {
       ok: false,
       error: "CTA de WhatsApp ainda nao esta suportado na publicacao automatica da Erizon. Use Saiba mais, Cadastre-se, Fale conosco ou Comprar agora.",
     };
   }
 
-  if (params.metaObjective === "OUTCOME_SALES") {
+  if (params.destination.channel === "whatsapp") {
+    if (!params.destination.whatsappNumber) {
+      return {
+        ok: false,
+        error: "Informe o WhatsApp de destino da campanha antes de publicar na Meta.",
+      };
+    }
+
+    optimizationGoal = "CONVERSATIONS";
+    promotedObject = {
+      page_id: params.pageId,
+      whatsapp_phone_number: params.destination.whatsappNumber,
+      smart_pse_enabled: false,
+    };
+    destinationType = "WHATSAPP";
+  } else if (params.destination.isMessaging) {
+    return {
+      ok: false,
+      error: "A publicacao automatica de Messenger e Instagram Direct ainda nao esta concluida na Erizon. Por enquanto, use WhatsApp ou URL de website.",
+    };
+  } else if (params.metaObjective === "OUTCOME_SALES") {
     if (!params.pixelId) {
       return {
         ok: false,
@@ -798,10 +857,13 @@ function buildObjectStorySpec(params: {
   instagramActorId: string | null;
 }) {
   const creative = asObject(params.draft.criativo);
+  const destination = resolveDestination(params.draft, null);
   const destinationUrl =
     normalizeUrl(creative.destinationUrl ?? params.draft.urlDestino) ||
     `https://www.facebook.com/${params.pageId}`;
-  const cta = asString(creative.cta, "LEARN_MORE");
+  const cta = destination.channel === "whatsapp"
+    ? "WHATSAPP_MESSAGE"
+    : asString(creative.cta, "LEARN_MORE");
   const message = asString(creative.primaryText, asString(creative.description, "Conheca a oferta."));
   const headline = asString(creative.headline, asString(params.draft.campaignName, "Campanha"));
   const description = asString(creative.description);
@@ -989,6 +1051,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
   const draft = asObject(typedCampaign.draft_payload);
   const creative = asObject(draft.criativo);
   const client = await getClientLaunchData(db, auth.user.id, typedCampaign);
+  const destination = resolveDestination(draft, client);
   const credentials = await resolveMetaCredentials(db, auth.user.id, typedCampaign);
   if (credentials.ok === false) {
     await recordPublishError(db, id, auth.user.id, credentials.error);
@@ -1032,6 +1095,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     pageName: page.pageName,
     instagramActorId: page.instagramActorId,
     pixelId,
+    destination,
     creativeSource: selectedInstagramPost ? "instagram_existing_post" : "upload",
     steps: [],
   };
@@ -1071,7 +1135,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
   partial.campaignRaw = createdCampaign.raw;
   (partial.steps as unknown[]).push("campaign_created");
 
-  const targeting = await buildTargeting(credentials.accessToken, draft);
+  const targeting = await buildTargeting(credentials.accessToken, draft, destination);
   partial.targeting = targeting.targeting;
   partial.warnings = targeting.warnings;
 
@@ -1085,6 +1149,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     pixelId,
     targeting: targeting.targeting,
     status: metaStatus,
+    destination,
   });
   if (adSetFields.ok === false) {
     await recordPublishError(db, id, auth.user.id, adSetFields.error, partial);
