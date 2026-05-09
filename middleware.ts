@@ -20,6 +20,7 @@ const ROTAS_CLIENTE = ["/cliente", "/login", "/signup", "/api"];
 const ERIZON_HOSTS = [
   "erizonai.com.br",
   "www.erizonai.com.br",
+  "crm.erizonai.com.br",
   "onboarding.erizonai.com.br",
   "ads.erizonai.com.br",
   "erizon.vercel.app",
@@ -39,6 +40,37 @@ const SUBDOMAIN_REWRITES: Record<string, string> = {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const host = request.headers.get("host") ?? "";
+  const hostWithoutPort = host.toLowerCase().split(":")[0] ?? "";
+
+  const isCrmSubdomain =
+    hostWithoutPort.startsWith("crm.") ||
+    hostWithoutPort === "crm.erizonai.com.br";
+
+  const loginTokenMatch = pathname.match(/^\/login\/([^/]+)$/);
+  if (loginTokenMatch) {
+    const token = loginTokenMatch[1];
+    return NextResponse.rewrite(new URL(`/crm/cliente/login/${token}`, request.url));
+  }
+
+  if (isCrmSubdomain) {
+    const tokenLoginMatch = pathname.match(/^\/([^/]+)\/login$/);
+    if (tokenLoginMatch) {
+      const token = tokenLoginMatch[1];
+      return NextResponse.rewrite(new URL(`/crm/cliente/login/${token}`, request.url));
+    }
+
+    const tokenOnlyMatch = pathname.match(/^\/([^/]+)$/);
+    if (tokenOnlyMatch) {
+      const token = tokenOnlyMatch[1];
+      if (!["crm", "login"].includes(token)) {
+        return NextResponse.rewrite(new URL(`/crm/cliente/${token}`, request.url));
+      }
+    }
+
+    if (pathname === "/") {
+      return NextResponse.rewrite(new URL("/crm", request.url));
+    }
+  }
 
   // ── Rewrite por subdomínio ─────────────────────────────────────────────────
   if (pathname === "/" && SUBDOMAIN_REWRITES[host]) {

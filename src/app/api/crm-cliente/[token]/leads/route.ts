@@ -18,7 +18,7 @@ export async function GET(
 
   const sessao = await verificarSessaoCliente(req, token);
   if (sessao.ok === false) {
-    return NextResponse.json({ error: sessao.erro, redirect: `/crm/cliente/login/${token}` }, { status: 401 });
+    return NextResponse.json({ error: sessao.erro, redirect: `/login/${token}` }, { status: 401 });
   }
 
   const { data: leads, error } = await supabaseAdmin
