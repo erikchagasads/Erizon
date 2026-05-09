@@ -59,6 +59,7 @@ const CTAS = [
 
 const MESSAGE_DESTINATIONS = [
   { id: "website", label: "Site / landing", sub: "Leva para uma URL externa" },
+  { id: "crm_form", label: "Formulario (CRM)", sub: "Webhook da Erizon com UTMs para lead + WhatsApp" },
   { id: "post_engagement", label: "Post / perfil", sub: "Engajamento no proprio ativo" },
   { id: "whatsapp", label: "WhatsApp", sub: "Puxa o numero do cliente automaticamente" },
   { id: "messenger", label: "Messenger", sub: "Conversa pela Page conectada" },
@@ -149,7 +150,7 @@ type SuggestionsResponse = {
 
 type AudienceMode = "ai" | "broad" | "interests" | "lookalike" | "retargeting";
 type Gender = "all" | "female" | "male";
-type CampaignDestination = "website" | "post_engagement" | "whatsapp" | "messenger" | "instagram_direct";
+type CampaignDestination = "website" | "crm_form" | "post_engagement" | "whatsapp" | "messenger" | "instagram_direct";
 
 type CreativeUpload = {
   bucket: string;
@@ -187,6 +188,18 @@ type MetaWhatsappSyncResponse = {
   error?: string;
   savedToClient?: boolean;
   saveError?: string | null;
+};
+
+type CrmWebhookLinkResponse = {
+  ok?: boolean;
+  webhookBase?: string;
+  webhookUrl?: string;
+  defaults?: {
+    whatsapp?: string | null;
+    whatsappMessage?: string | null;
+    appendAdReference?: boolean;
+  };
+  error?: string;
 };
 
 type PayloadOverride = {
@@ -257,6 +270,63 @@ function buildWhatsAppUrl(phone: string, text: string) {
   if (!digits) return "";
   const base = `https://wa.me/${digits}`;
   return text.trim() ? `${base}?text=${encodeURIComponent(text.trim())}` : base;
+}
+
+function ensureAbsoluteHttpUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+function buildCrmWebhookUrl(
+  baseUrl: string,
+  options: { messageTemplate: string; appendAdReference: boolean }
+) {
+  const normalizedBase = ensureAbsoluteHttpUrl(baseUrl);
+  if (!normalizedBase) return "";
+
+  const [prefix, rawQuery = ""] = normalizedBase.split("?");
+  const params = rawQuery.split("&").map((item) => item.trim()).filter(Boolean);
+  const withoutDynamic = params.filter((item) => {
+    const key = item.split("=")[0]?.toLowerCase();
+    return key !== "mensagem_template" && key !== "anexar_referencia_anuncio";
+  });
+  const hasParam = (key: string) => withoutDynamic.some((item) => item.split("=")[0]?.toLowerCase() === key);
+
+  if (!hasParam("utm_source")) withoutDynamic.push("utm_source=facebook");
+  if (!hasParam("utm_medium")) withoutDynamic.push("utm_medium=cpc");
+  if (!hasParam("utm_campaign")) withoutDynamic.push("utm_campaign={{campaign.name}}");
+  if (!hasParam("utm_term")) withoutDynamic.push("utm_term={{adset.name}}");
+  if (!hasParam("utm_content")) withoutDynamic.push("utm_content={{ad.name}}");
+
+  const messageTemplate = options.messageTemplate.trim();
+  if (messageTemplate) {
+    withoutDynamic.push(`mensagem_template=${encodeURIComponent(messageTemplate)}`);
+  }
+  if (!options.appendAdReference) {
+    withoutDynamic.push("anexar_referencia_anuncio=0");
+  }
+
+  return withoutDynamic.length > 0 ? `${prefix}?${withoutDynamic.join("&")}` : prefix;
+}
+
+function removeCrmWebhookDynamicParams(value: string) {
+  const normalizedBase = ensureAbsoluteHttpUrl(value);
+  if (!normalizedBase) return "";
+
+  const [prefix, rawQuery = ""] = normalizedBase.split("?");
+  const params = rawQuery.split("&").map((item) => item.trim()).filter(Boolean);
+  const filtered = params.filter((item) => {
+    const key = item.split("=")[0]?.toLowerCase();
+    return key !== "mensagem_template" && key !== "anexar_referencia_anuncio";
+  });
+
+  return filtered.length > 0 ? `${prefix}?${filtered.join("&")}` : prefix;
+}
+
+function isCrmWebhookUrl(value: string) {
+  return /\/api\/crm\/webhook\//i.test(value);
 }
 
 function parseList(value: string) {
@@ -470,6 +540,7 @@ export default function NovaPage() {
   const { clientes, clienteAtual, loading: loadingClientes, selecionarCliente, recarregar: recarregarClientes } = useCliente();
   const draftQueryId = searchParams.get("draft");
   const lastMetaWhatsappSyncKeyRef = useRef("");
+  const lastCrmWebhookSyncKeyRef = useRef("");
 
   const [step, setStep] = useState<"form" | "result">("form");
   const [loading, setLoading] = useState(false);
@@ -494,6 +565,9 @@ export default function NovaPage() {
   const [syncingMetaWhatsapp, setSyncingMetaWhatsapp] = useState(false);
   const [metaWhatsappInfo, setMetaWhatsappInfo] = useState<string | null>(null);
   const [metaWhatsappError, setMetaWhatsappError] = useState<string | null>(null);
+  const [syncingCrmWebhook, setSyncingCrmWebhook] = useState(false);
+  const [crmWebhookInfo, setCrmWebhookInfo] = useState<string | null>(null);
+  const [crmWebhookError, setCrmWebhookError] = useState<string | null>(null);
 
   const [campaignName, setCampaignName] = useState("");
   const [objetivo, setObjetivo] = useState("LEADS");
@@ -532,6 +606,8 @@ export default function NovaPage() {
   const [headline, setHeadline] = useState("");
   const [description, setDescription] = useState("");
   const [destinationUrl, setDestinationUrl] = useState("");
+  const [crmWebhookBaseUrl, setCrmWebhookBaseUrl] = useState("");
+  const [crmAppendAdReference, setCrmAppendAdReference] = useState(true);
   const [messagePhoneNumber, setMessagePhoneNumber] = useState("");
   const [messageOpeningText, setMessageOpeningText] = useState("");
   const [cta, setCta] = useState("LEARN_MORE");
@@ -545,12 +621,21 @@ export default function NovaPage() {
   const [metaPixelId, setMetaPixelId] = useState("");
   const supportsDestinationSelection = objetivo === "LEADS" || objetivo === "ENGAGEMENT";
   const destinationOptions = MESSAGE_DESTINATIONS.filter((option) => (
-    objetivo === "ENGAGEMENT" ? true : option.id !== "post_engagement"
+    objetivo === "ENGAGEMENT"
+      ? option.id !== "crm_form"
+      : option.id !== "post_engagement"
   ));
   const messagingCampaign = supportsDestinationSelection && isMessagingDestination(campaignDestination);
+  const normalizedCrmWebhookBase = crmWebhookBaseUrl
+    || (isCrmWebhookUrl(destinationUrl.trim()) ? removeCrmWebhookDynamicParams(destinationUrl.trim()) : "");
   const resolvedDestinationUrl = campaignDestination === "whatsapp"
     ? buildWhatsAppUrl(messagePhoneNumber, messageOpeningText)
-    : destinationUrl.trim();
+    : campaignDestination === "crm_form"
+      ? buildCrmWebhookUrl(
+          normalizedCrmWebhookBase,
+          { messageTemplate: messageOpeningText, appendAdReference: crmAppendAdReference }
+        )
+      : destinationUrl.trim();
   const requiresPixelForObjective = objetivo === "SALES" || (objetivo === "LEADS" && !messagingCampaign);
 
   useEffect(() => {
@@ -603,10 +688,15 @@ export default function NovaPage() {
     setMetaWhatsappInfo(null);
     setMetaWhatsappError(null);
     lastMetaWhatsappSyncKeyRef.current = "";
+    setCrmWebhookInfo(null);
+    setCrmWebhookError(null);
+    setCrmWebhookBaseUrl("");
+    setCrmAppendAdReference(true);
+    lastCrmWebhookSyncKeyRef.current = "";
   }, [clienteAtual?.id]);
 
   useEffect(() => {
-    if (objetivo === "ENGAGEMENT" && campaignDestination === "website") {
+    if (objetivo === "ENGAGEMENT" && (campaignDestination === "website" || campaignDestination === "crm_form")) {
       setCampaignDestination("post_engagement");
       return;
     }
@@ -688,6 +778,51 @@ export default function NovaPage() {
 
     void syncWhatsappFromMeta(clienteAtual.id, { silent: true });
   }, [campaignDestination, clienteAtual?.id, clienteAtual?.ig_user_id, metaPageId, messagePhoneNumber]);
+
+  async function syncCrmWebhookFromClient(clientId: string, options?: { silent?: boolean }) {
+    setSyncingCrmWebhook(true);
+    setCrmWebhookError(null);
+    if (!options?.silent) setCrmWebhookInfo(null);
+
+    try {
+      const res = await fetch(`/api/clientes/${clientId}/crm-webhook`);
+      const data = (await res.json()) as CrmWebhookLinkResponse;
+      const webhookBase = asString(data.webhookUrl ?? data.webhookBase);
+
+      if (!res.ok || !data.ok || !webhookBase) {
+        throw new Error(data.error ?? "Nao foi possivel montar o link de formulario CRM.");
+      }
+
+      setCrmWebhookBaseUrl(webhookBase);
+      setDestinationUrl((current) => (!current || isCrmWebhookUrl(current) ? webhookBase : current));
+      setMessageOpeningText((current) => current || asString(data.defaults?.whatsappMessage));
+      setMessagePhoneNumber((current) => current || asString(data.defaults?.whatsapp));
+      if (typeof data.defaults?.appendAdReference === "boolean") {
+        setCrmAppendAdReference(data.defaults.appendAdReference);
+      }
+
+      setCrmWebhookInfo("Link do formulario CRM carregado com UTMs padrao para Meta Ads.");
+    } catch (error) {
+      setCrmWebhookError(error instanceof Error ? error.message : "Erro ao carregar o link do formulario CRM.");
+    } finally {
+      setSyncingCrmWebhook(false);
+    }
+  }
+
+  useEffect(() => {
+    if (campaignDestination !== "crm_form") return;
+    if (!clienteAtual?.id) {
+      setCrmWebhookError("Selecione um cliente para montar automaticamente o link do formulario CRM.");
+      return;
+    }
+    if (crmWebhookBaseUrl.trim()) return;
+
+    const syncKey = clienteAtual.id;
+    if (lastCrmWebhookSyncKeyRef.current === syncKey) return;
+    lastCrmWebhookSyncKeyRef.current = syncKey;
+
+    void syncCrmWebhookFromClient(clienteAtual.id, { silent: true });
+  }, [campaignDestination, clienteAtual?.id, crmWebhookBaseUrl]);
 
   async function carregarPostsInstagram(clientId: string) {
     setInstagramPostsLoading(true);
@@ -857,6 +992,11 @@ export default function NovaPage() {
     setPrimaryText(suggestion.angle || suggestion.rationale || "");
     setHeadline(suggestion.title);
     setDescription(suggestion.rationale || "");
+    setDestinationUrl("");
+    setCrmWebhookBaseUrl("");
+    setCrmAppendAdReference(true);
+    setCrmWebhookInfo(null);
+    setCrmWebhookError(null);
     setMessagePhoneNumber(suggestionClient?.whatsapp ?? "");
     setMessageOpeningText(suggestionClient?.whatsapp_mensagem ?? "");
     setMetaPageId("");
@@ -897,7 +1037,11 @@ export default function NovaPage() {
     setForecast(draft.forecast_snapshot ?? null);
     setCampaignName(asString(payload.campaignName ?? draft.nome_campanha));
     setObjetivo(asString(payload.objetivo ?? draft.objective, "LEADS"));
-    setCampaignDestination(asString(destinationConfig.channel, asString(payload.objetivo ?? draft.objective, "LEADS") === "ENGAGEMENT" ? "post_engagement" : "website") as CampaignDestination);
+    const resolvedChannel = asString(
+      destinationConfig.channel,
+      asString(payload.objetivo ?? draft.objective, "LEADS") === "ENGAGEMENT" ? "post_engagement" : "website"
+    ) as CampaignDestination;
+    setCampaignDestination(resolvedChannel);
     setOrcamento(asInputValue(payload.orcamentoDiario ?? draft.orcamento));
     setMetaCpl(asInputValue(payload.metaCpl));
     setAudienceMode(asString(audience.mode, "ai") as AudienceMode);
@@ -941,7 +1085,19 @@ export default function NovaPage() {
     setPrimaryText(asString(creative.primaryText));
     setHeadline(asString(creative.headline));
     setDescription(asString(creative.description));
-    setDestinationUrl(asString(creative.destinationUrl ?? payload.urlDestino));
+    const savedDestinationUrl = asString(creative.destinationUrl ?? payload.urlDestino);
+    setDestinationUrl(savedDestinationUrl);
+    setCrmWebhookBaseUrl(
+      resolvedChannel === "crm_form"
+        ? asString(
+            destinationConfig.crmWebhookBase,
+            isCrmWebhookUrl(savedDestinationUrl) ? removeCrmWebhookDynamicParams(savedDestinationUrl) : ""
+          )
+        : ""
+    );
+    setCrmAppendAdReference(asBoolean(destinationConfig.appendAdReference, true));
+    setCrmWebhookInfo(null);
+    setCrmWebhookError(null);
     setMessagePhoneNumber(asString(destinationConfig.whatsappNumber ?? matchedClient?.whatsapp));
     setMessageOpeningText(asString(destinationConfig.openingMessage ?? matchedClient?.whatsapp_mensagem));
     setCta(asString(creative.cta, "LEARN_MORE"));
@@ -1109,6 +1265,10 @@ export default function NovaPage() {
         isMessaging: messagingCampaign,
         whatsappNumber: normalizedWhatsapp || null,
         openingMessage: messageOpeningText.trim() || null,
+        crmWebhookBase: campaignDestination === "crm_form"
+          ? normalizedCrmWebhookBase || null
+          : null,
+        appendAdReference: campaignDestination === "crm_form" ? crmAppendAdReference : null,
       },
       urlDestino: resolvedDestinationUrl || undefined,
       velocidadeUrl: velocidade ? parseNumber(velocidade) : undefined,
@@ -1205,6 +1365,7 @@ export default function NovaPage() {
       `Origem do criativo: ${creativeSource === "instagram_existing_post" ? "publicacao existente do Instagram" : "arquivo enviado para anuncio"}`,
       resolvedDestinationUrl ? `URL destino: ${resolvedDestinationUrl}` : null,
       messagingCampaign && campaignDestination === "whatsapp" && messagePhoneNumber ? `WhatsApp destino: ${messagePhoneNumber}` : null,
+      campaignDestination === "crm_form" && messageOpeningText ? `Mensagem WhatsApp do CRM: ${messageOpeningText}` : null,
       `CTA atual: ${cta}`,
       audiencia ? `Tamanho estimado de publico: ${audiencia} mil pessoas` : null,
       locations ? `Localizacao: ${locations}` : null,
@@ -1552,11 +1713,11 @@ export default function NovaPage() {
                         <div className="mb-3">
                           <FieldLabel>Destino da campanha</FieldLabel>
                           <p className="mt-1 text-[10px] leading-relaxed text-white/28">
-                            Para campanhas de leads ou engajamento, voce pode escolher se a acao vai para site, post/perfil ou app de mensagem.
+                            Para campanhas de leads ou engajamento, voce pode escolher se a acao vai para site, formulario CRM, post/perfil ou app de mensagem.
                           </p>
                         </div>
 
-                        <div className={`grid gap-2 ${objetivo === "ENGAGEMENT" ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+                        <div className="grid gap-2 sm:grid-cols-5">
                           {destinationOptions.map((option) => (
                             <button
                               key={option.id}
@@ -1639,6 +1800,58 @@ export default function NovaPage() {
                                   : "A Erizon vai salvar essa campanha como destino de mensagens no Instagram Direct usando o Instagram conectado do cliente."}
                               </div>
                             )}
+                          </div>
+                        )}
+
+                        {campaignDestination === "crm_form" && (
+                          <div className="mt-4 space-y-4">
+                            <div className="rounded-xl border border-sky-400/18 bg-sky-400/[0.05] px-4 py-3">
+                              <div className="mb-1.5 flex items-center justify-between gap-3">
+                                <p className="text-[11px] font-semibold text-sky-100/85">Webhook CRM do cliente</p>
+                                <button
+                                  type="button"
+                                  onClick={() => clienteAtual?.id ? void syncCrmWebhookFromClient(clienteAtual.id) : undefined}
+                                  disabled={syncingCrmWebhook || !clienteAtual?.id}
+                                  className="inline-flex items-center gap-1 rounded-full border border-sky-300/18 bg-sky-300/[0.1] px-2.5 py-1 text-[10px] font-semibold text-sky-100/88 transition hover:bg-sky-300/[0.16] disabled:cursor-not-allowed disabled:opacity-55"
+                                >
+                                  {syncingCrmWebhook ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                                  Atualizar link
+                                </button>
+                              </div>
+                              <p className="break-all text-[11px] font-medium text-sky-100/90">
+                                {crmWebhookBaseUrl || "Selecione um cliente para montar o webhook automaticamente."}
+                              </p>
+                              <p className="mt-1.5 text-[10px] leading-relaxed text-sky-100/62">
+                                A Erizon usa este link como destino da campanha, com UTMs da Meta e envio direto para o CRM.
+                              </p>
+                              {crmWebhookInfo && !syncingCrmWebhook && (
+                                <p className="mt-1.5 text-[10px] leading-relaxed text-sky-100/80">{crmWebhookInfo}</p>
+                              )}
+                              {crmWebhookError && !syncingCrmWebhook && (
+                                <p className="mt-1.5 text-[10px] leading-relaxed text-red-300/85">{crmWebhookError}</p>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                              <div>
+                                <FieldLabel>Mensagem WhatsApp do lead (opcional)</FieldLabel>
+                                <textarea
+                                  value={messageOpeningText}
+                                  onChange={(event) => setMessageOpeningText(event.target.value)}
+                                  className={textareaClass}
+                                  placeholder="Oi {nome}! Vi seu interesse na campanha {campanha}."
+                                />
+                                <p className="mt-1.5 text-[10px] leading-relaxed text-white/28">
+                                  Placeholders: {"{nome}"}, {"{campanha}"}, {"{conjunto}"}, {"{conjunto_anuncio}"}, {"{adset}"}, {"{anuncio}"}, {"{ad}"}, {"{telefone}"}.
+                                </p>
+                              </div>
+                              <Toggle
+                                checked={crmAppendAdReference}
+                                onChange={() => setCrmAppendAdReference((value) => !value)}
+                                label="Anexar referencia do anuncio"
+                                sub="Se a mensagem nao citar origem, a Erizon acrescenta campanha/conjunto automaticamente."
+                              />
+                            </div>
                           </div>
                         )}
                       </div>
@@ -2139,7 +2352,7 @@ export default function NovaPage() {
                       </div>
 
                       <div>
-                        <FieldLabel>{messagingCampaign ? "Destino resolvido" : "URL destino"}</FieldLabel>
+                        <FieldLabel>{messagingCampaign || campaignDestination === "crm_form" ? "Destino resolvido" : "URL destino"}</FieldLabel>
                         {campaignDestination === "website" || !supportsDestinationSelection ? (
                           <div className="relative">
                             <LinkIcon size={13} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/24" />
@@ -2150,6 +2363,15 @@ export default function NovaPage() {
                             <p className="text-[12px] font-semibold text-emerald-100/86">{resolvedDestinationUrl || "Informe o WhatsApp para montar o destino."}</p>
                             <p className="mt-1 text-[10px] leading-relaxed text-emerald-100/48">
                               A URL de destino e montada automaticamente a partir do numero e da mensagem inicial.
+                            </p>
+                          </div>
+                        ) : campaignDestination === "crm_form" ? (
+                          <div className="rounded-xl border border-sky-400/15 bg-sky-400/[0.05] px-4 py-3">
+                            <p className="break-all text-[12px] font-semibold text-sky-100/88">
+                              {resolvedDestinationUrl || "Selecione um cliente para montar o webhook CRM."}
+                            </p>
+                            <p className="mt-1 text-[10px] leading-relaxed text-sky-100/55">
+                              O link inclui UTMs da Meta e envia o lead para o CRM, com redirecionamento para o WhatsApp.
                             </p>
                           </div>
                         ) : campaignDestination === "post_engagement" ? (
@@ -2204,7 +2426,13 @@ export default function NovaPage() {
                           {description ? <p className="line-clamp-2 text-[10px] text-white/34">{description}</p> : null}
                           <p className="line-clamp-4 text-[11px] leading-relaxed text-white/45">{primaryText || "Texto principal do anuncio aparece aqui."}</p>
                           <div className="flex items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
-                            <span className="truncate text-[10px] text-white/35">{resolvedDestinationUrl || (campaignDestination === "post_engagement" ? "Post / perfil" : "Destino da campanha")}</span>
+                            <span className="truncate text-[10px] text-white/35">
+                              {resolvedDestinationUrl || (campaignDestination === "post_engagement"
+                                ? "Post / perfil"
+                                : campaignDestination === "crm_form"
+                                  ? "Webhook CRM"
+                                  : "Destino da campanha")}
+                            </span>
                             <span className="rounded-md bg-white/10 px-2 py-1 text-[9px] font-bold text-white/70">
                               {CTAS.find((item) => item.id === cta)?.label ?? "CTA"}
                             </span>

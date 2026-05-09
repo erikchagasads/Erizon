@@ -96,7 +96,7 @@ type BidStrategyResolution = {
 };
 
 type DestinationResolution = {
-  channel: "website" | "post_engagement" | "whatsapp" | "messenger" | "instagram_direct";
+  channel: "website" | "crm_form" | "post_engagement" | "whatsapp" | "messenger" | "instagram_direct";
   isMessaging: boolean;
   whatsappNumber: string | null;
   openingMessage: string | null;
@@ -209,7 +209,7 @@ function resolveDestination(draft: JsonRecord, client: ClientLaunchRow | null): 
   const destinationConfig = asObject(draft.destinationConfig);
   const rawChannel = asString(destinationConfig.channel, "website").toLowerCase();
   const channel = (
-    ["website", "post_engagement", "whatsapp", "messenger", "instagram_direct"].includes(rawChannel)
+    ["website", "crm_form", "post_engagement", "whatsapp", "messenger", "instagram_direct"].includes(rawChannel)
       ? rawChannel
       : "website"
   ) as DestinationResolution["channel"];
