@@ -1287,7 +1287,27 @@ async function createMetaLeadForm(params: {
   privacyPolicyUrl: string;
   whatsappNumber: string | null;
   openingMessage: string | null;
+  destinationUrl?: string | null;
 }): Promise<MetaPostResult> {
+  // Determina a URL de redirect pós-conversão (obrigatória pela Meta: FollowUpActionURL)
+  let followUpUrl: string;
+  let thankYouButtonText = "Saiba mais";
+
+  if (params.whatsappNumber) {
+    const digits = params.whatsappNumber.replace(/\D/g, "");
+    const message = params.openingMessage?.trim() ||
+      "OlÃ¡! Vi seu anÃºncio e tenho interesse. Pode me passar mais informaÃ§Ãµes?";
+    followUpUrl = `https://wa.me/55${digits}?text=${encodeURIComponent(params.openingMessage?.trim() || "Ola! Vi seu anuncio e tenho interesse. Pode me passar mais informacoes?")}`;
+    thankYouButtonText = "Falar no WhatsApp";
+  } else {
+    // Prefere a URL destino da campanha; fallback para privacy policy.
+    followUpUrl =
+      params.destinationUrl ||
+      params.privacyPolicyUrl ||
+      "https://erizonai.com.br";
+    thankYouButtonText = "Saiba mais";
+  }
+
   const fields: Record<string, string> = {
     name: `${params.campaignName} | Form`,
     questions: JSON.stringify([
@@ -1299,22 +1319,14 @@ async function createMetaLeadForm(params: {
       url: params.privacyPolicyUrl,
       link_text: "Politica de Privacidade",
     }),
-  };
-
-  if (params.whatsappNumber) {
-    const digits = params.whatsappNumber.replace(/\D/g, "");
-    const message = params.openingMessage?.trim() ||
-      "Olá! Vi seu anúncio e tenho interesse. Pode me passar mais informações?";
-    const waUrl = `https://wa.me/55${digits}?text=${encodeURIComponent(message)}`;
-
-    fields.thank_you_action = JSON.stringify({
+    follow_up_action_url: followUpUrl,
+    thank_you_action: JSON.stringify({
       type: "VIEW_WEBSITE",
-      url: waUrl,
-      button_text: "Falar no WhatsApp",
-    });
-  }
-
-  fields.access_token = params.accessToken;
+      url: followUpUrl,
+      button_text: thankYouButtonText,
+    }),
+    access_token: params.accessToken,
+  };
 
   return postMetaForm(
     `${params.pageId}/leadgen_forms`,
@@ -1554,6 +1566,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       whatsappNumber: destination.whatsappNumber ??
         client?.whatsapp ?? null,
       openingMessage: destination.openingMessage ?? null,
+      destinationUrl: destinationUrl || null,
     });
 
     if (createdLeadForm.ok === false) {

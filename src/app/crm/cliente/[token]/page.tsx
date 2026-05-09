@@ -68,7 +68,7 @@ export default function CRMClientePage() {
   const fetchLeads = useCallback(async () => {
     const res = await fetch(`/api/crm-cliente/${token}/leads`);
     if (res.status === 401) {
-      router.replace(`/login/${token}`);
+      router.replace(`/crm/cliente/login/${token}`);
       return;
     }
     if (!res.ok) {
@@ -125,7 +125,7 @@ export default function CRMClientePage() {
   // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function handleLogout() {
     await fetch("/api/crm-cliente/auth/logout", { method: "POST" });
-    router.replace(`/login/${token}`);
+    router.replace(`/crm/cliente/login/${token}`);
   }
 
   // â”€â”€ Métricas rápidas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

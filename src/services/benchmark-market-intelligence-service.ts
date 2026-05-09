@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
+import { BENCHMARKS_SETOR } from "@/app/lib/benchmarkSetor";
 import {
   NETWORK_INTELLIGENCE_MIN_CAMPAIGNS,
   NETWORK_INTELLIGENCE_MIN_WORKSPACES,
@@ -490,7 +491,42 @@ export class BenchmarkMarketIntelligenceService {
   }): Promise<MarketBenchmark | null> {
     const market = await this.getMarketBenchmark({ ...params, allowFallback: false });
     if (market) return market;
-    return this.getNetworkBenchmarkForNiche(params.niche, params.platform ?? "meta", params.country ?? "BR");
+    const network = await this.getNetworkBenchmarkForNiche(
+      params.niche,
+      params.platform ?? "meta",
+      params.country ?? "BR"
+    );
+    if (network) return network;
+
+    return this.getStaticFallbackBenchmark(params.niche, params.platform ?? "meta");
+  }
+
+  private getStaticFallbackBenchmark(niche: string, platform: string): MarketBenchmark {
+    const normalized = (niche || "geral").toLowerCase().replace(/\s+/g, "_");
+    const fallbackKey = (normalized in BENCHMARKS_SETOR ? normalized : "geral") as keyof typeof BENCHMARKS_SETOR;
+    const benchmark = BENCHMARKS_SETOR[fallbackKey];
+
+    return {
+      niche: normalized || "geral",
+      campaignType: "all",
+      platform,
+      country: "BR",
+      periodStart: "2024-01-01",
+      periodEnd: "2024-12-31",
+      sampleSize: null,
+      confidence: 0.60,
+      sourceName: "Referência de mercado curada (WordStream + Meta Business 2024)",
+      sourceUrl: null,
+      sourceNote: "Benchmark público de referência para Brasil 2024. Atualiza automaticamente conforme dados reais da rede Erizon acumulam.",
+      metrics: {
+        cpl: { p25: benchmark.cpl.p25, p50: benchmark.cpl.p50, p75: benchmark.cpl.p75, unit: "BRL" },
+        roas: { p25: benchmark.roas.p25, p50: benchmark.roas.p50, p75: benchmark.roas.p75, unit: "x" },
+        ctr: { p25: benchmark.ctr.p25, p50: benchmark.ctr.p50, p75: benchmark.ctr.p75, unit: "%" },
+        cpm: { p25: benchmark.cpm.p25, p50: benchmark.cpm.p50, p75: benchmark.cpm.p75, unit: "BRL" },
+        cpc: { p25: null, p50: null, p75: null, unit: "BRL" },
+        frequency: { p25: null, p50: null, p75: null, unit: "x" },
+      },
+    };
   }
 
   private async getNetworkBenchmarkForNiche(niche: string, platform: string, country: string): Promise<MarketBenchmark | null> {

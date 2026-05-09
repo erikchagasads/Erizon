@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   Zap, BarChart3, BarChart2, Users, Users2, Building2,
-  BrainCircuit, Sparkles, Settings, LogOut,
+  Brain, BrainCircuit, Sparkles, Settings, LogOut,
   ShieldAlert, Bot, FileText, Layers,
   Cpu, Globe, GitBranch, Instagram, Activity, Kanban, BookOpen,
   Gift, Key,
@@ -25,7 +25,7 @@ const NAV: NavEntry[] = [
   { href: "/campanhas", icon: Users,     label: "Campanhas"  },
   { href: "/analytics", icon: BarChart3, label: "Analytics"  },
   { href: "/clientes",  icon: Building2, label: "Clientes"   },
-  { href: "/crm",       icon: Kanban,    label: "CRM"        },
+  { href: "/crm/dashboard", icon: Kanban, label: "CRM" },
 
   null,
 
@@ -47,6 +47,7 @@ const NAV: NavEntry[] = [
     items: [
       { href: "/copiloto",      icon: Bot,       label: "Copiloto AI"      },
       { href: "/creative-lab",  icon: Sparkles,  label: "Creative Lab"     },
+      { href: "/neuro-score",   icon: Brain,     label: "Neuro Score IA"   },
       { href: "/funil-publico", icon: Users,     label: "Funil de Público" },
       { href: "/benchmarks",    icon: BarChart2, label: "Benchmarks"       },
     ],

@@ -41,6 +41,10 @@
       "schedule": "0 1 * * *"
     },
     {
+      "path": "/api/cron/neuro-learn",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/autopilot/run",
       "schedule": "0 6 * * *"
     },

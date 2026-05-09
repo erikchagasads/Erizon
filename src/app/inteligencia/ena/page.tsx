@@ -340,6 +340,26 @@ export default function ENAPage() {
 
   if (loading) return <SkeletonPage cols={3} />;
 
+  const hasAnyData = ireData || predictiveRoas || attribution || trackRecord;
+
+  if (!hasAnyData) {
+    return (
+      <div className="flex min-h-screen bg-[#0a0a0a] text-white">
+        <Sidebar />
+        <main className="flex-1 ml-0 md:ml-24 px-10 py-20 flex flex-col items-center justify-center gap-4 text-center">
+          <Brain size={32} className="text-purple-400/40" />
+          <h2 className="text-xl font-bold text-white/60">ENA ainda está calculando</h2>
+          <p className="text-sm text-white/25 max-w-md">
+            Sincronize campanhas reais do Meta Ads e aguarde o primeiro ciclo de cálculo. Os dados aparecem automaticamente após a primeira sincronização.
+          </p>
+          <a href="/campanhas" className="mt-2 px-5 py-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-300 text-sm font-semibold hover:bg-purple-500/20 transition-all">
+            Ir para Campanhas →
+          </a>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <PlanGate minPlan="pro" feature="ENA · Atribuição" preview>
       <div className="flex min-h-screen bg-gradient-to-b from-[#0a0a0a] via-[#0b0b0d] to-[#0a0a0a] text-white">
@@ -378,12 +398,27 @@ export default function ENAPage() {
 
         {/* Attribution Funnel + Waste */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
-          {attribution && <AttributionFunnel data={attribution} />}
-          {ireData?.latest && <WasteBreakdownPanel ire={ireData.latest} />}
+          {attribution
+            ? <AttributionFunnel data={attribution} />
+            : <div className="p-6 rounded-[24px] border border-white/[0.05] bg-white/[0.02] flex items-center justify-center min-h-[140px]">
+                <p className="text-[12px] text-white/20">Funil de atribuição — aguardando touchpoints</p>
+              </div>
+          }
+          {ireData?.latest
+            ? <WasteBreakdownPanel ire={ireData.latest} />
+            : <div className="p-6 rounded-[24px] border border-white/[0.05] bg-white/[0.02] flex items-center justify-center min-h-[140px]">
+                <p className="text-[12px] text-white/20">Análise de desperdício — sem dados ainda</p>
+              </div>
+          }
         </div>
 
         {/* Track Record */}
-        {trackRecord && <TrackRecordPanel data={trackRecord} />}
+        {trackRecord
+          ? <TrackRecordPanel data={trackRecord} />
+          : <div className="p-6 rounded-[24px] border border-white/[0.05] bg-white/[0.02] flex items-center justify-center min-h-[100px]">
+              <p className="text-[12px] text-white/20">Track Record — nenhuma decisão registrada ainda</p>
+            </div>
+        }
 
         {/* IRE Histórico sparkline */}
         {ireData?.history && ireData.history.length > 1 && (

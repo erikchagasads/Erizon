@@ -54,7 +54,7 @@ export interface RelatorioComparativo {
 // ─── Benchmarks por setor (dados reais agregados 2024) ───────────────────────
 // CPL em R$ (convertido de USD com fator ~5.2), ROAS adimensional, CTR em %
 
-const BENCHMARKS_SETOR: Record<Setor, BenchmarkSetor> = {
+export const BENCHMARKS_SETOR: Record<Setor, BenchmarkSetor> = {
   ecommerce: {
     setor: "ecommerce", label: "E-commerce",
     cpl:  { p25: 18,  p50: 35,  p75: 65,  referencia: "WordStream 2024" },

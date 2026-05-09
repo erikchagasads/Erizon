@@ -158,19 +158,31 @@ function StatusIcon({ status, inverse = false }: { status: Status; inverse?: boo
 }
 
 function BenchmarkConfidenceBadge({ benchmark }: { benchmark: MarketBenchmark | null | undefined }) {
+  if (!benchmark) {
+    return (
+      <span className="text-[10px] text-white/20 uppercase tracking-widest">
+        Sem referência de mercado
+      </span>
+    );
+  }
+  if (benchmark.sourceName.toLowerCase().includes("referência de mercado curada") || benchmark.sourceName.toLowerCase().includes("referencia de mercado curada")) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-violet-400/25 bg-violet-400/10 px-2.5 py-1 text-[10px] font-semibold text-violet-200">
+        Referência de mercado curada
+      </span>
+    );
+  }
   const sampleSize = Number.isFinite(benchmark?.sampleSize) ? Number(benchmark?.sampleSize) : null;
   const sampleLabel = sampleSize !== null ? `${sampleSize} ${sampleSize === 1 ? "conta" : "contas"}` : null;
   const confidence = Number.isFinite(benchmark?.confidence) ? Number(benchmark?.confidence) : 0;
   const sourceNote = benchmark?.sourceNote ?? "";
   const reducedByNote = sourceNote.toLowerCase().includes("amostra reduzida");
-  const isReduced = !benchmark || reducedByNote || confidence < 0.72 || (sampleSize !== null && sampleSize < 8);
-  const isHigh = Boolean(benchmark) && !isReduced && confidence >= 0.82;
+  const isReduced = reducedByNote || confidence < 0.72 || (sampleSize !== null && sampleSize < 8);
+  const isHigh = !isReduced && confidence >= 0.82;
   const label = isReduced
     ? `Amostra reduzida${sampleLabel ? ` (${sampleLabel})` : ""}`
     : `${isHigh ? "Alta confianca" : "Confianca media"}${sampleLabel ? ` (${sampleLabel})` : ""}`;
-  const description = benchmark
-    ? `${Math.round(confidence * 100)}% de confianca${sourceNote ? ` | ${sourceNote}` : ""}`
-    : "Sem base global suficiente para este nicho";
+  const description = `${Math.round(confidence * 100)}% de confianca${sourceNote ? ` | ${sourceNote}` : ""}`;
 
   return (
     <span
@@ -752,6 +764,14 @@ export default function BenchmarksPage() {
                   </div>
                 )}
               </section>
+
+              {campaigns.length === 0 && (
+                <div className="mt-6 p-5 rounded-[20px] border border-amber-500/15 bg-amber-500/[0.03]">
+                  <p className="text-[12px] text-amber-300/60">
+                    Sincronize suas campanhas do Meta Ads para ver sua posição relativa ao mercado. Os benchmarks de referência já estão disponíveis.
+                  </p>
+                </div>
+              )}
 
               {benchmarkGroups.length > 0 && (
                 <section className="space-y-4">
