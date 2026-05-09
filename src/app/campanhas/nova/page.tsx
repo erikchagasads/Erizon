@@ -636,7 +636,9 @@ export default function NovaPage() {
           { messageTemplate: messageOpeningText, appendAdReference: crmAppendAdReference }
         )
       : destinationUrl.trim();
-  const requiresPixelForObjective = objetivo === "SALES" || (objetivo === "LEADS" && !messagingCampaign);
+  const requiresPixelForObjective =
+    objetivo === "SALES" ||
+    (objetivo === "LEADS" && !messagingCampaign && campaignDestination !== "crm_form");
 
   useEffect(() => {
     if (loadingClientes) return;
@@ -900,7 +902,7 @@ export default function NovaPage() {
       advantagePlacements || selectedPlacements.length >= 3,
       Boolean(primaryText.trim()),
       Boolean(headline.trim()),
-      campaignDestination === "post_engagement"
+      campaignDestination === "post_engagement" || campaignDestination === "crm_form"
         ? true
         : Boolean(resolvedDestinationUrl),
       creativeSource === "instagram_existing_post"
@@ -2373,6 +2375,11 @@ export default function NovaPage() {
                             <p className="mt-1 text-[10px] leading-relaxed text-sky-100/55">
                               O link inclui UTMs da Meta e envia o lead para o CRM, com redirecionamento para o WhatsApp.
                             </p>
+                            {campaignDestination === "crm_form" && objetivo === "LEADS" && (
+                              <p className="mt-1 text-[10px] text-purple-300/70">
+                                Formulário nativo Meta — nenhuma URL necessária. Os leads chegam direto no CRM via webhook.
+                              </p>
+                            )}
                           </div>
                         ) : campaignDestination === "post_engagement" ? (
                           <div className="rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3 text-[11px] leading-relaxed text-white/42">
