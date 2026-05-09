@@ -327,10 +327,14 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
-    const signatureHeader = req.headers.get("x-hub-signature-256");
+    const expected = `sha256=${crypto
+      .createHmac("sha256", process.env.META_APP_SECRET!)
+      .update(rawBody)
+      .digest("hex")}`;
+    const signature = req.headers.get("x-hub-signature-256") ?? "";
 
-    if (!verifyMetaSignature(rawBody, signatureHeader)) {
-      return NextResponse.json({ ok: false, error: "Assinatura invalida." }, { status: 401 });
+    if (signature !== expected) {
+      return new Response("Forbidden", { status: 403 });
     }
 
     let payload: MetaLeadWebhookPayload;
