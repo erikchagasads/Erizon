@@ -853,11 +853,15 @@ async function buildTargeting(
   const warnings: string[] = [];
   const { geo, warnings: geoWarnings } = await resolveGeoLocations(accessToken, locations);
   warnings.push(...geoWarnings);
+  const advantageAudienceEnabled = placements.advantagePlus !== false;
 
   const targeting: JsonRecord = {
     geo_locations: geo,
     age_min: Math.max(18, asNumber(audience.ageMin) ?? 18),
     age_max: Math.min(65, asNumber(audience.ageMax) ?? 65),
+    targeting_automation: {
+      advantage_audience: advantageAudienceEnabled ? 1 : 0,
+    },
     ...mapPlacementTargeting(placements, destination),
   };
 
