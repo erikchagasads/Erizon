@@ -280,6 +280,7 @@ function metaErrorMessage(data: JsonRecord, fallback = "Erro ao publicar no Meta
   if (!error) return fallback;
 
   const code = Number(error.code);
+  const subcode = Number(error.error_subcode);
   const message = String(error.message ?? fallback);
   const userTitle = asString(error.error_user_title);
   const userMessage = asString(error.error_user_msg);
@@ -293,6 +294,12 @@ function metaErrorMessage(data: JsonRecord, fallback = "Erro ao publicar no Meta
 
   if (code === 190) return "Token do Meta expirado. Atualize a integracao antes de publicar.";
   if (code === 200 || code === 294) return "Permissao insuficiente. O token precisa de ads_management e acesso a Page/conta de anuncios.";
+  if (
+    subcode === 1885183 ||
+    /created by an app that is in development mode/i.test(`${message} ${userTitle} ${userMessage}`)
+  ) {
+    return "Meta recusou o setup: o app de integracao ainda esta em modo desenvolvimento. Coloque o app em modo publico (Live) no Meta for Developers, gere um novo token e reconecte a integracao da Erizon. Enquanto isso, voce so consegue promover posts existentes criados fora desse app.";
+  }
   if (code === 100) {
     const detail = [userTitle, userMessage].filter(Boolean).join(" — ");
     return `Meta recusou o setup: ${detail || message}.${blameText}`.trim();
@@ -887,6 +894,7 @@ function buildAdSetFields(params: {
   metaObjective: string;
   pageId: string;
   pixelId: string | null;
+  leadFormId?: string;
   targeting: JsonRecord;
   status: "ACTIVE" | "PAUSED";
   destination: DestinationResolution;
@@ -937,21 +945,32 @@ function buildAdSetFields(params: {
     promotedObject = { pixel_id: params.pixelId, custom_event_type: "PURCHASE" };
     destinationType = "WEBSITE";
   } else if (params.metaObjective === "OUTCOME_LEADS") {
-    if (!params.pixelId) {
-      return {
-        ok: false,
-        error: "Para publicar campanhas de leads pela Erizon, informe um Pixel Meta no cliente. Fluxos de formulario instantaneo e WhatsApp ainda nao estao automatizados.",
-      };
+    if (params.destination.channel === "crm_form") {
+      if (!params.leadFormId) {
+        return {
+          ok: false,
+          error: "Nao foi possivel identificar o formulario de Lead Ads para essa campanha.",
+        };
+      }
+      optimizationGoal = "LEAD_GENERATION";
+      promotedObject = { page_id: params.pageId, leadgen_form_id: params.leadFormId };
+    } else {
+      if (!params.pixelId) {
+        return {
+          ok: false,
+          error: "Para publicar campanhas de leads pela Erizon, informe um Pixel Meta no cliente. Fluxos de formulario instantaneo e WhatsApp ainda nao estao automatizados.",
+        };
+      }
+      if (!destinationUrl) {
+        return {
+          ok: false,
+          error: "Informe a URL destino do anuncio antes de publicar a campanha de leads.",
+        };
+      }
+      optimizationGoal = "OFFSITE_CONVERSIONS";
+      promotedObject = { pixel_id: params.pixelId, custom_event_type: "LEAD" };
+      destinationType = "WEBSITE";
     }
-    if (!destinationUrl) {
-      return {
-        ok: false,
-        error: "Informe a URL destino do anuncio antes de publicar a campanha de leads.",
-      };
-    }
-    optimizationGoal = "OFFSITE_CONVERSIONS";
-    promotedObject = { pixel_id: params.pixelId, custom_event_type: "LEAD" };
-    destinationType = "WEBSITE";
   } else if (params.metaObjective === "OUTCOME_AWARENESS") {
     optimizationGoal = "REACH";
   } else if (params.metaObjective === "OUTCOME_ENGAGEMENT") {
@@ -1181,6 +1200,31 @@ async function createMetaAdCreative(params: {
   );
 }
 
+async function createMetaLeadForm(params: {
+  pageId: string;
+  accessToken: string;
+  campaignName: string;
+  privacyPolicyUrl: string;
+}): Promise<MetaPostResult> {
+  return postMetaForm(
+    `${params.pageId}/leadgen_forms`,
+    {
+      name: `${params.campaignName} | Form`,
+      questions: JSON.stringify([
+        { type: "FULL_NAME" },
+        { type: "EMAIL" },
+        { type: "PHONE" },
+      ]),
+      privacy_policy: JSON.stringify({
+        url: params.privacyPolicyUrl,
+        link_text: "Politica de Privacidade",
+      }),
+      access_token: params.accessToken,
+    },
+    "Erro ao criar formulario de lead no Meta."
+  );
+}
+
 async function createMetaAd(params: {
   accountId: string;
   accessToken: string;
@@ -1333,6 +1377,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
   if (
     ["OUTCOME_LEADS", "OUTCOME_SALES", "OUTCOME_TRAFFIC"].includes(metaObjective) &&
     !destination.isMessaging &&
+    destination.channel !== "crm_form" &&
     !destinationUrl
   ) {
     const message = "Informe a URL destino do anuncio antes de publicar no Meta.";
@@ -1396,6 +1441,30 @@ export async function POST(req: NextRequest, context: RouteContext) {
   partial.campaignRaw = createdCampaign.raw;
   (partial.steps as unknown[]).push("campaign_created");
 
+  let leadFormId: string | undefined;
+  if (destination.channel === "crm_form") {
+    const destinationConfig = asObject(draft.destinationConfig);
+    const privacyPolicyUrl =
+      normalizeUrl(destinationConfig.privacyPolicyUrl ?? draft.urlDestino) ||
+      "https://erizon.com.br/privacidade";
+
+    const createdLeadForm = await createMetaLeadForm({
+      pageId: page.pageId,
+      accessToken: credentials.accessToken,
+      campaignName,
+      privacyPolicyUrl,
+    });
+
+    if (createdLeadForm.ok === false) {
+      await recordPublishError(db, id, auth.user.id, createdLeadForm.error, partial);
+      return NextResponse.json({ error: createdLeadForm.error, metaResult: createdLeadForm.raw }, { status: 400 });
+    }
+
+    leadFormId = createdLeadForm.id;
+    partial.leadFormId = createdLeadForm.id;
+    partial.leadFormRaw = createdLeadForm.raw;
+  }
+
   const targeting = await buildTargeting(credentials.accessToken, draft, destination);
   partial.targeting = targeting.targeting;
   partial.warnings = targeting.warnings;
@@ -1408,6 +1477,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     metaObjective,
     pageId: page.pageId,
     pixelId,
+    leadFormId,
     targeting: targeting.targeting,
     status: metaStatus,
     destination,
