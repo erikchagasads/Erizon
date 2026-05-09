@@ -20,6 +20,13 @@ type DraftPayload = {
   publicoCustom?: boolean;
   metaCpl?: number | string | null;
   plataforma?: string;
+  audience?: Record<string, unknown>;
+  placements?: Record<string, unknown>;
+  criativo?: Record<string, unknown>;
+  destinationConfig?: Record<string, unknown>;
+  tracking?: Record<string, unknown>;
+  urlDestino?: string;
+  launchPackageVersion?: number;
 };
 
 const VALID_PLATFORMS = new Set(["meta", "google", "tiktok", "linkedin"]);
