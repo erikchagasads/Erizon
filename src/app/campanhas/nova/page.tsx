@@ -573,6 +573,9 @@ export default function NovaPage() {
   const [objetivo, setObjetivo] = useState("LEADS");
   const [campaignDestination, setCampaignDestination] = useState<CampaignDestination>("website");
   const [orcamento, setOrcamento] = useState("");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataTermino, setDataTermino] = useState("");
+  const [budgetMode, setBudgetMode] = useState<"daily" | "total">("daily");
   const [metaCpl, setMetaCpl] = useState("");
   const [audiencia, setAudiencia] = useState("");
 
@@ -982,6 +985,9 @@ export default function NovaPage() {
     setObjetivo(draft.objetivo || suggestion.objective || "LEADS");
     setCampaignDestination((draft.objetivo || suggestion.objective || "LEADS") === "ENGAGEMENT" ? "post_engagement" : "website");
     setOrcamento(String(draft.orcamentoDiario || suggestion.dailyBudget || ""));
+    setBudgetMode("daily");
+    setDataInicio("");
+    setDataTermino("");
     setAudiencia(draft.audienciaSize ? String(Math.round(draft.audienciaSize / 1000)) : "");
     setFormato(draft.formato || suggestion.format || "video");
     setTemCTA(draft.temCTA ?? true);
@@ -1050,6 +1056,12 @@ export default function NovaPage() {
     setLocations(asStringArray(audience.locations).join(", ") || "Brasil");
     setAgeMin(asInputValue(audience.ageMin || 24));
     setAgeMax(asInputValue(audience.ageMax || 55));
+    setBudgetMode(asString(payload.budgetMode, "daily") as "daily" | "total");
+    setDataInicio(asString(payload.dataInicio));
+    setDataTermino(asString(payload.dataTermino));
+    if (payload.budgetMode === "total" && payload.orcamentoTotal) {
+      setOrcamento(asInputValue(payload.orcamentoTotal));
+    }
     setGender(asString(audience.gender, "all") as Gender);
     setInterests(asStringArray(audience.interests).join("\n"));
     setExclusions(asStringArray(audience.exclusions).join("\n"));
@@ -1209,7 +1221,12 @@ export default function NovaPage() {
       campaignName,
       objetivo,
       plataforma: "meta",
-      orcamentoDiario: parseNumber(orcamento),
+      orcamentoDiario: budgetDaily,
+      orcamentoTotal: budgetMode === "total" ? budgetRaw : undefined,
+      budgetMode,
+      dataInicio: dataInicio || undefined,
+      dataTermino: dataTermino || undefined,
+      campanhasDias: campanhasDias ?? undefined,
       audienciaSize: audienceSize && Number.isFinite(audienceSize) ? audienceSize : undefined,
       audience: {
         mode: audienceMode,
@@ -1510,7 +1527,26 @@ export default function NovaPage() {
     }
   }
 
-  const budgetDaily = parseNumber(orcamento) ?? 0;
+  const budgetRaw = parseNumber(orcamento) ?? 0;
+
+  const campanhasDias = useMemo(() => {
+    if (!dataInicio || !dataTermino) return null;
+    const start = new Date(dataInicio);
+    const end = new Date(dataTermino);
+    const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : null;
+  }, [dataInicio, dataTermino]);
+
+  const budgetDaily = budgetMode === "total" && campanhasDias
+    ? Math.round(budgetRaw / campanhasDias)
+    : budgetRaw;
+
+  const budgetTotal = budgetMode === "total"
+    ? budgetRaw
+    : campanhasDias
+      ? budgetRaw * campanhasDias
+      : budgetRaw * 7;
+
   const weeklyBudget = budgetDaily * 7;
   const uploadedOrSelectedFile = creativeSource === "instagram_existing_post"
     ? (selectedInstagramPost ? {
@@ -1552,7 +1588,14 @@ export default function NovaPage() {
             <div className="grid grid-cols-3 gap-2 sm:w-[420px]">
               {[
                 { label: "Setup", value: `${setupCompleteness}%` },
-                { label: "Budget 7d", value: weeklyBudget ? `R$ ${weeklyBudget.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}` : "-" },
+                {
+                  label: campanhasDias ? "Budget total" : "Budget 7d",
+                  value: campanhasDias
+                    ? `R$ ${budgetTotal.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`
+                    : weeklyBudget
+                      ? `R$ ${weeklyBudget.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`
+                      : "-",
+                },
                 { label: "Criativo", value: uploadedOrSelectedFile ? "OK" : "-" },
               ].map((item) => (
                 <div key={item.label} className="rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2">
@@ -1685,15 +1728,87 @@ export default function NovaPage() {
                       </div>
                     </div>
 
-                    <div>
-                      <FieldLabel>Orcamento diario (R$)</FieldLabel>
-                      <input
-                        type="number"
-                        value={orcamento}
-                        onChange={(event) => setOrcamento(event.target.value)}
-                        placeholder="100"
-                        className={inputClass}
-                      />
+                    <div className="lg:col-span-2">
+                      <div className="mb-3 flex items-center gap-2">
+                        <FieldLabel>Orcamento</FieldLabel>
+                        <div className="flex rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5">
+                          {(["daily", "total"] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => setBudgetMode(mode)}
+                              className={`rounded-md px-3 py-1 text-[10px] font-semibold transition-colors ${
+                                budgetMode === mode
+                                  ? "bg-purple-500/30 text-purple-200"
+                                  : "text-white/40 hover:text-white/60"
+                              }`}
+                            >
+                              {mode === "daily" ? "Diario" : "Total"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div>
+                          <FieldLabel>
+                            {budgetMode === "daily" ? "Valor diario (R$)" : "Valor total (R$)"}
+                          </FieldLabel>
+                          <input
+                            type="number"
+                            value={orcamento}
+                            onChange={(event) => setOrcamento(event.target.value)}
+                            placeholder={budgetMode === "daily" ? "100" : "2100"}
+                            className={inputClass}
+                          />
+                        </div>
+
+                        <div>
+                          <FieldLabel>Data de inicio</FieldLabel>
+                          <input
+                            type="date"
+                            value={dataInicio}
+                            onChange={(event) => setDataInicio(event.target.value)}
+                            min={new Date().toISOString().split("T")[0]}
+                            className={inputClass}
+                          />
+                        </div>
+
+                        <div>
+                          <FieldLabel>Data de termino</FieldLabel>
+                          <input
+                            type="date"
+                            value={dataTermino}
+                            onChange={(event) => setDataTermino(event.target.value)}
+                            min={dataInicio || new Date().toISOString().split("T")[0]}
+                            className={inputClass}
+                          />
+                        </div>
+                      </div>
+
+                      {budgetRaw > 0 && (
+                        <div className="mt-2.5 flex flex-wrap gap-3">
+                          {campanhasDias && (
+                            <p className="text-[10px] text-white/38">
+                              Duracao: <span className="font-medium text-white/60">{campanhasDias} dias</span>
+                            </p>
+                          )}
+                          {budgetMode === "total" && campanhasDias && (
+                            <p className="text-[10px] text-white/38">
+                              Equivale a <span className="font-medium text-white/60">
+                                R$ {budgetDaily.toLocaleString("pt-BR")}/dia
+                              </span>
+                            </p>
+                          )}
+                          {budgetMode === "daily" && campanhasDias && (
+                            <p className="text-[10px] text-white/38">
+                              Total previsto: <span className="font-medium text-white/60">
+                                R$ {budgetTotal.toLocaleString("pt-BR")}
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div>

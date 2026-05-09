@@ -10,7 +10,7 @@ import { WL_COOKIE } from "@/lib/white-label";
 const ROTAS_PUBLICAS = [
   "/share", "/", "/login", "/register", "/signup",
   "/billing", "/blog", "/sobre", "/privacidade", "/termos",
-  "/api", "/_next", "/lp", "/admin", "/crm/cliente",
+  "/api", "/_next", "/lp", "/admin", "/crm/cliente", "/crm/agencia",
 ];
 
 // Rotas que clientes white label podem ver
@@ -153,6 +153,7 @@ export async function middleware(request: NextRequest) {
   const ROTAS_SEM_BILLING = [
     "/billing", "/settings", "/onboarding", "/sucesso",
     "/api/billing", "/api/agente",
+    "/crm", "/crm/dashboard", "/crm/agencia",
   ];
   const passaSemBilling = ROTAS_SEM_BILLING.some(
     r => pathname === r || pathname.startsWith(r + "/")
