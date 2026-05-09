@@ -849,6 +849,86 @@ function mapPlacementTargeting(placements: JsonRecord, destination: DestinationR
   return targeting;
 }
 
+async function inferAudienceInterests(params: {
+  accessToken: string;
+  draft: JsonRecord;
+  campaignName: string;
+  client: ClientLaunchRow | null;
+}): Promise<string[]> {
+  const audience = asObject(params.draft.audience);
+  const existing = asStringArray(audience.interests);
+
+  if (existing.length > 0) return existing;
+
+  const mode = asString(audience.mode, "broad");
+  if (mode !== "ai" && mode !== "broad") return [];
+
+  if (!asString(params.accessToken)) return [];
+
+  const anthropicApiKey = asString(process.env.ANTHROPIC_API_KEY);
+  if (!anthropicApiKey) return [];
+
+  const clientName = asString(params.client?.nome_cliente ?? params.client?.nome);
+  const objetivo = asString(params.draft.objetivo, "LEADS");
+  const locations = asStringArray(audience.locations).join(", ") || "Brasil";
+  const ageMin = asNumber(audience.ageMin) ?? 25;
+  const ageMax = asNumber(audience.ageMax) ?? 55;
+  const gender = asString(audience.gender, "all");
+
+  const prompt = `Você é especialista em Meta Ads no Brasil.
+Com base nos dados abaixo, retorne APENAS um JSON array com
+5 a 8 strings de interesses reais do Meta Ads, específicos
+e pesquisáveis via API de targeting do Meta.
+Não inclua explicações. Apenas o JSON array.
+
+Campanha: ${params.campaignName}
+Cliente: ${clientName || "não informado"}
+Objetivo: ${objetivo}
+Localização: ${locations}
+Idade: ${ageMin} a ${ageMax}
+Gênero: ${gender}
+
+Exemplo de saída:
+["Empreendedorismo", "Marketing Digital", "Gestão de negócios"]`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": anthropicApiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 300,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+    };
+
+    const text = data.content?.find((block) => block.type === "text")?.text ?? "";
+    const match = text.match(/\[[\s\S]*?\]/);
+    if (!match) return [];
+
+    const parsed = JSON.parse(match[0]) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 8);
+  } catch (error) {
+    console.error("[publish] Falha ao inferir interesses via IA:", error);
+    return [];
+  }
+}
+
 async function buildTargeting(
   accessToken: string,
   draft: JsonRecord,
@@ -1205,22 +1285,40 @@ async function createMetaLeadForm(params: {
   accessToken: string;
   campaignName: string;
   privacyPolicyUrl: string;
+  whatsappNumber: string | null;
+  openingMessage: string | null;
 }): Promise<MetaPostResult> {
+  const fields: Record<string, string> = {
+    name: `${params.campaignName} | Form`,
+    questions: JSON.stringify([
+      { type: "FULL_NAME" },
+      { type: "EMAIL" },
+      { type: "PHONE" },
+    ]),
+    privacy_policy: JSON.stringify({
+      url: params.privacyPolicyUrl,
+      link_text: "Politica de Privacidade",
+    }),
+  };
+
+  if (params.whatsappNumber) {
+    const digits = params.whatsappNumber.replace(/\D/g, "");
+    const message = params.openingMessage?.trim() ||
+      "Olá! Vi seu anúncio e tenho interesse. Pode me passar mais informações?";
+    const waUrl = `https://wa.me/55${digits}?text=${encodeURIComponent(message)}`;
+
+    fields.thank_you_action = JSON.stringify({
+      type: "VIEW_WEBSITE",
+      url: waUrl,
+      button_text: "Falar no WhatsApp",
+    });
+  }
+
+  fields.access_token = params.accessToken;
+
   return postMetaForm(
     `${params.pageId}/leadgen_forms`,
-    {
-      name: `${params.campaignName} | Form`,
-      questions: JSON.stringify([
-        { type: "FULL_NAME" },
-        { type: "EMAIL" },
-        { type: "PHONE" },
-      ]),
-      privacy_policy: JSON.stringify({
-        url: params.privacyPolicyUrl,
-        link_text: "Politica de Privacidade",
-      }),
-      access_token: params.accessToken,
-    },
+    fields,
     "Erro ao criar formulario de lead no Meta."
   );
 }
@@ -1453,6 +1551,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
       accessToken: credentials.accessToken,
       campaignName,
       privacyPolicyUrl,
+      whatsappNumber: destination.whatsappNumber ??
+        client?.whatsapp ?? null,
+      openingMessage: destination.openingMessage ?? null,
     });
 
     if (createdLeadForm.ok === false) {
@@ -1465,7 +1566,27 @@ export async function POST(req: NextRequest, context: RouteContext) {
     partial.leadFormRaw = createdLeadForm.raw;
   }
 
-  const targeting = await buildTargeting(credentials.accessToken, draft, destination);
+  const inferredInterests = await inferAudienceInterests({
+    accessToken: credentials.accessToken,
+    draft,
+    campaignName,
+    client,
+  });
+
+  const draftWithAudience: JsonRecord = {
+    ...draft,
+    audience: {
+      ...asObject(draft.audience),
+      interests: inferredInterests.length > 0
+        ? inferredInterests
+        : asStringArray(asObject(draft.audience).interests),
+    },
+  };
+
+  const targeting = await buildTargeting(credentials.accessToken, draftWithAudience, destination);
+  if (inferredInterests.length > 0) {
+    partial.inferredInterests = inferredInterests;
+  }
   partial.targeting = targeting.targeting;
   partial.warnings = targeting.warnings;
 

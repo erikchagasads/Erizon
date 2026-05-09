@@ -1807,32 +1807,46 @@ export default function NovaPage() {
 
                         {campaignDestination === "crm_form" && (
                           <div className="mt-4 space-y-4">
-                            <div className="rounded-xl border border-sky-400/18 bg-sky-400/[0.05] px-4 py-3">
-                              <div className="mb-1.5 flex items-center justify-between gap-3">
-                                <p className="text-[11px] font-semibold text-sky-100/85">Webhook CRM do cliente</p>
-                                <button
-                                  type="button"
-                                  onClick={() => clienteAtual?.id ? void syncCrmWebhookFromClient(clienteAtual.id) : undefined}
-                                  disabled={syncingCrmWebhook || !clienteAtual?.id}
-                                  className="inline-flex items-center gap-1 rounded-full border border-sky-300/18 bg-sky-300/[0.1] px-2.5 py-1 text-[10px] font-semibold text-sky-100/88 transition hover:bg-sky-300/[0.16] disabled:cursor-not-allowed disabled:opacity-55"
-                                >
-                                  {syncingCrmWebhook ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
-                                  Atualizar link
-                                </button>
+                            {objetivo !== "LEADS" && (
+                              <div className="rounded-xl border border-sky-400/18 bg-sky-400/[0.05] px-4 py-3">
+                                <div className="mb-1.5 flex items-center justify-between gap-3">
+                                  <p className="text-[11px] font-semibold text-sky-100/85">Webhook CRM do cliente</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => clienteAtual?.id ? void syncCrmWebhookFromClient(clienteAtual.id) : undefined}
+                                    disabled={syncingCrmWebhook || !clienteAtual?.id}
+                                    className="inline-flex items-center gap-1 rounded-full border border-sky-300/18 bg-sky-300/[0.1] px-2.5 py-1 text-[10px] font-semibold text-sky-100/88 transition hover:bg-sky-300/[0.16] disabled:cursor-not-allowed disabled:opacity-55"
+                                  >
+                                    {syncingCrmWebhook ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                                    Atualizar link
+                                  </button>
+                                </div>
+                                <p className="break-all text-[11px] font-medium text-sky-100/90">
+                                  {crmWebhookBaseUrl || "Selecione um cliente para montar o webhook automaticamente."}
+                                </p>
+                                <p className="mt-1.5 text-[10px] leading-relaxed text-sky-100/62">
+                                  A Erizon usa este link como destino da campanha, com UTMs da Meta e envio direto para o CRM.
+                                </p>
+                                {crmWebhookInfo && !syncingCrmWebhook && (
+                                  <p className="mt-1.5 text-[10px] leading-relaxed text-sky-100/80">{crmWebhookInfo}</p>
+                                )}
+                                {crmWebhookError && !syncingCrmWebhook && (
+                                  <p className="mt-1.5 text-[10px] leading-relaxed text-red-300/85">{crmWebhookError}</p>
+                                )}
                               </div>
-                              <p className="break-all text-[11px] font-medium text-sky-100/90">
-                                {crmWebhookBaseUrl || "Selecione um cliente para montar o webhook automaticamente."}
-                              </p>
-                              <p className="mt-1.5 text-[10px] leading-relaxed text-sky-100/62">
-                                A Erizon usa este link como destino da campanha, com UTMs da Meta e envio direto para o CRM.
-                              </p>
-                              {crmWebhookInfo && !syncingCrmWebhook && (
-                                <p className="mt-1.5 text-[10px] leading-relaxed text-sky-100/80">{crmWebhookInfo}</p>
-                              )}
-                              {crmWebhookError && !syncingCrmWebhook && (
-                                <p className="mt-1.5 text-[10px] leading-relaxed text-red-300/85">{crmWebhookError}</p>
-                              )}
-                            </div>
+                            )}
+
+                            {objetivo === "LEADS" && campaignDestination === "crm_form" && (
+                              <div className="rounded-xl border border-purple-400/18 bg-purple-400/[0.05] px-4 py-3">
+                                <p className="text-[11px] font-semibold text-purple-200/85">
+                                  Formulário nativo Meta Ads
+                                </p>
+                                <p className="mt-1 text-[10px] leading-relaxed text-purple-100/60">
+                                  A Erizon cria o formulário automaticamente no Meta no momento da publicação. Os leads chegam direto no CRM via webhook —
+                                  nenhuma URL de destino necessária.
+                                </p>
+                              </div>
+                            )}
 
                             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                               <div>
@@ -2354,7 +2368,13 @@ export default function NovaPage() {
                       </div>
 
                       <div>
-                        <FieldLabel>{messagingCampaign || campaignDestination === "crm_form" ? "Destino resolvido" : "URL destino"}</FieldLabel>
+                        <FieldLabel>
+                          {campaignDestination === "crm_form" && objetivo === "LEADS"
+                            ? "Destino da campanha"
+                            : messagingCampaign || campaignDestination === "crm_form"
+                              ? "Destino resolvido"
+                              : "URL destino"}
+                        </FieldLabel>
                         {campaignDestination === "website" || !supportsDestinationSelection ? (
                           <div className="relative">
                             <LinkIcon size={13} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/24" />
@@ -2368,19 +2388,27 @@ export default function NovaPage() {
                             </p>
                           </div>
                         ) : campaignDestination === "crm_form" ? (
-                          <div className="rounded-xl border border-sky-400/15 bg-sky-400/[0.05] px-4 py-3">
-                            <p className="break-all text-[12px] font-semibold text-sky-100/88">
-                              {resolvedDestinationUrl || "Selecione um cliente para montar o webhook CRM."}
-                            </p>
-                            <p className="mt-1 text-[10px] leading-relaxed text-sky-100/55">
-                              O link inclui UTMs da Meta e envia o lead para o CRM, com redirecionamento para o WhatsApp.
-                            </p>
-                            {campaignDestination === "crm_form" && objetivo === "LEADS" && (
-                              <p className="mt-1 text-[10px] text-purple-300/70">
-                                Formulário nativo Meta — nenhuma URL necessária. Os leads chegam direto no CRM via webhook.
+                          objetivo === "LEADS" ? (
+                            <div className="rounded-xl border border-purple-400/15 bg-purple-400/[0.05] px-4 py-3">
+                              <p className="text-[12px] font-semibold text-purple-200/88">
+                                Formulário nativo Meta Ads
                               </p>
-                            )}
-                          </div>
+                              <p className="mt-1 text-[10px] leading-relaxed text-purple-100/55">
+                                Formulário criado automaticamente pela Erizon no Meta.
+                                Leads chegam direto no CRM via webhook.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-sky-400/15 bg-sky-400/[0.05] px-4 py-3">
+                              <p className="break-all text-[12px] font-semibold text-sky-100/88">
+                                {resolvedDestinationUrl || "Selecione um cliente para montar o webhook CRM."}
+                              </p>
+                              <p className="mt-1 text-[10px] leading-relaxed text-sky-100/55">
+                                O link inclui UTMs da Meta e envia o lead para o CRM,
+                                com redirecionamento para o WhatsApp.
+                              </p>
+                            </div>
+                          )
                         ) : campaignDestination === "post_engagement" ? (
                           <div className="rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3 text-[11px] leading-relaxed text-white/42">
                             A Meta vai trabalhar o proprio post/perfil como destino principal, sem URL externa obrigatoria.
