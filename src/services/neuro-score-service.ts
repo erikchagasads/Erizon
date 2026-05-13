@@ -1,22 +1,22 @@
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import { createClient } from "@supabase/supabase-js";
 import { TrainingDataService } from "./training-data-service";
 
-let _anthropic: Anthropic | null = null;
+let _groq: Groq | null = null;
 
-function getAnthropic(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+function getGroq(): Groq {
+  const apiKey = process.env.GROQ_API_KEY?.trim();
   if (!apiKey) {
     throw new Error(
-      "ANTHROPIC_API_KEY nao configurado no servidor. Configure a chave da Anthropic no .env.local e nas variaveis da Vercel.",
+      "GROQ_API_KEY nao configurado no servidor. Configure a chave da Groq no .env.local e nas variaveis da Vercel.",
     );
   }
 
-  if (!_anthropic) {
-    _anthropic = new Anthropic({ apiKey });
+  if (!_groq) {
+    _groq = new Groq({ apiKey });
   }
 
-  return _anthropic;
+  return _groq;
 }
 
 const supabaseAdmin = createClient(
@@ -176,20 +176,22 @@ ${input.benchmarkCplP50 ? `Benchmark CPL do nicho (p50): R$${input.benchmarkCplP
 
 Seja preciso e direto. Cada recomendação deve ser cirúrgica e implementável.`;
 
-    const response = await getAnthropic().messages.create({
-      model: "claude-sonnet-4-20250514",
+    const response = await getGroq().chat.completions.create({
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
       max_tokens: 1500,
-      system: systemPrompt,
+      temperature: 0.2,
       messages: [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
         {
           role: "user",
           content: [
             {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: input.imageMimeType,
-                data: input.imageBase64,
+              type: "image_url",
+              image_url: {
+                url: `data:${input.imageMimeType};base64,${input.imageBase64}`,
               },
             },
             { type: "text", text: userMessage },
@@ -198,7 +200,7 @@ Seja preciso e direto. Cada recomendação deve ser cirúrgica e implementável.
       ],
     });
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "";
+    const raw = response.choices[0]?.message?.content ?? "";
     const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()) as {
       neuro_score: number;
       atencao_score: number;
@@ -219,7 +221,9 @@ Seja preciso e direto. Cada recomendação deve ser cirúrgica e implementável.
     };
 
     const tempoMs = Date.now() - t0;
-    const tokensUsados = response.usage.input_tokens + response.usage.output_tokens;
+    const tokensUsados =
+      (response.usage?.prompt_tokens ?? 0) +
+      (response.usage?.completion_tokens ?? 0);
 
     const { data: saved, error: saveErr } = await supabaseAdmin
       .from("neuro_score_analyses")
