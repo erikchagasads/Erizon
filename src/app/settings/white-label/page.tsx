@@ -20,7 +20,7 @@ function isValidHex(s: string) { return /^#[0-9a-fA-F]{6}$/.test(s); }
 function ColorInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   const [raw, setRaw] = useState(value);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Inicializa o preview a partir da configuração carregada.
   useEffect(() => setRaw(value), [value]);
 
   return (

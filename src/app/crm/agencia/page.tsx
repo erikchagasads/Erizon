@@ -33,6 +33,10 @@ interface CampanhaAds {
 
 const WHATSAPP_NUMBER = "5519992078842";
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 export default function SalaDeControle() {
   const [aba, setAba] = useState<"corretores" | "vinculos">("corretores");
   const [corretores, setCorretores] = useState<Corretor[]>([]);
@@ -58,8 +62,10 @@ export default function SalaDeControle() {
   async function carregarCampanhas() {
     const res = await fetch("/api/relatorio-pdf");
     const json = await res.json();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const camps: CampanhaAds[] = (json.relatorio?.campanhas ?? []).map((c: any) => ({
+    const relatorio = json && typeof json === "object" && "relatorio" in json
+      ? (json as { relatorio?: { campanhas?: unknown } }).relatorio
+      : undefined;
+    const camps: CampanhaAds[] = asArray<Record<string, unknown>>(relatorio?.campanhas).map((c) => ({
       id: String(c.id ?? ""),
       nome_campanha: String(c.nome ?? "—"),
       status: String(c.status ?? ""),
@@ -80,7 +86,7 @@ export default function SalaDeControle() {
     setLoading(false);
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+  // Carrega os dados iniciais uma vez para montar a visão da agência.
   useEffect(() => { carregar(); }, []);
 
   async function salvarCorretor() {

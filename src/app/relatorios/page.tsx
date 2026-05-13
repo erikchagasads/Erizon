@@ -49,6 +49,10 @@ interface Relatorio {
   campanhas: CampanhaRelatorio[];
 }
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmtBRL  = (v: number) =>
   `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -237,10 +241,15 @@ export default function RelatoriosPage() {
     fetch("/api/clientes")
       .then(r => r.json())
       .then(json => {
-        const lista: Cliente[] = (json.clientes ?? json ?? []).map((c: { id: string; nome_cliente?: string; nome?: string; cor?: string }) => ({
-          id: c.id,
-          nome: c.nome_cliente ?? c.nome ?? "—",
-          cor: c.cor,
+        const payload =
+          json && typeof json === "object" && "clientes" in json
+            ? asArray<Record<string, unknown>>((json as { clientes?: unknown }).clientes)
+            : asArray<Record<string, unknown>>(json);
+
+        const lista: Cliente[] = payload.map((c) => ({
+          id: String(c.id ?? ""),
+          nome: String(c.nome_cliente ?? c.nome ?? "—"),
+          cor: typeof c.cor === "string" ? c.cor : undefined,
         }));
         setClientes(lista);
         if (lista.length > 0) setClienteId(lista[0].id);

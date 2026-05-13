@@ -2,17 +2,6 @@
 
 import Script from "next/script";
 import { useMemo, useState } from "react";
-import { DM_Mono, Sora } from "next/font/google";
-
-const sora = Sora({
-  subsets: ["latin"],
-  weight: ["300", "400", "600"],
-});
-
-const dmMono = DM_Mono({
-  subsets: ["latin"],
-  weight: ["400"],
-});
 
 type FormularioLandingProps = {
   userId?: string;
@@ -26,6 +15,9 @@ declare global {
     fbq?: (...args: unknown[]) => void;
   }
 }
+
+const headingFontClassName = "font-sans";
+const accentFontClassName = "font-mono";
 
 function formatPhone(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -43,7 +35,7 @@ function TrustItem({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`flex items-center gap-1.5 text-[11px] text-[#3A3950] ${dmMono.className}`}>
+    <div className={`flex items-center gap-1.5 text-[11px] text-[#3A3950] ${accentFontClassName}`}>
       {children}
       <span>{label}</span>
     </div>
@@ -153,7 +145,7 @@ export default function FormularioLanding({
 
   return (
     <main
-      className={`relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#0A0A0F] px-5 py-12 text-white ${sora.className}`}
+      className={`relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#0A0A0F] px-5 py-12 text-white ${headingFontClassName}`}
     >
       {facebookPixelId ? (
         <Script id={`meta-pixel-${facebookPixelId}`} strategy="afterInteractive">{`
@@ -175,7 +167,7 @@ export default function FormularioLanding({
 
       <div className="relative z-10 flex w-full max-w-[420px] flex-col items-center">
         <div
-          className={`mb-7 inline-flex items-center gap-1.5 rounded-full border border-[rgba(83,74,183,0.4)] bg-[rgba(83,74,183,0.15)] px-3 py-[5px] text-[11px] uppercase tracking-[0.12em] text-[#AFA9EC] ${dmMono.className}`}
+          className={`mb-7 inline-flex items-center gap-1.5 rounded-full border border-[rgba(83,74,183,0.4)] bg-[rgba(83,74,183,0.15)] px-3 py-[5px] text-[11px] uppercase tracking-[0.12em] text-[#AFA9EC] ${accentFontClassName}`}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-[#7F77DD] animate-pulse" />
           Atendimento via WhatsApp
@@ -197,7 +189,7 @@ export default function FormularioLanding({
           <div className="pointer-events-none absolute inset-0 rounded-[20px] border border-transparent bg-[linear-gradient(135deg,rgba(127,119,221,0.2),transparent_60%)] [mask-composite:exclude] [-webkit-mask-composite:destination-out] [mask:linear-gradient(#fff_0_0)_padding-box,linear-gradient(#fff_0_0)] [-webkit-mask:linear-gradient(#fff_0_0)_padding-box,linear-gradient(#fff_0_0)]" />
 
           {!enabled ? (
-            <div className={`rounded-2xl border border-[rgba(83,74,183,0.35)] bg-[rgba(83,74,183,0.08)] px-4 py-4 text-center text-xs leading-6 text-[#AFA9EC] ${dmMono.className}`}>
+            <div className={`rounded-2xl border border-[rgba(83,74,183,0.35)] bg-[rgba(83,74,183,0.08)] px-4 py-4 text-center text-xs leading-6 text-[#AFA9EC] ${accentFontClassName}`}>
               Abra esta pagina no formato
               <div className="mt-2 break-all text-[#F0EFF8]">/lp/formulario/USER_ID/CLIENTE_ID</div>
             </div>
@@ -208,7 +200,7 @@ export default function FormularioLanding({
                 className={showSuccess ? "hidden" : ""}
               >
                 <div className="mb-5">
-                  <div className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#4A4960] ${dmMono.className}`}>
+                  <div className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#4A4960] ${accentFontClassName}`}>
                     Nome
                   </div>
                   <input
@@ -226,7 +218,7 @@ export default function FormularioLanding({
                 </div>
 
                 <div className="mb-5">
-                  <div className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#4A4960] ${dmMono.className}`}>
+                  <div className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#4A4960] ${accentFontClassName}`}>
                     WhatsApp
                   </div>
                   <input
@@ -265,7 +257,7 @@ export default function FormularioLanding({
                   <div className="text-center text-[18px] font-semibold text-[#E8E7F0]">
                     Perfeito, {primeiroNome}!
                   </div>
-                  <div className={`text-center text-[13px] text-[#4A4960] ${dmMono.className}`}>
+                  <div className={`text-center text-[13px] text-[#4A4960] ${accentFontClassName}`}>
                     Redirecionando para o WhatsApp...
                   </div>
                 </div>
@@ -296,10 +288,10 @@ export default function FormularioLanding({
           )}
         </div>
 
-        <div className={`mt-4 text-center text-[12px] tracking-[0.04em] text-[#2E2D3A] ${dmMono.className}`}>
+        <div className={`mt-4 text-center text-[12px] tracking-[0.04em] text-[#2E2D3A] ${accentFontClassName}`}>
           O atendimento continua no WhatsApp
         </div>
-        <div className={`mt-9 text-[11px] uppercase tracking-[0.15em] text-[#2A2940] ${dmMono.className}`}>
+        <div className={`mt-9 text-[11px] uppercase tracking-[0.15em] text-[#2A2940] ${accentFontClassName}`}>
           Erizon Â· AI Marketing OS
         </div>
       </div>

@@ -22,6 +22,10 @@ type PredictiveAnomalyResponse = {
   error?: string;
 };
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 function formatMetric(metric?: string | null): string {
   const map: Record<string, string> = {
     cpl: "CPL",
@@ -76,10 +80,13 @@ export default function AnomalyAlert() {
   const carregarAlertas = useCallback(async () => {
     try {
       const res = await fetch("/api/intelligence/predict-anomalies", { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) {
+        setAlerts([]);
+        return;
+      }
 
       const json = (await res.json()) as PredictiveAnomalyResponse;
-      setAlerts(json.alerts ?? []);
+      setAlerts(asArray<PredictiveAnomalyAlert>(json.alerts));
     } catch {
       setAlerts([]);
     }

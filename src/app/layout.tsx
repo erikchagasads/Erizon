@@ -1,15 +1,9 @@
 import './globals.css'
-import { Plus_Jakarta_Sans } from 'next/font/google'
 import type { Metadata } from 'next'
 import CookieBanner from '@/components/CookieBanner'
 import { Toaster } from '@/components/Toast'
 import AgenteProvider from '@/components/AgenteProvider'
 import { PushBootstrap } from '@/components/PushBootstrap'
-
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700', '800'],
-})
 
 export const metadata: Metadata = {
   title: 'Erizon AI | Automação de Marketing com Inteligência Artificial',
@@ -151,7 +145,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
 
-      <body className={`${jakarta.className} bg-[#0a0a0b] antialiased overflow-x-hidden`}>
+      <body className="bg-[#0a0a0b] antialiased overflow-x-hidden">
         {children}
         <CookieBanner />
         <Toaster />

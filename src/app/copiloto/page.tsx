@@ -183,7 +183,7 @@ export default function StudioPage() {
 
   // Recarrega campanhas quando o cliente muda
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Carrega o histórico inicial apenas na entrada da página.
     setCampanhaSelecionada("todas"); // reset dropdown ao trocar cliente
     async function init() {
       const { data: { user } } = await supabase.auth.getUser();

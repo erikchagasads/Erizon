@@ -22,7 +22,15 @@ interface Cliente {
   cor: string;
   meta_account_id?: string;
   ig_user_id?: string;
+  facebook_pixel_id?: string | null;
+  whatsapp?: string | null;
+  crm_token?: string | null;
   ticket_medio?: number;
+  investimento_mensal?: number;
+  campanhas_ativas?: number;
+  cpl_medio?: number;
+  roas_medio?: number;
+  integracoes?: string[];
 }
 
 interface IGSummary {
@@ -455,13 +463,61 @@ export default function ClienteDetalhe() {
   useEffect(() => {
     async function load() {
       const supabase = getSupabase();
-      const { data } = await supabase
-        .from("clientes")
-        .select("id, nome, cor, meta_account_id, ig_user_id, ticket_medio")
-        .eq("id", id)
-        .maybeSingle();
-      setCliente(data);
-      setIgUserId(data?.ig_user_id ?? "");
+      const [{ data: clienteData }, { data: campanhasData }] = await Promise.all([
+        supabase
+          .from("clientes")
+          .select("id, nome, cor, meta_account_id, ig_user_id, ticket_medio, facebook_pixel_id, whatsapp, crm_token")
+          .eq("id", id)
+          .maybeSingle(),
+        supabase
+          .from("metricas_ads")
+          .select("gasto_total, contatos, roas, status")
+          .eq("cliente_id", id),
+      ]);
+
+      if (!clienteData) {
+        setCliente(null);
+        setIgUserId("");
+        setLoading(false);
+        return;
+      }
+
+      const campanhas = campanhasData ?? [];
+      const campanhasAtivas = campanhas.filter((campanha) =>
+        ["ATIVO", "ACTIVE", "ATIVA", "ativo"].includes(String(campanha.status ?? "")),
+      );
+      const investimentoMensal = campanhas.reduce(
+        (total, campanha) => total + (Number(campanha.gasto_total) || 0),
+        0,
+      );
+      const totalLeads = campanhas.reduce(
+        (total, campanha) => total + (Number(campanha.contatos) || 0),
+        0,
+      );
+      const roasValidos = campanhas
+        .map((campanha) => Number(campanha.roas))
+        .filter((roas) => Number.isFinite(roas) && roas > 0);
+      const integracoes = [
+        clienteData.meta_account_id ? "Meta Ads" : null,
+        clienteData.ig_user_id ? "Instagram Insights" : null,
+        clienteData.facebook_pixel_id ? "Meta Pixel" : null,
+        clienteData.whatsapp ? "WhatsApp" : null,
+        clienteData.crm_token ? "CRM" : null,
+      ].filter((item): item is string => Boolean(item));
+
+      const clienteCompleto: Cliente = {
+        ...clienteData,
+        investimento_mensal: investimentoMensal,
+        campanhas_ativas: campanhasAtivas.length,
+        cpl_medio: totalLeads > 0 ? investimentoMensal / totalLeads : undefined,
+        roas_medio: roasValidos.length > 0
+          ? roasValidos.reduce((sum, roas) => sum + roas, 0) / roasValidos.length
+          : undefined,
+        integracoes,
+      };
+
+      setCliente(clienteCompleto);
+      setIgUserId(clienteData.ig_user_id ?? "");
       setLoading(false);
     }
     load();
@@ -549,12 +605,81 @@ export default function ClienteDetalhe() {
         {/* Conteúdo */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
 
-          {/* ABA OVERVIEW — placeholder para conteúdo existente */}
+          {/* ABA OVERVIEW — métricas reais do cliente */}
           {aba === "overview" && (
-            <div className="flex flex-col items-center justify-center py-20 text-white/20 gap-3">
-              <BarChart3 size={32} />
-              <div className="text-[13px]">Visão geral de campanhas do cliente</div>
-              <div className="text-[11px] text-white/10">Conecte aqui o conteúdo existente de /clientes</div>
+            <div className="flex flex-col gap-6">
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                {[
+                  {
+                    label: "Investimento",
+                    value: typeof cliente.investimento_mensal === "number"
+                      ? `R$ ${cliente.investimento_mensal.toLocaleString("pt-BR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`
+                      : "—",
+                  },
+                  {
+                    label: "Campanhas ativas",
+                    value: cliente.campanhas_ativas ?? "—",
+                  },
+                  {
+                    label: "CPL médio",
+                    value: typeof cliente.cpl_medio === "number"
+                      ? `R$ ${cliente.cpl_medio.toFixed(2)}`
+                      : "—",
+                  },
+                  {
+                    label: "ROAS médio",
+                    value: typeof cliente.roas_medio === "number"
+                      ? `${cliente.roas_medio.toFixed(1)}x`
+                      : "—",
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    className="flex flex-col gap-1 rounded-xl border border-white/10 bg-white/5 p-4"
+                  >
+                    <span className="text-[11px] uppercase tracking-wider text-white/40">
+                      {item.label}
+                    </span>
+                    <span className="text-xl font-semibold text-white">
+                      {item.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+                <h3 className="mb-3 text-[13px] font-medium text-white/60">
+                  Integrações conectadas
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {(cliente.integracoes ?? []).length === 0 ? (
+                    <span className="text-[12px] text-white/30">
+                      Nenhuma integração configurada
+                    </span>
+                  ) : (
+                    (cliente.integracoes ?? []).map((integ) => (
+                      <span
+                        key={integ}
+                        className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-[11px] font-medium text-emerald-400"
+                      >
+                        {integ}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="py-4 text-center">
+                <a
+                  href={`/analytics?cliente=${id}`}
+                  className="text-[12px] text-white/30 underline underline-offset-2 transition-colors hover:text-white/60"
+                >
+                  Ver analytics completo →
+                </a>
+              </div>
             </div>
           )}
 

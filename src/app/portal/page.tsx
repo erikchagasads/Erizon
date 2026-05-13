@@ -50,6 +50,10 @@ interface PortalData {
   gasto_semana_anterior?: number;
 }
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 const fmtBRL = (v: number) =>
   `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const fmtNum = (v: number) => v.toLocaleString("pt-BR");
@@ -347,9 +351,15 @@ export default function PortalPage() {
     fetch("/api/clientes")
       .then(r => r.json())
       .then(json => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const lista: Cliente[] = (json.clientes ?? json ?? []).map((c: any) => ({
-          id: c.id, nome: c.nome_cliente ?? c.nome ?? "—", cor: c.cor,
+        const payload =
+          json && typeof json === "object" && "clientes" in json
+            ? asArray<Record<string, unknown>>((json as { clientes?: unknown }).clientes)
+            : asArray<Record<string, unknown>>(json);
+
+        const lista: Cliente[] = payload.map((c) => ({
+          id: String(c.id ?? ""),
+          nome: String(c.nome_cliente ?? c.nome ?? "—"),
+          cor: typeof c.cor === "string" ? c.cor : undefined,
         }));
         setClientes(lista);
         if (lista.length > 0) setClienteId(lista[0].id);

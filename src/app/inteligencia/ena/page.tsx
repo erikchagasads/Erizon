@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState, useMemo } from "react";
+import Link from "next/link";
 import { createBrowserClient } from "@supabase/ssr";
 import {
   Activity, TrendingUp, TrendingDown, Minus,
@@ -132,9 +133,9 @@ function AttributionFunnel({ data }: { data: AttributionSummary }) {
           <p className="mx-auto mt-2 max-w-sm text-[11px] leading-relaxed text-white/18">
             O funil depende dos eventos de WhatsApp/CRM. Configure a Evolution API em Notificações para que cliques, leads e vendas alimentem a atribuição automaticamente.
           </p>
-          <a href="/settings/notificacoes" className="mt-4 inline-flex items-center gap-2 rounded-xl border border-purple-500/20 bg-purple-500/10 px-4 py-2 text-[11px] font-semibold text-purple-200 transition-colors hover:bg-purple-500/15">
+          <Link href="/settings/notificacoes" className="mt-4 inline-flex items-center gap-2 rounded-xl border border-purple-500/20 bg-purple-500/10 px-4 py-2 text-[11px] font-semibold text-purple-200 transition-colors hover:bg-purple-500/15">
             Configurar Evolution API <ChevronRight size={11} />
-          </a>
+          </Link>
         </div>
       ) : (
         <div className="space-y-3">
@@ -352,9 +353,9 @@ export default function ENAPage() {
           <p className="text-sm text-white/25 max-w-md">
             Sincronize campanhas reais do Meta Ads e aguarde o primeiro ciclo de cálculo. Os dados aparecem automaticamente após a primeira sincronização.
           </p>
-          <a href="/campanhas" className="mt-2 px-5 py-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-300 text-sm font-semibold hover:bg-purple-500/20 transition-all">
+          <Link href="/campanhas" className="mt-2 rounded-xl border border-purple-500/20 bg-purple-500/10 px-5 py-2.5 text-sm font-semibold text-purple-300 transition-all hover:bg-purple-500/20">
             Ir para Campanhas →
-          </a>
+          </Link>
         </main>
       </div>
     );
@@ -378,9 +379,9 @@ export default function ENAPage() {
               Atribuição independente · I.R.E. · Track Record · ROAS Preditivo
             </p>
           </div>
-          <a href="/inteligencia" className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.07] bg-white/[0.04] text-white/40 hover:text-white hover:border-white/15 text-[12px] font-semibold transition-all self-start">
+          <Link href="/inteligencia" className="self-start rounded-xl border border-white/[0.07] bg-white/[0.04] px-4 py-2.5 text-[12px] font-semibold text-white/40 transition-all hover:border-white/15 hover:text-white">
             <BarChart2 size={13} /> Inteligência <ChevronRight size={11} />
-          </a>
+          </Link>
         </header>
 
         {/* Grid principal */}

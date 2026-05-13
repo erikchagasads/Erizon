@@ -25,11 +25,22 @@ export default function ReferralPage() {
   const [data, setData] = useState<ReferralData | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const stats = data?.stats;
 
   useEffect(() => {
     fetch("/api/referral")
-      .then(r => r.json())
-      .then(setData)
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((payload) => {
+        if (payload && typeof payload === "object" && "referralLink" in payload) {
+          setData(payload as ReferralData);
+          return;
+        }
+
+        setData(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -84,21 +95,21 @@ export default function ReferralPage() {
             <ExternalLink className="w-4 h-4" />
             <span className="text-xs uppercase tracking-wide">Cliques</span>
           </div>
-          <p className="text-2xl font-medium text-white">{data?.stats.clicks ?? 0}</p>
+          <p className="text-2xl font-medium text-white">{stats?.clicks ?? 0}</p>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-1">
           <div className="flex items-center gap-2 text-zinc-500">
             <Users className="w-4 h-4" />
             <span className="text-xs uppercase tracking-wide">Cadastros</span>
           </div>
-          <p className="text-2xl font-medium text-white">{data?.stats.signups ?? 0}</p>
+          <p className="text-2xl font-medium text-white">{stats?.signups ?? 0}</p>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-1">
           <div className="flex items-center gap-2 text-zinc-500">
             <TrendingUp className="w-4 h-4" />
             <span className="text-xs uppercase tracking-wide">Conversões pagas</span>
           </div>
-          <p className="text-2xl font-medium text-emerald-400">{data?.stats.conversions ?? 0}</p>
+          <p className="text-2xl font-medium text-emerald-400">{stats?.conversions ?? 0}</p>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-1">
           <div className="flex items-center gap-2 text-zinc-500">
@@ -106,7 +117,7 @@ export default function ReferralPage() {
             <span className="text-xs uppercase tracking-wide">Crédito acumulado</span>
           </div>
           <p className="text-2xl font-medium text-violet-400">
-            {(data?.stats.creditBRL ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+            {(stats?.creditBRL ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
           </p>
         </div>
       </div>

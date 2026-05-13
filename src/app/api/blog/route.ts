@@ -42,7 +42,10 @@ export async function GET(req: NextRequest) {
     if (contentType && contentType !== "Todos") query = query.eq("content_type", contentType);
 
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+      console.error("[api/blog] fallbacking to empty posts list:", error.message);
+      return NextResponse.json({ posts: [] });
+    }
 
     return NextResponse.json({ posts: data ?? [] });
   } catch (e: unknown) {

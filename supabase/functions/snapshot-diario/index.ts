@@ -23,7 +23,7 @@ serve(async () => {
   }
 
   // Deduplica user_ids
-  const userIds = [...new Set((usuarios || []).map((u: any) => u.user_id))];
+  const userIds = [...new Set((usuarios || []).map((u: { user_id: string }) => u.user_id))];
 
   const TICKET_MEDIO     = 450;
   const TAXA_CONVERSAO   = 0.04;
@@ -38,8 +38,8 @@ serve(async () => {
 
     if (!campanhas || campanhas.length === 0) continue;
 
-    const totalGasto   = campanhas.reduce((a: number, c: any) => a + (c.gasto_total || 0), 0);
-    const totalLeads   = campanhas.reduce((a: number, c: any) => a + (c.contatos || 0), 0);
+    const totalGasto   = campanhas.reduce((a: number, c: { gasto_total?: number | null }) => a + (c.gasto_total || 0), 0);
+    const totalLeads   = campanhas.reduce((a: number, c: { contatos?: number | null }) => a + (c.contatos || 0), 0);
     const totalReceita = totalLeads * TAXA_CONVERSAO * TICKET_MEDIO;
     const lucroTotal   = totalReceita - totalGasto;
     const roasGlobal   = totalGasto > 0 ? totalReceita / totalGasto : 0;

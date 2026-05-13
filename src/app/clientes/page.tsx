@@ -59,6 +59,10 @@ const fmtBRL0 = (v: number) =>
 
 const CORES = ["#6366f1","#8b5cf6","#ec4899","#f59e0b","#10b981","#3b82f6","#ef4444","#14b8a6"];
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 // â”€â”€â”€ Modal Cadastro/EdiÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ModalCliente({ cliente, onClose, onSave }: {
   cliente?: Cliente | null; onClose: () => void; onSave: () => void;
@@ -219,8 +223,10 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
     setLoadingV(true);
     const res = await fetch(`/api/relatorio-pdf?cliente_id=${cliente.id}`);
     const json = await res.json();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const camps: CampanhaItem[] = (json.relatorio?.campanhas ?? []).map((c: any) => ({
+    const relatorio = json && typeof json === "object" && "relatorio" in json
+      ? (json as { relatorio?: { campanhas?: unknown } }).relatorio
+      : undefined;
+    const camps: CampanhaItem[] = asArray<Record<string, unknown>>(relatorio?.campanhas).map((c) => ({
       id: String(c.id ?? ""), nome: String(c.nome ?? "â€”"),
       status: String(c.status ?? ""), gasto: Number(c.gasto ?? 0),
       leads: Number(c.leads ?? 0), cliente_id: cliente.id,
@@ -236,17 +242,19 @@ function PainelCampanhas({ cliente, onClose }: { cliente: Cliente; onClose: () =
       : `/api/relatorio-pdf`;
     const res  = await fetch(url);
     const json = await res.json();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const camps: CampanhaItem[] = (json.relatorio?.campanhas ?? []).map((c: any) => ({
+    const relatorio = json && typeof json === "object" && "relatorio" in json
+      ? (json as { relatorio?: { campanhas?: unknown } }).relatorio
+      : undefined;
+    const camps: CampanhaItem[] = asArray<Record<string, unknown>>(relatorio?.campanhas).map((c) => ({
       id: String(c.id ?? ""), nome: String(c.nome ?? "â€”"),
       status: String(c.status ?? ""), gasto: Number(c.gasto ?? 0),
-      leads: Number(c.leads ?? 0), cliente_id: c.cliente_id ?? null,
+      leads: Number(c.leads ?? 0), cliente_id: typeof c.cliente_id === "string" ? c.cliente_id : null,
     }));
     setTodas(camps);
     setLoadingT(false);
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+  // Carrega campanhas e catálogo uma vez ao abrir o painel.
   useEffect(() => { carregarVinculadas(); carregarTodas(); }, []);
 
   // debounce busca
@@ -712,17 +720,19 @@ function ClienteCard({ c, onEdit, onDelete, onVincular }: {
     fetch(`/api/clientes/campanhas?cliente_id=${c.id}`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {
-        if (json?.campanhas) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          setCampanhas(json.campanhas.map((camp: any) => ({
-            id: camp.id,
-            nome_campanha: camp.nome_campanha,
-            status: camp.status ?? "ATIVO",
-            gasto_total: camp.gasto_total ?? 0,
-            contatos: camp.total_leads ?? 0,
-            cpl: camp.cpl ?? 0,
-          })));
-        }
+        const payload =
+          json && typeof json === "object" && "campanhas" in json
+            ? asArray<Record<string, unknown>>((json as { campanhas?: unknown }).campanhas)
+            : [];
+
+        setCampanhas(payload.map((camp) => ({
+          id: String(camp.id ?? ""),
+          nome_campanha: String(camp.nome_campanha ?? "â€”"),
+          status: String(camp.status ?? "ATIVO"),
+          gasto_total: Number(camp.gasto_total ?? 0),
+          contatos: Number(camp.total_leads ?? 0),
+          cpl: Number(camp.cpl ?? 0),
+        })));
       })
       .finally(() => setLoadingCamps(false));
   }, [c.id]);
@@ -896,11 +906,15 @@ export default function ClientesPage() {
     setLoading(true);
     const res = await fetch("/api/clientes");
     const json = await res.json();
-    setClientes(json.clientes ?? []);
+    const clientesPayload =
+      json && typeof json === "object" && "clientes" in json
+        ? asArray<Cliente>((json as { clientes?: unknown }).clientes)
+        : [];
+    setClientes(clientesPayload);
     setLoading(false);
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Atualiza a lista principal de clientes no primeiro render.
   useEffect(() => { carregar(); }, []);
 
   async function excluir(id: string) {

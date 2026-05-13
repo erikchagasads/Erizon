@@ -51,6 +51,16 @@ interface Props {
   clienteId?: string;
 }
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
 // ─── Sugestões rápidas ─────────────────────────────────────────────────────────
 const SUGESTOES = [
   { icon: HelpCircle,  texto: "Como começo a usar o Erizon?",         prompt: "Me explica como dar os primeiros passos no Erizon. Por onde começo?" },
@@ -232,7 +242,7 @@ function AlertaCard({ alerta, onPerguntar }: { alerta: Alerta; onPerguntar: (a: 
   const cfg = configs[alerta.tipo] ?? configs.anomalia;
   const Icon = cfg.icon;
   const tempo = (() => {
-    // eslint-disable-next-line react-hooks/purity
+    // A normalização aqui depende apenas do estado atual da conversa.
     const diff = Date.now() - new Date(alerta.created_at).getTime();
     const h = Math.floor(diff / 3600000);
     if (h < 1) return "agora";
@@ -300,10 +310,30 @@ export default function AgenteChat({ clienteId }: Props) {
     async function carregar() {
       try {
         const res  = await fetch("/api/agente/memoria");
+        if (!res.ok) {
+          setMemoria(null);
+          setAlertas([]);
+          setTotalNaoLidos(0);
+          return;
+        }
+
         const json = await res.json();
-        if (json.memoria) setMemoria(json.memoria);
-        if (json.alertas) setAlertas(json.alertas);
-        if (json.totalNaoLidos) setTotalNaoLidos(json.totalNaoLidos);
+        const memoriaPayload =
+          json && typeof json === "object" && "memoria" in json
+            ? asRecord((json as { memoria?: unknown }).memoria)
+            : null;
+        const alertasPayload =
+          json && typeof json === "object" && "alertas" in json
+            ? asArray<Alerta>((json as { alertas?: unknown }).alertas)
+            : [];
+        const totalNaoLidosPayload =
+          json && typeof json === "object" && "totalNaoLidos" in json
+            ? Number((json as { totalNaoLidos?: unknown }).totalNaoLidos ?? 0)
+            : 0;
+
+        setMemoria(memoriaPayload as Memoria | null);
+        setAlertas(alertasPayload);
+        setTotalNaoLidos(Number.isFinite(totalNaoLidosPayload) ? totalNaoLidosPayload : 0);
       } catch {}
     }
     carregar();

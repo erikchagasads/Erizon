@@ -7,7 +7,7 @@ function isValidHex(s: string) { return /^#[0-9a-fA-F]{6}$/.test(s); }
 export function ColorInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   const [raw, setRaw] = useState(value);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Sincroniza o preview local quando a cor externa muda.
   useEffect(() => setRaw(value), [value]);
 
   return (

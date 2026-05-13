@@ -6,8 +6,7 @@ create table if not exists neuro_score_analyses (
   user_id             uuid not null references auth.users(id) on delete cascade,
   workspace_id        text not null,
   cliente_id          uuid references clientes(id) on delete set null,
-  campanha_id         uuid references campanhas_ads(id) on delete set null,
-
+  campanha_id         uuid references campanhas(id) on delete set null,
   -- Criativo analisado
   -- [GANCHO VÍDEO] media_type distingue imagem de vídeo. Por ora só "image" é processado.
   -- Quando análise de vídeo for ativada, media_type="video" + video_url serão preenchidos;

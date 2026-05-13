@@ -22,7 +22,7 @@ export default function BannerStatus({ clienteId, onSyncSuccess }: BannerStatusP
   const [descartado, setDescartado]     = useState(false);
   const [loading, setLoading]           = useState(true);
   const [erroSync, setErroSync]         = useState("");
-  // eslint-disable-next-line react-hooks/purity
+  // Leitura assíncrona pontual para atualizar o status do banner.
   const renderNowRef = useRef(Date.now());
 
   const checar = useCallback(async () => {

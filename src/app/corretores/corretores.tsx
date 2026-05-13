@@ -29,7 +29,7 @@ export default function CorretoresPage() {
     setLoading(false);
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Hidrata a lista inicial de corretores ao montar a página.
   useEffect(() => { carregar(); }, []);
 
   async function salvar() {

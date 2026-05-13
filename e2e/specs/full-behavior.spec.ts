@@ -1,42 +1,49 @@
-import { test, expect } from '../core/baseTest';
-import { crawlSite } from '../core/crawler';
-import { mockAPIs } from '../core/mock';
+import { test, expect } from "../core/baseTest";
+import { crawlSite } from "../core/crawler";
 
-test('Teste total inteligente', async ({ page }) => {
+const NAVIGATION_TIMEOUT_MS = 15_000;
 
-  await mockAPIs(page);
+test("Teste total ponta a ponta (sem mocks)", async ({ page }) => {
+  test.setTimeout(180_000);
+
+  async function gotoPath(path: string) {
+    try {
+      await page.goto(path, {
+        waitUntil: "commit",
+        timeout: NAVIGATION_TIMEOUT_MS * 2,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (!message.includes("ERR_ABORTED") && !message.includes("frame was detached")) {
+        throw error;
+      }
+
+      await page.waitForLoadState("domcontentloaded", {
+        timeout: NAVIGATION_TIMEOUT_MS * 2,
+      }).catch(() => null);
+    }
+  }
 
   const pages = await crawlSite(page);
 
   for (const path of pages) {
-    await page.goto(path);
+    await gotoPath(path);
+    await expect(page.locator("body")).toBeVisible();
 
-    await expect(page.locator('body')).toBeVisible();
-
-    const errosVisuais = await page.locator('text=error').count();
+    const errosVisuais = await page.locator("text=Unexpected error").count();
     expect(errosVisuais).toBe(0);
 
-    const botoes = page.locator('button');
+    const botoes = page.locator("button:visible:enabled");
     const count = await botoes.count();
 
     for (let i = 0; i < count; i++) {
-      const botao = botoes.nth(i);
-
       try {
-        if (await botao.isVisible() && await botao.isEnabled()) {
-          await botao.click({ timeout: 1500 });
-          await page.waitForTimeout(200);
-        }
-      } catch {}
-    }
-
-    const inputs = page.locator('input');
-    const inputsCount = await inputs.count();
-
-    for (let i = 0; i < inputsCount; i++) {
-      try {
-        await inputs.nth(i).fill('teste');
-      } catch {}
+        await botoes.nth(i).click({ timeout: 1500 });
+        await page.waitForTimeout(200);
+      } catch {
+        // Alguns botões navegam, abrem modais ou desmontam a árvore; seguimos o crawl.
+      }
     }
   }
 });

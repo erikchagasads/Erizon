@@ -39,7 +39,7 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
 
     try {
       const parsed: Partial<WhiteLabelConfig> = JSON.parse(decodeURIComponent(raw));
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // Hidrata o tema uma vez a partir do estado persistido no cliente.
       setConfig(parsed);
 
       // Aplica variáveis CSS no :root

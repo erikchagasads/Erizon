@@ -83,6 +83,10 @@ type CreativeAssetResponse = {
   error?: string | null;
 };
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtBRL  = (v: number) => `R$\u00a0${v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const fmtBRL2 = (v: number) => `R$\u00a0${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -889,7 +893,10 @@ export default function GerenciadorAnunciosPage() {
       // Carrega campanhas de todos os clientes (via relatorio-pdf sem filtro)
       const res  = await fetch("/api/relatorio-pdf");
       const json = await res.json();
-      const camps: Campanha[] = (json.relatorio?.campanhas ?? []).map((c: ClienteRaw) => {
+      const relatorio = json && typeof json === "object" && "relatorio" in json
+        ? (json as { relatorio?: { campanhas?: unknown } }).relatorio
+        : undefined;
+      const camps: Campanha[] = asArray<ClienteRaw>(relatorio?.campanhas).map((c: ClienteRaw) => {
         const cl = listaClientes.find(x => x.id === String(c.cliente_id ?? ""));
         const status = String(c.status ?? "PAUSADO");
         const preflightScore = c.preflight_score != null ? Number(c.preflight_score) : null;
@@ -926,7 +933,7 @@ export default function GerenciadorAnunciosPage() {
     setLoading(false);
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Carrega o conjunto inicial de campanhas no mount da página.
   useEffect(() => { carregar(); }, []);
 
   // ── Filtros e ordenação ───────────────────────────────────────────────────────

@@ -7,8 +7,8 @@ export interface AuditTrailEntry {
   workspace_id: string;
   decision_id: string;
   campaign_id: string;
-  input_snapshot: Record<string, any>;
-  input_rules: Record<string, any>[];
+  input_snapshot: Record<string, unknown>;
+  input_rules: Record<string, unknown>[];
   reasoning_anomaly_score?: number;
   reasoning_confidence?: number;
   reasoning_factors?: Array<{ factor: string; score: number }>;
@@ -38,8 +38,8 @@ export class AuditTrailService {
     workspace_id: string;
     decision_id: string;
     campaign_id: string;
-    campaign_snapshot: Record<string, any>;
-    applied_rules: Record<string, any>[];
+    campaign_snapshot: Record<string, unknown>;
+    applied_rules: Record<string, unknown>[];
     anomaly_analysis?: {
       score: number;
       factors: Array<{ factor: string; score: number }>;
@@ -301,39 +301,39 @@ export class AuditTrailService {
   /**
    * Formatar dados para resposta
    */
-  private formatTrailForResponse(data: any): AuditTrailEntry {
+  private formatTrailForResponse(data: Record<string, unknown>): AuditTrailEntry {
     return {
-      id: data.id,
-      workspace_id: data.workspace_id,
-      decision_id: data.decision_id,
-      campaign_id: data.campaign_id,
-      input_snapshot: data.input_snapshot,
-      input_rules: data.input_rules,
-      reasoning_anomaly_score: data.reasoning_anomaly_score,
-      reasoning_confidence: data.reasoning_confidence,
-      reasoning_factors: data.reasoning_factors,
-      decision_action: data.decision_action,
-      decision_impact_estimated: data.decision_impact_estimated,
-      decision_explanation: data.decision_explanation,
-      approval_status: data.approval_status,
-      approval_by_user_id: data.approval_by_user_id,
-      approval_at: data.approval_at ? new Date(data.approval_at) : undefined,
-      approval_notes: data.approval_notes,
-      execution_status: data.execution_status,
+      id: String(data.id),
+      workspace_id: String(data.workspace_id),
+      decision_id: String(data.decision_id),
+      campaign_id: String(data.campaign_id),
+      input_snapshot: (data.input_snapshot as Record<string, unknown>) ?? {},
+      input_rules: (data.input_rules as Record<string, unknown>[]) ?? [],
+      reasoning_anomaly_score: data.reasoning_anomaly_score as number | undefined,
+      reasoning_confidence: data.reasoning_confidence as number | undefined,
+      reasoning_factors: data.reasoning_factors as Array<{ factor: string; score: number }> | undefined,
+      decision_action: String(data.decision_action),
+      decision_impact_estimated: Number(data.decision_impact_estimated ?? 0),
+      decision_explanation: data.decision_explanation as ExplainableDecision | undefined,
+      approval_status: data.approval_status as AuditTrailEntry["approval_status"],
+      approval_by_user_id: data.approval_by_user_id as string | undefined,
+      approval_at: data.approval_at ? new Date(String(data.approval_at)) : undefined,
+      approval_notes: data.approval_notes as string | undefined,
+      execution_status: data.execution_status as AuditTrailEntry["execution_status"],
       execution_started_at: data.execution_started_at
-        ? new Date(data.execution_started_at)
+        ? new Date(String(data.execution_started_at))
         : undefined,
       execution_completed_at: data.execution_completed_at
-        ? new Date(data.execution_completed_at)
+        ? new Date(String(data.execution_completed_at))
         : undefined,
-      execution_error: data.execution_error,
-      outcome_actual_value: data.outcome_actual_value,
+      execution_error: data.execution_error as string | undefined,
+      outcome_actual_value: data.outcome_actual_value as number | undefined,
       outcome_measured_at: data.outcome_measured_at
-        ? new Date(data.outcome_measured_at)
+        ? new Date(String(data.outcome_measured_at))
         : undefined,
-      outcome_success: data.outcome_success,
-      created_at: new Date(data.created_at),
-      updated_at: new Date(data.updated_at),
+      outcome_success: data.outcome_success as boolean | undefined,
+      created_at: new Date(String(data.created_at)),
+      updated_at: new Date(String(data.updated_at)),
     };
   }
 }

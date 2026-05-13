@@ -1,27 +1,31 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import { dirname } from "path";
+import { fileURLToPath } from "url";
+import { FlatCompat } from "@eslint/eslintrc";
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-  ]),
-  // Project-level rule overrides
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const compat = new FlatCompat({
+  baseDirectory: __dirname,
+});
+
+const eslintConfig = [
   {
+    ignores: [".next/**", ".next*/**", "out/**", "build/**", "next-env.d.ts"],
+  },
+  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
+    files: ["scripts/**/*.js", "scripts/**/*.mjs", "check-migrations.mjs"],
     rules: {
-      // UI text naturally contains quotes — downgrade to warning
-      "react/no-unescaped-entities": "warn",
-      // setState inside effects is often intentional (e.g. listening to external stores)
-      "react-hooks/set-state-in-effect": "warn",
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
-]);
+  {
+    rules: {
+      "react/no-unescaped-entities": "warn",
+      "react-hooks/exhaustive-deps": "warn",
+    },
+  },
+];
 
 export default eslintConfig;

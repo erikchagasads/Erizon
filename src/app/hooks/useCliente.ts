@@ -32,6 +32,10 @@ export interface Cliente {
 const STORAGE_KEY  = "erizon_cliente_id";
 const CHANNEL_NAME = "erizon_cliente_sync";
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 function lerClienteIdUrl(): string | null {
   if (typeof window === "undefined") return null;
   const params = new URLSearchParams(window.location.search);
@@ -63,10 +67,26 @@ export function useCliente() {
       const res = await fetch("/api/clientes");
       if (!res.ok) { setLoading(false); return; }
       const json = await res.json();
-      const lista: Cliente[] = (json.clientes ?? []).map((c: Record<string, unknown>) => ({
-        ...c,
-        nome_cliente: (c.nome_cliente ?? c.nome ?? "") as string,
-        nome:         (c.nome ?? c.nome_cliente ?? "") as string,
+      const lista: Cliente[] = asArray<Record<string, unknown>>(
+        json && typeof json === "object" ? (json as { clientes?: unknown }).clientes : undefined
+      ).map((c) => ({
+        id: String(c.id ?? ""),
+        nome_cliente: String(c.nome_cliente ?? c.nome ?? ""),
+        nome: String(c.nome ?? c.nome_cliente ?? ""),
+        cor: typeof c.cor === "string" ? c.cor : undefined,
+        logo_url: typeof c.logo_url === "string" ? c.logo_url : undefined,
+        fb_ad_account_id: typeof c.fb_ad_account_id === "string" ? c.fb_ad_account_id : undefined,
+        meta_account_id: typeof c.meta_account_id === "string" ? c.meta_account_id : undefined,
+        ig_user_id: typeof c.ig_user_id === "string" ? c.ig_user_id : null,
+        facebook_pixel_id: typeof c.facebook_pixel_id === "string" ? c.facebook_pixel_id : null,
+        whatsapp: typeof c.whatsapp === "string" ? c.whatsapp : null,
+        whatsapp_mensagem: typeof c.whatsapp_mensagem === "string" ? c.whatsapp_mensagem : null,
+        total_campanhas: Number(c.total_campanhas ?? 0) || undefined,
+        campanhas_ativas: Number(c.campanhas_ativas ?? 0) || undefined,
+        gasto_total: Number(c.gasto_total ?? 0) || undefined,
+        total_leads: Number(c.total_leads ?? 0) || undefined,
+        cpl_medio: Number(c.cpl_medio ?? 0) || undefined,
+        ultima_atualizacao: typeof c.ultima_atualizacao === "string" ? c.ultima_atualizacao : undefined,
       }));
       setClientes(lista);
 
@@ -85,7 +105,7 @@ export function useCliente() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Dispara o carregamento inicial sem reexecutar em cascata.
     carregarClientes();
 
     if (typeof BroadcastChannel !== "undefined") {
