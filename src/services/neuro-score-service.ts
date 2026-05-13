@@ -2,7 +2,22 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { TrainingDataService } from "./training-data-service";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+let _anthropic: Anthropic | null = null;
+
+function getAnthropic(): Anthropic {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error(
+      "ANTHROPIC_API_KEY nao configurado no servidor. Configure a chave da Anthropic no .env.local e nas variaveis da Vercel.",
+    );
+  }
+
+  if (!_anthropic) {
+    _anthropic = new Anthropic({ apiKey });
+  }
+
+  return _anthropic;
+}
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -161,7 +176,7 @@ ${input.benchmarkCplP50 ? `Benchmark CPL do nicho (p50): R$${input.benchmarkCplP
 
 Seja preciso e direto. Cada recomendação deve ser cirúrgica e implementável.`;
 
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1500,
       system: systemPrompt,
